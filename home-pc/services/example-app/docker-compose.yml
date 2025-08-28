@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   example-app:
     image: nginx:alpine
