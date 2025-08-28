@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  example-app:
+    image: nginx:alpine
+    container_name: example-app
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.example.rule=Host(`example.local`)"
+      - "traefik.http.routers.example.entrypoints=websecure"
+      - "traefik.http.routers.example.tls.certresolver=letsencrypt"
+      - "traefik.http.services.example.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
