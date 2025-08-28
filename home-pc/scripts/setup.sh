@@ -104,6 +104,23 @@ if [[ -f "$TRAEFIK_DIR/docker-compose.yml" ]]; then
 fi
 
 # -----------------------------
+# Setup data directories for services
+# -----------------------------
+echo "==> Setting up service data directories..."
+
+# Create Nextcloud data directory on large storage if it exists
+if [[ -d "/media/data" ]]; then
+    echo "==> Creating Nextcloud data directory on /media/data..."
+    mkdir -p /media/data/nextcloud
+    # Set proper ownership for www-data (UID 33)
+    chown -R 33:33 /media/data/nextcloud
+    chmod -R 755 /media/data/nextcloud
+    echo "Nextcloud data directory created at /media/data/nextcloud"
+else
+    echo "⚠️  Warning: /media/data not found. Nextcloud will use Docker volumes (limited by OS disk space)"
+fi
+
+# -----------------------------
 # Launch all service containers
 # -----------------------------
 SERVICES_PATH="${SERVICES_DIR:-services}"
@@ -121,3 +138,16 @@ fi
 
 echo "✅ Home PC bootstrap complete!"
 echo "All services are running, Traefik is ready, firewall restricted to VPS."
+echo ""
+echo "📊 Storage Configuration:"
+if [[ -d "/media/data/nextcloud" ]]; then
+    echo "  ✅ Nextcloud data directory: /media/data/nextcloud"
+    echo "  💾 Available space: $(df -h /media/data | awk 'NR==2 {print $4}') free"
+else
+    echo "  ⚠️  Nextcloud using Docker volumes (OS disk space limited)"
+fi
+echo ""
+echo "🌐 Access Points:"
+echo "  • Nextcloud: https://drive.cliff.li"
+echo "  • AIO Admin: http://localhost:8080 (home PC only)"
+echo "  • Traefik Dashboard: http://localhost:8090 (home PC only)"
