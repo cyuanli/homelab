@@ -184,6 +184,7 @@ tail -f /var/log/nginx/stream_error.log
 - **Traefik Dashboard**: `https://traefik.local` (home PC only)
 - **Whoami**: `https://whoami.cliff.li` - Request diagnostic tool
 - **Example App**: `https://example.homelab.local` - Sample Nginx service
+- **Nextcloud**: `https://drive.cliff.li` - Complete cloud storage and collaboration platform
 
 ## Ports & Protocols
 

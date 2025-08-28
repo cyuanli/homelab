@@ -1,0 +1,57 @@
+services:
+  nextcloud-aio-mastercontainer:
+    image: ghcr.io/nextcloud-releases/all-in-one:latest
+    container_name: nextcloud-aio-mastercontainer
+    restart: unless-stopped
+    ports:
+      # AIO interface (local access only)
+      - "8080:8080"
+    volumes:
+      - nextcloud_aio_mastercontainer:/mnt/docker-aio-config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optional: Map data directory to specific location
+      # - /path/to/nextcloud/data:/mnt/ncdata
+    environment:
+      # Configure Apache container to bind to all interfaces
+      - APACHE_IP_BINDING=0.0.0.0
+      # Use port 11000 for the Apache container (Traefik target)
+      - APACHE_PORT=11000
+      # Skip domain validation if needed (set to true if issues)
+      - SKIP_DOMAIN_VALIDATION=false
+      # Optional: Configure timezone
+      - TIMEZONE=America/New_York
+    networks:
+      - traefik
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      
+      # Router for Nextcloud (Apache container)
+      - "traefik.http.routers.nextcloud.rule=Host(`drive.cliff.li`)"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nextcloud.service=nextcloud"
+      
+      # Service configuration for Apache container
+      - "traefik.http.services.nextcloud.loadbalancer.server.port=11000"
+      - "traefik.http.services.nextcloud.loadbalancer.server.scheme=https"
+      
+      # Important: Pass through real client IP
+      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-Host=drive.cliff.li"
+      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-For=%[.ClientIP]"
+      - "traefik.http.routers.nextcloud.middlewares=nextcloud-headers"
+      
+      # Router for AIO admin interface (optional - for local management)
+      - "traefik.http.routers.nextcloud-admin.rule=Host(`nextcloud-admin.local`)"
+      - "traefik.http.routers.nextcloud-admin.entrypoints=web"
+      - "traefik.http.routers.nextcloud-admin.service=nextcloud-admin"
+      - "traefik.http.services.nextcloud-admin.loadbalancer.server.port=8080"
+
+volumes:
+  nextcloud_aio_mastercontainer:
+    name: nextcloud_aio_mastercontainer
+
+networks:
+  traefik:
+    external: true
