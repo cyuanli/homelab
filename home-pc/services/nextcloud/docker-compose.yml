@@ -16,6 +16,8 @@ services:
       - APACHE_IP_BINDING=0.0.0.0
       # Use port 11000 for the Apache container (Traefik target)
       - APACHE_PORT=11000
+      # Connect Apache container to traefik network for reverse proxy access
+      - APACHE_ADDITIONAL_NETWORK=traefik
       # Skip domain validation if needed (set to true if issues)
       - SKIP_DOMAIN_VALIDATION=false
       # Optional: Configure timezone

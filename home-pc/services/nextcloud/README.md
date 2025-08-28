@@ -42,9 +42,11 @@ Internet → VPS (Nginx) → Tailscale → Home PC (Traefik) → Nextcloud AIO
 ```
 
 The setup includes:
-- **Master Container**: Management interface (port 8080)
-- **Apache Container**: Main Nextcloud instance (port 11000 → 443)
-- **Additional Containers**: Database, Redis, etc. (managed by AIO)
+- **Master Container**: Management interface (port 8080) - on `nextcloud-aio` network
+- **Apache Container**: Main Nextcloud instance (port 11000 → 443) - on BOTH `nextcloud-aio` AND `traefik` networks
+- **Additional Containers**: Database, Redis, etc. (managed by AIO) - on `nextcloud-aio` network
+
+**Critical**: The `APACHE_ADDITIONAL_NETWORK=traefik` environment variable ensures the Apache container joins the traefik network, enabling reverse proxy connectivity while maintaining internal AIO network isolation.
 
 ### Port Configuration
 
@@ -56,6 +58,7 @@ The setup includes:
 
 - `APACHE_PORT=11000`: Internal port for the Apache container
 - `APACHE_IP_BINDING=0.0.0.0`: Allow connections from Traefik
+- `APACHE_ADDITIONAL_NETWORK=traefik`: Connect Apache container to traefik network (CRITICAL for reverse proxy)
 - `SKIP_DOMAIN_VALIDATION=false`: Validate domain (set to `true` if issues)
 - `TIMEZONE`: Set your timezone for proper scheduling
 
@@ -92,10 +95,13 @@ If you see domain validation errors:
 3. Temporarily set `SKIP_DOMAIN_VALIDATION=true`
 
 #### Container Communication Issues
-If the AIO can't reach the Apache container:
-1. Check Docker networking: `docker network ls`
-2. Verify the traefik network exists: `docker network inspect traefik`
-3. Check container logs: `docker logs nextcloud-aio-mastercontainer`
+If the AIO can't reach the Apache container or you see "Bad Gateway" errors:
+1. **Network Connectivity (Most Common Issue)**:
+   - Check if Apache container is on traefik network: `docker inspect nextcloud-aio-apache | grep -A 10 "Networks"`
+   - Verify the traefik network exists: `docker network inspect traefik`
+   - Ensure `APACHE_ADDITIONAL_NETWORK=traefik` is set in environment variables
+2. Check container logs: `docker logs nextcloud-aio-mastercontainer`
+3. Test domain check container: `curl -I http://localhost:11000` (should return HTTP 200)
 
 #### SSL/Certificate Issues
 - AIO handles SSL internally - don't configure SSL in the master container
