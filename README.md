@@ -181,7 +181,7 @@ tail -f /var/log/nginx/stream_error.log
 
 ## Included Services
 
-- **Traefik Dashboard**: `https://traefik.local` (home PC only)
+- **Traefik Dashboard**: `http://localhost:8090` or `https://traefik.local` (home PC only)
 - **Whoami**: `https://whoami.cliff.li` - Request diagnostic tool
 - **Nextcloud**: `https://drive.cliff.li` - Complete cloud storage and collaboration platform
 
