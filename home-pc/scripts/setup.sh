@@ -93,6 +93,10 @@ fi
 touch "$TRAEFIK_DIR/acme.json"
 chmod 600 "$TRAEFIK_DIR/acme.json"
 
+# Create Traefik network for service discovery
+echo "==> Creating Traefik network..."
+docker network create traefik 2>/dev/null || echo "Network 'traefik' already exists"
+
 # Launch Traefik
 if [[ -f "$TRAEFIK_DIR/docker-compose.yml" ]]; then
     echo "==> Starting Traefik..."

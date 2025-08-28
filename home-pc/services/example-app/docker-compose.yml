@@ -9,7 +9,7 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.example.rule=Host(`example.local`)"
+      - "traefik.http.routers.example.rule=Host(`example.homelab.local`)"
       - "traefik.http.routers.example.entrypoints=websecure"
       - "traefik.http.routers.example.tls.certresolver=letsencrypt"
       - "traefik.http.services.example.loadbalancer.server.port=80"
