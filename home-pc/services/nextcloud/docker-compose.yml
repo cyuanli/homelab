@@ -16,35 +16,17 @@ services:
       - APACHE_IP_BINDING=0.0.0.0
       # Use port 11000 for the Apache container (Traefik target)
       - APACHE_PORT=11000
-      # Connect Apache container to traefik network for reverse proxy access
-      - APACHE_ADDITIONAL_NETWORK=traefik
+      # Connect Apache container to traefik network for reverse proxy access  
+      - APACHE_CONTAINER_ADDITIONAL_NETWORK=traefik
       # Skip domain validation if needed (set to true if issues)
-      - SKIP_DOMAIN_VALIDATION=false
+      - SKIP_DOMAIN_VALIDATION=true
       # Optional: Configure timezone
       - TIMEZONE=America/New_York
     networks:
       - traefik
     labels:
-      # Enable Traefik for this service
-      - "traefik.enable=true"
-      
-      # Router for Nextcloud (Apache container)
-      - "traefik.http.routers.nextcloud.rule=Host(`drive.cliff.li`)"
-      - "traefik.http.routers.nextcloud.entrypoints=websecure"
-      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.nextcloud.service=nextcloud"
-      
-      # Service configuration for Apache container
-      - "traefik.http.services.nextcloud.loadbalancer.server.port=11000"
-      - "traefik.http.services.nextcloud.loadbalancer.server.scheme=https"
-      
-      # Important: Pass through real client IP
-      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-Host=drive.cliff.li"
-      - "traefik.http.middlewares.nextcloud-headers.headers.customRequestHeaders.X-Forwarded-For=%[.ClientIP]"
-      - "traefik.http.routers.nextcloud.middlewares=nextcloud-headers"
-      
       # Router for AIO admin interface (optional - for local management)
+      - "traefik.enable=true"
       - "traefik.http.routers.nextcloud-admin.rule=Host(`nextcloud-admin.local`)"
       - "traefik.http.routers.nextcloud-admin.entrypoints=web"
       - "traefik.http.routers.nextcloud-admin.service=nextcloud-admin"

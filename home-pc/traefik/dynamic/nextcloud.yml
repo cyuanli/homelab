@@ -1,0 +1,25 @@
+http:
+  routers:
+    nextcloud:
+      rule: "Host(`drive.cliff.li`)"
+      entryPoints:
+        - "websecure"
+      service: "nextcloud"
+      tls:
+        certResolver: "letsencrypt"
+      middlewares:
+        - "nextcloud-headers"
+
+  services:
+    nextcloud:
+      loadBalancer:
+        servers:
+          - url: "http://nextcloud-aio-apache:11000"
+
+  middlewares:
+    nextcloud-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-Host: "drive.cliff.li"
+          X-Forwarded-For: "%[.ClientIP]"

@@ -50,6 +50,6 @@ networks:
 ## Examples
 
 - **whoami/**: Simple diagnostic service showing request info
-- **example-app/**: Basic nginx service
+- **nextcloud/**: Complete cloud storage and collaboration platform
 
 That's it! No nginx configs, no manual SSL setup - Traefik handles everything automatically.
