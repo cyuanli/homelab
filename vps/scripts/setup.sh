@@ -4,6 +4,20 @@ set -euo pipefail
 # -----------------------------
 # VPS Bootstrap Script
 # -----------------------------
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Load environment variables
+CONFIG_FILE="$PROJECT_ROOT/config/vps.env.local"
+if [[ -f "$CONFIG_FILE" ]]; then
+    echo "==> Loading configuration from $CONFIG_FILE"
+    source "$CONFIG_FILE"
+else
+    echo "==> Loading default configuration from $PROJECT_ROOT/config/vps.env"
+    source "$PROJECT_ROOT/config/vps.env"
+fi
 echo "==> Updating system..."
 apt update -y && apt upgrade -y
 
@@ -17,12 +31,16 @@ echo "==> Installing Tailscale..."
 curl -fsSL https://tailscale.com/install.sh | sh
 
 echo "==> Starting Tailscale login..."
-tailscale up  # Add --authkey=<AUTHKEY> if automating
+if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
+    tailscale up --authkey="$TAILSCALE_AUTHKEY"
+else
+    echo "No TAILSCALE_AUTHKEY provided, manual authentication required:"
+    tailscale up
+fi
 
 # -----------------------------
 # Detect Home PC Tailscale IP
 # -----------------------------
-HOME_PC_NAME="cyl-homelab"
 
 echo "==> Detecting home PC Tailscale IP..."
 HOME_PC_IP=$(tailscale status --json | jq -r ".Peer[] | select(.HostName==\"$HOME_PC_NAME\") | .Addresses[0]")
@@ -35,15 +53,19 @@ fi
 echo "Detected home PC Tailscale IP: $HOME_PC_IP"
 
 # -----------------------------
-# Generate Nginx config
+# Deploy and generate Nginx config
 # -----------------------------
 TEMPLATE_FILE="/etc/nginx/nginx.conf.template"
 NGINX_CONF="/etc/nginx/nginx.conf"
+SOURCE_TEMPLATE="$PROJECT_ROOT/${NGINX_TEMPLATE_PATH:-nginx/nginx.conf.template}"
 
-if [[ ! -f "$TEMPLATE_FILE" ]]; then
-    echo "ERROR: Nginx template $TEMPLATE_FILE not found."
+echo "==> Deploying nginx template..."
+if [[ ! -f "$SOURCE_TEMPLATE" ]]; then
+    echo "ERROR: Source nginx template $SOURCE_TEMPLATE not found."
     exit 1
 fi
+
+cp "$SOURCE_TEMPLATE" "$TEMPLATE_FILE"
 
 echo "==> Generating Nginx configuration..."
 sed "s/{{HOME_PC_IP}}/$HOME_PC_IP/g" "$TEMPLATE_FILE" > "$NGINX_CONF"
@@ -84,10 +106,16 @@ systemctl enable nginx
 systemctl restart nginx
 
 # -----------------------------
-# Configure SSH key access interactively
+# Configure SSH key access
 # -----------------------------
 echo "==> Configuring SSH key access..."
-read -rp "Paste the public SSH key you want to authorize on the VPS: " VPS_PUBLIC_KEY
+
+if [[ -n "${SSH_PUBLIC_KEY:-}" ]]; then
+    VPS_PUBLIC_KEY="$SSH_PUBLIC_KEY"
+    echo "Using SSH key from configuration file"
+else
+    read -rp "Paste the public SSH key you want to authorize on the VPS: " VPS_PUBLIC_KEY
+fi
 
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
