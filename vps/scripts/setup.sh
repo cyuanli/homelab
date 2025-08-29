@@ -5,18 +5,18 @@ set -euo pipefail
 # VPS Bootstrap Script
 # -----------------------------
 
-# Get script directory
+# Get script directory and vps root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VPS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Load environment variables
-CONFIG_FILE="$PROJECT_ROOT/config/vps.env.local"
+CONFIG_FILE="$VPS_ROOT/config/vps.env.local"
 if [[ -f "$CONFIG_FILE" ]]; then
     echo "==> Loading configuration from $CONFIG_FILE"
     source "$CONFIG_FILE"
 else
     echo "==> Loading default configuration from $PROJECT_ROOT/config/vps.env"
-    source "$PROJECT_ROOT/config/vps.env"
+    source "$VPS_ROOT/config/vps.env"
 fi
 echo "==> Updating system..."
 apt update -y && apt upgrade -y
@@ -27,8 +27,12 @@ apt install -y nginx-full ufw curl jq
 # -----------------------------
 # Install Tailscale
 # -----------------------------
-echo "==> Installing Tailscale..."
-curl -fsSL https://tailscale.com/install.sh | sh
+if ! command -v tailscale &> /dev/null; then
+    echo "==> Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+else
+    echo "==> Tailscale already installed, skipping..."
+fi
 
 echo "==> Starting Tailscale login..."
 if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
@@ -57,7 +61,7 @@ echo "Detected home PC Tailscale IP: $HOME_PC_IP"
 # -----------------------------
 TEMPLATE_FILE="/etc/nginx/nginx.conf.template"
 NGINX_CONF="/etc/nginx/nginx.conf"
-SOURCE_TEMPLATE="$PROJECT_ROOT/${NGINX_TEMPLATE_PATH:-nginx/nginx.conf.template}"
+SOURCE_TEMPLATE="$VPS_ROOT/nginx/nginx.conf.template"
 
 echo "==> Deploying nginx template..."
 if [[ ! -f "$SOURCE_TEMPLATE" ]]; then

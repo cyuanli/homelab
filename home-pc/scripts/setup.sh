@@ -5,18 +5,18 @@ set -euo pipefail
 # Home PC Bootstrap Script (Production-ready)
 # -----------------------------
 
-# Get script directory and project root
+# Get script directory and home-pc root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+HOMEPC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Load environment variables
-CONFIG_FILE="$PROJECT_ROOT/config/home-pc.env.local"
+CONFIG_FILE="$HOMEPC_ROOT/config/home-pc.env.local"
 if [[ -f "$CONFIG_FILE" ]]; then
     echo "==> Loading configuration from $CONFIG_FILE"
     source "$CONFIG_FILE"
 else
-    echo "==> Loading default configuration from $PROJECT_ROOT/config/home-pc.env"
-    source "$PROJECT_ROOT/config/home-pc.env"
+    echo "==> Loading default configuration from $HOMEPC_ROOT/config/home-pc.env"
+    source "$HOMEPC_ROOT/config/home-pc.env"
 fi
 
 # -----------------------------
@@ -30,21 +30,33 @@ apt install -y curl git ufw jq
 # -----------------------------
 # Install Docker + Compose
 # -----------------------------
-echo "==> Installing Docker..."
-curl -fsSL https://get.docker.com | sh
+if ! command -v docker &> /dev/null; then
+    echo "==> Installing Docker..."
+    curl -fsSL https://get.docker.com | sh
+else
+    echo "==> Docker already installed, skipping..."
+fi
 systemctl enable docker
 systemctl start docker
 
-echo "==> Installing latest Docker Compose..."
-DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
-curl -L "$DOCKER_COMPOSE_URL" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+if ! command -v docker-compose &> /dev/null; then
+    echo "==> Installing latest Docker Compose..."
+    DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
+    curl -L "$DOCKER_COMPOSE_URL" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+else
+    echo "==> Docker Compose already installed, skipping..."
+fi
 
 # -----------------------------
 # Install Tailscale
 # -----------------------------
-echo "==> Installing Tailscale..."
-curl -fsSL https://tailscale.com/install.sh | sh
+if ! command -v tailscale &> /dev/null; then
+    echo "==> Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+else
+    echo "==> Tailscale already installed, skipping..."
+fi
 
 echo "==> Starting Tailscale..."
 if [[ -n "${TAILSCALE_AUTHKEY:-}" ]]; then
@@ -79,29 +91,24 @@ ufw default allow outgoing
 
 ufw allow from "$VPS_TAILSCALE_IP" to any port 80,443 proto tcp
 ufw allow from "$VPS_TAILSCALE_IP" to any port 443 proto udp
+ufw allow from "$VPS_TAILSCALE_IP" to any port 22 proto tcp
+ufw allow from 192.168.0.0/16 to any port 22 proto tcp
 
 ufw --force enable
 
 # -----------------------------
 # Setup Traefik
 # -----------------------------
-TRAEFIK_DIR="${TRAEFIK_DIR:-$HOME/traefik}"
-mkdir -p "$TRAEFIK_DIR"
-if [[ -d "$PROJECT_ROOT/traefik" ]]; then
-    cp -r "$PROJECT_ROOT/traefik/"* "$TRAEFIK_DIR/"
-fi
-touch "$TRAEFIK_DIR/acme.json"
-chmod 600 "$TRAEFIK_DIR/acme.json"
+touch "$HOMEPC_ROOT/traefik/acme.json"
+chmod 600 "$HOMEPC_ROOT/traefik/acme.json"
 
 # Create Traefik network for service discovery
 echo "==> Creating Traefik network..."
 docker network create traefik 2>/dev/null || echo "Network 'traefik' already exists"
 
 # Launch Traefik
-if [[ -f "$TRAEFIK_DIR/docker-compose.yml" ]]; then
-    echo "==> Starting Traefik..."
-    (cd "$TRAEFIK_DIR" && docker-compose up -d --no-recreate)
-fi
+echo "==> Starting Traefik..."
+(cd "$HOMEPC_ROOT/traefik" && docker-compose up -d --no-recreate)
 
 # -----------------------------
 # Setup data directories for services
@@ -123,18 +130,13 @@ fi
 # -----------------------------
 # Launch all service containers
 # -----------------------------
-SERVICES_PATH="${SERVICES_DIR:-services}"
-if [[ -d "$PROJECT_ROOT/$SERVICES_PATH" ]]; then
-    echo "==> Launching service containers..."
-    for dir in "$PROJECT_ROOT/$SERVICES_PATH"/*; do
-        if [[ -d "$dir" && -f "$dir/docker-compose.yml" ]]; then
-            echo "==> Deploying $dir..."
-            (cd "$dir" && docker-compose pull && docker-compose up -d --no-recreate)
-        fi
-    done
-else
-    echo "==> No services directory found at $PROJECT_ROOT/$SERVICES_PATH"
-fi
+echo "==> Launching service containers..."
+for dir in "$HOMEPC_ROOT/services"/*; do
+    if [[ -d "$dir" && -f "$dir/docker-compose.yml" ]]; then
+        echo "==> Deploying $dir..."
+        (cd "$dir" && docker-compose pull && docker-compose up -d --no-recreate)
+    fi
+done
 
 echo "✅ Home PC bootstrap complete!"
 echo "All services are running, Traefik is ready, firewall restricted to VPS."

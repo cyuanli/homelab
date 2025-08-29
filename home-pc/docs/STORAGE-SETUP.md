@@ -134,9 +134,9 @@ sudo nano /etc/fstab
 UUID=your-parity-uuid /mnt/parity1 xfs defaults,noatime 0 2
 
 # Data drives (ext4)
-UUID=your-data1-uuid /mnt/data1 ext4 defaults,noatime 0 2
-UUID=your-data2-uuid /mnt/data2 ext4 defaults,noatime 0 2
-UUID=your-data3-uuid /mnt/data3 ext4 defaults,noatime 0 2
+UUID=your-data1-uuid /mnt/data1 ext4 defaults,noatime,nodiratime 0 2
+UUID=your-data2-uuid /mnt/data2 ext4 defaults,noatime,nodiratime 0 2
+UUID=your-data3-uuid /mnt/data3 ext4 defaults,noatime,nodiratime 0 2
 
 # MergerFS unified pool
 /mnt/data1:/mnt/data2:/mnt/data3 /media/data mergerfs defaults,noatime,direct_io,minfreespace=50G,category.create=epmfs,moveonenospc=true 0 0
@@ -210,9 +210,32 @@ sudo mkdir -p /var/snapraid
 ## Step 7: Set Permissions
 
 ```bash
-# Set ownership for services (Nextcloud uses www-data, UID 33)
-sudo chown -R 33:33 /media/data
-sudo chmod -R 755 /media/data
+# Create a shared group for multi-service storage access
+sudo groupadd storage
+
+# Add common service users to the storage group
+sudo usermod -a -G storage www-data    # Nextcloud/web services
+sudo usermod -a -G storage $USER       # Your user account
+
+# Set shared ownership and permissions
+sudo chown -R $USER:storage /media/data
+sudo chmod -R 775 /media/data
+
+# Make sure new files inherit group permissions
+sudo chmod g+s /media/data
+```
+
+**What this does:**
+- Creates a `storage` group for shared access
+- Allows your user account full access
+- Allows www-data (Nextcloud) read/write access  
+- Other services can be added to `storage` group later
+- New files automatically get proper group permissions
+
+**Adding other services later:**
+```bash
+# Example: Add another service user to storage group
+sudo usermod -a -G storage service_user_name
 ```
 
 ---
@@ -286,6 +309,38 @@ Add this line for daily 2 AM sync:
 ### Create log file:
 ```bash
 sudo touch /var/log/snapraid.log
+```
+
+### Optional: Set up Discord notifications for failures:
+```bash
+# Create notification script
+sudo tee /usr/local/bin/snapraid-notify << 'EOF'
+#!/bin/bash
+
+WEBHOOK_URL="YOUR_DISCORD_WEBHOOK_URL_HERE"
+LOG_FILE="/var/log/snapraid.log"
+
+# Get last few lines of log to check status
+LAST_LINES=$(tail -20 "$LOG_FILE")
+
+# Check if sync failed
+if echo "$LAST_LINES" | grep -q "FAILED\|ERROR\|DANGER"; then
+    # Extract error details
+    ERROR_MSG=$(echo "$LAST_LINES" | grep -E "FAILED|ERROR|DANGER" | tail -5)
+    
+    # Send Discord notification
+    curl -H "Content-Type: application/json" \
+         -d "{\"content\": \"🚨 **SnapRAID FAILED on $(hostname)**\n\`\`\`\n$ERROR_MSG\n\`\`\`\"}" \
+         "$WEBHOOK_URL"
+fi
+EOF
+
+sudo chmod +x /usr/local/bin/snapraid-notify
+```
+
+Update the cron job to include notifications:
+```bash
+0 2 * * * /usr/local/bin/snapraid-runner && /usr/local/bin/snapraid-notify
 ```
 
 ---
