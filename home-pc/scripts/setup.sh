@@ -151,5 +151,4 @@ fi
 echo ""
 echo "🌐 Access Points:"
 echo "  • Nextcloud: https://drive.cliff.li"
-echo "  • AIO Admin: http://localhost:8080 (home PC only)"
-echo "  • Traefik Dashboard: http://localhost:8090 (home PC only)"
+echo "  • Traefik Dashboard: http://localhost:8080 (home PC only)"

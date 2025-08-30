@@ -127,6 +127,9 @@ sudo nano /etc/fstab
 
 ### Add these lines (replace UUIDs with yours):
 ```bash
+# Root filesystem
+UUID=your-root-uuid / ext4 defaults 0 1
+
 # SnapRAID + MergerFS Storage Pool
 # Added on YYYY-MM-DD
 

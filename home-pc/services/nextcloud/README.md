@@ -1,352 +1,129 @@
-# Nextcloud All-in-One Service
+# Nextcloud Service
 
-This service deploys Nextcloud All-in-One (AIO) behind Traefik with automatic HTTPS.
+Self-hosted Nextcloud instance with PostgreSQL and Redis, deployed behind Traefik with automatic HTTPS.
 
-## Important Setup Notes
+## Quick Start
 
-⚠️ **Critical**: Nextcloud All-in-One is complex and requires careful setup. Read this entire document before deploying.
-
-### Prerequisites
-
-1. **Domain Name**: You MUST have a valid domain name pointing to your VPS. IP addresses are not supported.
-2. **Internet Access**: Nextcloud AIO requires internet connectivity and cannot run completely offline.
-3. **DNS Configuration**: Ensure your domain points to your VPS public IP.
-
-### Configuration Steps
-
-1. **Domain Configuration**: The service is pre-configured for `drive.cliff.li`.
-
-2. **Deploy the Service**:
-   ```bash
-   cd ~/homelab/home-pc/services/nextcloud
-   docker-compose up -d
-   ```
-
-3. **Access AIO Admin Interface**:
-   - Local access: `http://localhost:8080` (on home PC)
-   - Or via Traefik: `http://nextcloud-admin.local` (if configured in your local DNS)
-
-4. **Initial Setup**:
-   - Access the AIO admin interface
-   - Enter your domain name: `drive.cliff.li`
-   - Configure your desired apps and settings
-   - Start the Nextcloud containers
-
-5. **Access Nextcloud**:
-   - Once setup is complete: `https://drive.cliff.li`
-
-### Network Architecture
-
-```
-Internet → VPS (Nginx) → Tailscale → Home PC (Traefik) → Nextcloud AIO
-```
-
-The setup includes:
-- **Master Container**: Management interface (port 8080) - on `nextcloud-aio` network
-- **Apache Container**: Main Nextcloud instance (port 11000 → 443) - on BOTH `nextcloud-aio` AND `traefik` networks
-- **Additional Containers**: Database, Redis, etc. (managed by AIO) - on `nextcloud-aio` network
-
-**Critical**: The `APACHE_ADDITIONAL_NETWORK=traefik` environment variable ensures the Apache container joins the traefik network, enabling reverse proxy connectivity while maintaining internal AIO network isolation.
-
-### Port Configuration
-
-- **8080**: AIO admin interface (local access)
-- **11000**: Apache container (proxied by Traefik to 443)
-- **Additional ports**: Managed automatically by AIO for Talk, etc.
-
-### Important Environment Variables
-
-- `APACHE_PORT=11000`: Internal port for the Apache container
-- `APACHE_IP_BINDING=0.0.0.0`: Allow connections from Traefik
-- `APACHE_ADDITIONAL_NETWORK=traefik`: Connect Apache container to traefik network (CRITICAL for reverse proxy)
-- `SKIP_DOMAIN_VALIDATION=false`: Validate domain (set to `true` if issues)
-- `TIMEZONE`: Set your timezone for proper scheduling
-
-### Traefik Configuration Explained
-
-The service uses specific Traefik labels to:
-- Route `drive.cliff.li` to the Apache container (port 11000)
-- Use HTTPS with Let's Encrypt certificates
-- Pass through real client IPs with proper headers
-- Optionally expose the admin interface locally
-
-### Data Persistence
-
-By default, data is stored in Docker volumes. To use a specific directory:
-
-1. Uncomment the volume mapping in `docker-compose.yml`:
-   ```yaml
-   volumes:
-     - /path/to/nextcloud/data:/mnt/ncdata
-   ```
-
-2. Create the directory with proper permissions:
-   ```bash
-   sudo mkdir -p /path/to/nextcloud/data
-   sudo chown -R www-data:www-data /path/to/nextcloud/data
-   ```
-
-### Troubleshooting
-
-This section documents **real issues we encountered** during setup. Use this as your debugging checklist.
-
-#### 🚨 Port 8080 Conflict (CRITICAL ISSUE)
-
-**Problem**: Nextcloud AIO master container and Traefik dashboard both want port 8080.
-
-**Symptoms**:
 ```bash
-# When you try to access Traefik API, you get Apache responses
-curl http://localhost:8080  # Returns HTML, not JSON
-docker port traefik         # Missing port 8080
+cd ~/homelab/home-pc/services/nextcloud
+docker-compose up -d
 ```
 
-**Root Cause**: Docker gives port 8080 to whichever container starts first.
+Access at: https://drive.cliff.li
 
-**Solutions**:
+**Default credentials:**
+- Username: `admin`
+- Password: Set in your `.env` file
 
-*Option 1: Change Traefik API port (recommended):*
-```yaml
-# In traefik.yml
-entryPoints:
-  traefik:
-    address: ":8090"
+⚠️ **Change the admin password after first login**
 
-# In docker-compose.yml  
-ports:
-  - "8090:8090"
-```
+## Architecture
 
-*Option 2: Change AIO master port:*
-```yaml
-# In nextcloud docker-compose.yml
-ports:
-  - "9080:8080"  # Instead of "8080:8080"
-```
+- **Nextcloud**: Main application (Apache variant)
+- **PostgreSQL 16**: Database backend with health checks
+- **Redis 7**: Caching and session storage with persistence
+- **Traefik v3**: Reverse proxy with SSL termination and security headers
 
-**Verification**: 
+## Configuration
+
+### Environment Variables
+
+Key settings are stored in `.env` file:
+
 ```bash
-docker port traefik        # Should show 8090
-curl http://localhost:8090/api/http/routers | jq keys  # Should return JSON
+NEXTCLOUD_ADMIN_USER=admin
+NEXTCLOUD_ADMIN_PASSWORD=<your-secure-password>
+POSTGRES_PASSWORD=<your-db-password>
+REDIS_PASSWORD=<your-redis-password>
 ```
 
-#### 🚨 Network Isolation Issue
+⚠️ **Never commit passwords to git** - they're stored in `.env` file which is ignored.
 
-**Problem**: Apache container only on `nextcloud-aio` network, Traefik can't reach it.
+### Custom Configuration
 
-**Symptoms**:
-- 502 Bad Gateway errors from external domain
-- `docker inspect nextcloud-aio-apache` shows only one network
+Advanced settings in `custom-config.php`:
+- **Trusted proxies**: Configured for Docker network ranges
+- **Maintenance window**: Set to 3 AM for background jobs
+- **Phone region**: Default region for phone number validation
+- **CLI URL**: Proper CLI access configuration
 
-**Critical Fix**: Use correct environment variable name:
-```yaml
-environment:
-  - APACHE_CONTAINER_ADDITIONAL_NETWORK=traefik  # NOT APACHE_ADDITIONAL_NETWORK
-```
+### Data Storage
 
-**Verification**:
-```bash
-docker inspect nextcloud-aio-apache | grep -A 20 "Networks"
-# Must show BOTH 'nextcloud-aio' AND 'traefik' networks
-```
+- **User files**: `/media/data/nextcloud` (host mount)
+- **App data**: `nextcloud_data` volume  
+- **Database**: `db_data` volume
+- **Redis cache**: `redis_data` volume (persisted)
 
-#### 🚨 Static vs Dynamic Configuration
+### Traefik Integration
 
-**Problem**: Docker labels don't work with AIO-managed containers.
+Direct routing with standard Docker labels:
+- **Automatic HTTPS** via Let's Encrypt
+- **Security headers**: HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+- **CalDAV/CardDAV redirects**: `.well-known` URLs properly redirected for client sync
+- **Health checks**: All containers monitored with health checks
+- **Proper dependencies**: Containers start in correct order
+- **Domain**: `drive.cliff.li`
 
-**Why**: AIO creates containers dynamically, can't add custom labels.
-
-**Solution**: Use Traefik file provider instead:
-
-```yaml
-# traefik/dynamic/nextcloud.yml
-http:
-  routers:
-    nextcloud:
-      rule: "Host(`drive.cliff.li`)"
-      service: "nextcloud"
-      entryPoints: ["websecure"]
-      tls:
-        certResolver: "letsencrypt"
-  services:
-    nextcloud:
-      loadBalancer:
-        servers:
-          - url: "http://nextcloud-aio-apache:11000"  # Note: HTTP not HTTPS
-```
-
-#### 🚨 Backend Protocol Mismatch
-
-**Problem**: HTTP 500 errors after routing works.
-
-**Cause**: Apache container serves HTTP internally, not HTTPS.
-
-**Fix**: Use `http://` in service URL:
-```yaml
-servers:
-  - url: "http://nextcloud-aio-apache:11000"  # NOT https://
-```
-
-**Test**: Direct connection should work:
-```bash
-curl -I http://localhost:11000  # Should return HTTP 302
-```
-
-#### 🚨 YAML Syntax Errors
-
-**Problem**: Traefik won't start, keeps restarting.
-
-**Common Errors**:
-```yaml
-# WRONG - duplicate keys
-entryPoints:
-  traefik:
-    address: ":8090"
-entryPoints:  # <-- Duplicate key
-  web:
-    address: ":80"
-
-# RIGHT - single section
-entryPoints:
-  traefik:
-    address: ":8090" 
-  web:
-    address: ":80"
-```
-
-**Debug**: Check Traefik logs:
-```bash
-docker logs traefik | grep -i "yaml\|error"
-```
-
-#### Quick Diagnostic Commands
-
-**Full health check**:
-```bash
-# 1. All containers running?
-docker ps --filter "name=nextcloud" | grep -v Exited
-
-# 2. Traefik API accessible?
-curl -s http://localhost:8090/api/http/routers | grep nextcloud
-
-# 3. Apache responding?
-curl -I http://localhost:11000
-
-# 4. Full chain working?
-curl -I https://drive.cliff.li  # Should return 302
-
-# 5. Any errors?
-docker logs traefik --since 5m | grep -i error
-```
-
-#### Working State Checklist
-
-When everything works correctly:
-
-✅ **Ports**:
-  - `8090`: Traefik API (returns JSON)
-  - `8080`: AIO master (returns HTML)  
-  - `11000`: Apache container (returns 302)
-
-✅ **Networks**: 
-```bash
-docker inspect nextcloud-aio-apache | grep -A 20 "Networks"
-# Shows: nextcloud-aio (internal) + traefik (proxy)
-```
-
-✅ **Routing**:
-```bash
-curl -s http://localhost:8090/api/http/routers | grep nextcloud
-# Shows: nextcloud@file route with correct configuration
-```
-
-✅ **Final Response**:
-```bash
-curl -I https://drive.cliff.li
-# HTTP/2 302
-# location: https://drive.cliff.li/login
-```
-
-#### Legacy Issues (Less Common)
-
-#### Domain Validation Issues
-If you see domain validation errors:
-1. Verify DNS points to your VPS
-2. Check domain accessibility from internet
-3. Set `SKIP_DOMAIN_VALIDATION=true` temporarily
-
-#### SSL/Certificate Issues  
-- AIO handles internal SSL
-- Traefik handles external SSL with Let's Encrypt
-- Never configure SSL in master container
-
-### Backup Considerations
-
-Nextcloud AIO includes built-in backup functionality:
-1. Configure backup location in the AIO interface
-2. Set up automated backup schedules
-3. Consider backing up the entire Docker volume as well
-
-### Security Notes
-
-- The master container needs Docker socket access (required for AIO)
-- All containers run in the same Docker network for service discovery
-- External access is controlled by Traefik with proper SSL termination
-- Consider additional security measures for production use
+## Management
 
 ### Updates
 
-Nextcloud AIO handles updates automatically:
-1. Updates are managed through the AIO interface
-2. The master container will pull new versions as needed
-3. Manual updates: recreate the master container with latest image
+```bash
+docker-compose pull
+docker-compose up -d
+```
 
-### Lessons Learned
+### Logs
 
-This deployment taught us several important lessons about Nextcloud AIO + Traefik integration:
+```bash
+docker-compose logs -f nextcloud
+docker-compose logs -f db
+```
 
-#### Why This Setup is Complex
+### Backup Database
 
-1. **AIO's Design**: Nextcloud AIO manages containers dynamically, preventing standard Docker label-based configuration
-2. **Port Conflicts**: Both AIO and Traefik default to port 8080, creating hidden conflicts
-3. **Network Isolation**: AIO creates its own network, requiring explicit bridging to Traefik
-4. **Protocol Mismatch**: Internal containers use different protocols than external expectations
+```bash
+docker-compose exec db pg_dump -U nextcloud nextcloud > backup.sql
+```
 
-#### The "Correct" Approach
+### Restore Database
 
-Based on community research and our experience:
+```bash
+cat backup.sql | docker-compose exec -T db psql -U nextcloud nextcloud
+```
 
-1. **Use File Provider**: Static configuration files, not Docker labels
-2. **Separate Admin/Service**: AIO admin stays on 8080, Nextcloud service uses 11000  
-3. **Bridge Networks**: Use `APACHE_CONTAINER_ADDITIONAL_NETWORK` (note the exact spelling)
-4. **HTTP Backend**: Internal connections use HTTP, Traefik handles HTTPS termination
+## Security Notes
 
-#### Key Debugging Skills
+- Change default passwords before production use
+- Database and Redis are isolated on internal network
+- External access only through Traefik with HTTPS
+- User data stored on host filesystem for easy backup
 
-1. **Check Port Bindings**: `docker port container-name` reveals conflicts
-2. **Inspect Networks**: Container networking issues are common
-3. **Read Traefik API**: `/api/http/routers` shows what Traefik actually sees
-4. **Test Each Layer**: VPS → Tailscale → Traefik → Apache → Nextcloud
+## Troubleshooting
 
-#### What Made This Hard
+### Check Container Status
+```bash
+docker-compose ps
+```
 
-- **Multiple Failure Points**: 5+ different systems in the proxy chain  
-- **Misleading Errors**: 502 errors could be network, config, or protocol issues
-- **Hidden Port Conflicts**: No obvious indication that Traefik couldn't bind to 8080
-- **Documentation Gaps**: Official examples don't cover all edge cases
+### Database Connection Issues
+```bash
+docker-compose exec nextcloud php occ db:check-status
+```
 
-#### Future Recommendations
+### Clear Redis Cache
+```bash
+docker-compose exec redis redis-cli -a ${REDIS_PASSWORD} flushall
+```
 
-1. **Always check port conflicts first** when mixing multiple services
-2. **Use Traefik API for debugging** - it shows exactly what's configured
-3. **Test direct connectivity** at each layer before debugging the full chain
-4. **Keep admin interfaces separate** from proxied services
-5. **File provider is more reliable** than labels for complex setups
+### Permission Issues
+```bash
+sudo chown -R www-data:www-data /media/data/nextcloud
+```
 
-### Resources
+## Adding Apps
 
-- [Nextcloud All-in-One GitHub](https://github.com/nextcloud/all-in-one)
-- [Reverse Proxy Documentation](https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md)  
-- [Nextcloud Documentation](https://docs.nextcloud.com/)
-- [Traefik File Provider Docs](https://doc.traefik.io/traefik/providers/file/)
-- [Docker Network Troubleshooting](https://docs.docker.com/network/troubleshooting/)
+Use the web interface or command line:
+```bash
+docker-compose exec nextcloud php occ app:install calendar
+```
