@@ -1,0 +1,54 @@
+services:
+  owntracks-recorder:
+    image: owntracks/recorder:latest
+    container_name: owntracks-recorder
+    restart: unless-stopped
+    volumes:
+      - /mnt/data1/owntracks:/store
+      - recorder_config:/config
+    environment:
+      # HTTP-only mode (no MQTT needed)
+      - OTR_PORT=0
+      - OTR_HTTPHOST=0.0.0.0
+      - OTR_HTTPPORT=8083
+      - OTR_STORAGEDIR=/store
+    networks:
+      - owntracks
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.owntracks-recorder.rule=Host(`owntracks.${DOMAIN:-cliff.li}`) && PathPrefix(`/pub`)
+      - traefik.http.routers.owntracks-recorder.entrypoints=websecure
+      - traefik.http.routers.owntracks-recorder.tls.certresolver=letsencrypt
+      - traefik.http.services.owntracks-recorder.loadbalancer.server.port=8083
+      - traefik.http.routers.owntracks-recorder.priority=100
+
+  owntracks-frontend:
+    image: owntracks/frontend:latest
+    container_name: owntracks-frontend
+    restart: unless-stopped
+    environment:
+      - SERVER_HOST=owntracks-recorder
+      - SERVER_PORT=8083
+    networks:
+      - traefik
+      - owntracks
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.owntracks.rule=Host(`owntracks.${DOMAIN:-cliff.li}`)
+      - traefik.http.routers.owntracks.entrypoints=websecure
+      - traefik.http.routers.owntracks.tls.certresolver=letsencrypt
+      - traefik.http.services.owntracks.loadbalancer.server.port=80
+      - traefik.http.routers.owntracks.middlewares=owntracks-auth
+      - traefik.http.middlewares.owntracks-auth.basicauth.users=${OWNTRACKS_AUTH_USERS}
+    depends_on:
+      - owntracks-recorder
+
+volumes:
+  recorder_config:
+
+networks:
+  owntracks:
+    name: owntracks
+  traefik:
+    external: true
