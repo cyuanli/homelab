@@ -447,6 +447,141 @@ sudo snapraid fix -d d1  # Replace d1 with failed drive name
 
 ---
 
-**🎯 Result**: You now have a unified `/media/data` directory with all your drives pooled together and protected by SnapRAID parity!
+---
 
-Your Nextcloud (and other services) can use `/media/data/nextcloud` for multi-terabyte storage with redundancy protection.
+## Step 11: Disk Health Monitoring & Failure Protection
+
+**⚠️ CRITICAL: Without monitoring, services will continue writing to failed drives before you notice, potentially causing unrecoverable data loss!**
+
+### Automatic Setup (Recommended)
+
+If you're using the bootstrap setup script, disk monitoring is configured automatically:
+
+```bash
+# Run the main setup script - it will detect SnapRAID and configure monitoring
+sudo ./scripts/setup.sh
+```
+
+The setup script will:
+- Detect SnapRAID configuration automatically
+- Install required monitoring tools
+- Create Discord webhook configuration template
+- Set up automated health checks every 5 minutes
+- Test the monitoring system
+
+### Manual Setup
+
+If you need to set up monitoring manually:
+
+#### Install Monitoring Tools:
+```bash
+# Already installed by setup script, but if needed:
+sudo apt install -y smartmontools curl
+```
+
+#### Configure Discord Alerts:
+```bash
+# Copy the configuration template
+cp scripts/disk-monitor.conf.example scripts/disk-monitor.conf
+
+# Edit with your Discord webhook URL
+nano scripts/disk-monitor.conf
+```
+
+Add your Discord webhook URL:
+```bash
+# Get webhook from Discord: Server Settings > Integrations > Webhooks
+DISK_MONITOR_WEBHOOK="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_TOKEN"
+```
+
+#### Setup Automated Monitoring:
+```bash
+# Add to root crontab (monitoring needs root permissions)
+sudo crontab -e
+
+# Add this line for monitoring every 5 minutes:
+*/5 * * * * /home/cyl/homelab/home-pc/scripts/disk-monitor-cron.sh >/dev/null 2>&1
+```
+
+### How It Works
+
+**🔍 Continuous Monitoring:**
+- Checks SMART health data every 5 minutes
+- Monitors mount point accessibility 
+- Tests write capability to all drives
+- Detects filesystem errors in system logs
+
+**🚨 Immediate Response on ANY Drive Failure:**
+1. **Stops ALL Docker containers** - Prevents new writes
+2. **Unmounts MergerFS pool** - Disables unified storage access
+3. **Remounts ALL drives as read-only** - Complete write protection
+4. **Sends Discord alert** - Immediate notification with failure details
+
+**📱 Alert Types:**
+- 🚨 **Drive Failures** - SMART failures, mount issues, filesystem errors
+- 💥 **Script Errors** - Monitoring system failures (always sent)
+- 🧪 **Test Alerts** - Manual testing (`sudo scripts/disk-monitor.sh test-alert`)
+
+### Testing the System
+
+**Check Current Status:**
+```bash
+sudo scripts/disk-monitor.sh status
+```
+
+**Test Discord Alerts:**
+```bash
+sudo scripts/disk-monitor.sh test-alert
+```
+
+**View Monitoring Logs:**
+```bash
+sudo tail -f /var/log/disk-monitor.log
+```
+
+### Recovery Process
+
+When you receive a disk failure alert:
+
+1. **Investigate the failed drive(s)** mentioned in the alert
+2. **Replace any failed hardware**
+3. **Run SnapRAID sync** to rebuild protection:
+   ```bash
+   sudo snapraid sync
+   ```
+4. **Restore system operation:**
+   ```bash
+   # Remount drives as read-write
+   sudo mount -o remount,rw /mnt/data1
+   sudo mount -o remount,rw /mnt/data2
+   sudo mount -o remount,rw /mnt/data3
+   sudo mount -o remount,rw /mnt/data4
+   sudo mount -o remount,rw /mnt/parity1
+   
+   # Remount MergerFS pool
+   sudo mount /media/data
+   
+   # Restart Docker containers
+   sudo docker start $(sudo docker ps -a -q)
+   ```
+
+### Monitoring System Files
+
+The monitoring system consists of:
+
+- **`scripts/disk-monitor.sh`** - Main monitoring script
+- **`scripts/disk-monitor-cron.sh`** - Cron wrapper with webhook config loading
+- **`scripts/disk-monitor.conf`** - Discord webhook configuration  
+- **`scripts/disk-monitor.conf.example`** - Configuration template
+
+**⚠️ Important Notes:**
+- Monitoring runs as root (required for SMART access and service control)
+- False positives trigger protection (better safe than sorry)
+- No recovery automation (requires manual verification for safety)
+- Monitors ALL drives in SnapRAID config (data + parity)
+
+---
+
+**🎯 Result**: You now have a unified `/media/data` directory with all your drives pooled together, protected by SnapRAID parity, AND continuously monitored for failures!
+
+Your Nextcloud (and other services) can use `/media/data/nextcloud` for multi-terabyte storage with redundancy protection and automatic failure detection.

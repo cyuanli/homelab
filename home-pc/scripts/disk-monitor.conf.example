@@ -1,0 +1,8 @@
+# Disk Monitor Configuration
+# Copy this file to disk-monitor.conf and set your Discord webhook URL
+
+# Discord webhook URL for alerts
+# Get this from Discord: Server Settings > Integrations > Webhooks
+DISK_MONITOR_WEBHOOK="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+
+# Optional: Additional configuration can be added here in the future

@@ -25,7 +25,7 @@ fi
 echo "==> Updating system..."
 apt update -y && apt upgrade -y
 
-apt install -y curl git ufw jq
+apt install -y curl git ufw jq smartmontools
 
 # -----------------------------
 # Install Docker + Compose
@@ -137,6 +137,69 @@ for dir in "$HOMEPC_ROOT/services"/*; do
         (cd "$dir" && docker-compose pull && docker-compose up -d --no-recreate)
     fi
 done
+
+# -----------------------------
+# Setup Disk Health Monitoring
+# -----------------------------
+echo "==> Setting up disk health monitoring..."
+
+# Check if SnapRAID storage is configured
+if [[ -d "/media/data" && -f "/etc/snapraid.conf" ]]; then
+    echo "==> SnapRAID storage detected, configuring disk health monitoring..."
+    
+    # Install required packages if not present
+    if ! command -v smartctl &> /dev/null; then
+        echo "Installing smartmontools for SMART monitoring..."
+        apt install -y smartmontools
+    fi
+    
+    # Setup Discord webhook configuration
+    MONITOR_CONFIG="$SCRIPT_DIR/disk-monitor.conf"
+    if [[ ! -f "$MONITOR_CONFIG" ]]; then
+        echo "==> Creating disk monitor configuration..."
+        cp "$SCRIPT_DIR/disk-monitor.conf.example" "$MONITOR_CONFIG"
+        echo ""
+        echo "⚠️  IMPORTANT: Configure Discord webhook for disk failure alerts!"
+        echo "   Edit: $MONITOR_CONFIG"
+        echo "   Set your Discord webhook URL for storage failure notifications"
+        echo ""
+    else
+        echo "==> Disk monitor configuration already exists"
+    fi
+    
+    # Setup cron job for monitoring
+    echo "==> Setting up automated disk health monitoring..."
+    CRON_JOB="*/5 * * * * $SCRIPT_DIR/disk-monitor-cron.sh >/dev/null 2>&1"
+    
+    # Check if cron job already exists
+    if ! crontab -l 2>/dev/null | grep -q "disk-monitor-cron.sh"; then
+        # Add cron job
+        (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+        echo "✅ Disk monitoring cron job added (runs every 5 minutes)"
+    else
+        echo "✅ Disk monitoring cron job already configured"
+    fi
+    
+    # Test the monitoring system
+    echo "==> Testing disk monitoring system..."
+    if "$SCRIPT_DIR/disk-monitor.sh" status >/dev/null 2>&1; then
+        echo "✅ Disk monitoring system operational"
+    else
+        echo "⚠️  Warning: Disk monitoring test failed - check configuration"
+    fi
+    
+    echo ""
+    echo "🛡️  Storage Protection Configured:"
+    echo "  ✅ SMART health monitoring enabled"
+    echo "  ✅ Automatic failure detection every 5 minutes"
+    echo "  ✅ Emergency service shutdown on drive failure"
+    echo "  ✅ Array lockdown (read-only) protection"
+    echo "  📱 Discord alerts: Configure webhook in $MONITOR_CONFIG"
+    
+else
+    echo "==> No SnapRAID storage found, skipping disk monitoring setup"
+    echo "   (Disk monitoring is designed for SnapRAID + MergerFS arrays)"
+fi
 
 echo "✅ Home PC bootstrap complete!"
 echo "All services are running, Traefik is ready, firewall restricted to VPS."

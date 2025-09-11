@@ -1,6 +1,7 @@
 # Local configuration files with secrets
 *.env.local
 .env
+*.conf
 
 # SSH keys
 *.pem
