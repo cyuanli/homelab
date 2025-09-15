@@ -25,7 +25,7 @@ fi
 echo "==> Updating system..."
 apt update -y && apt upgrade -y
 
-apt install -y curl git ufw jq smartmontools
+apt install -y curl git ufw jq smartmontools borgmatic
 
 # -----------------------------
 # Install Docker + Compose
@@ -147,12 +147,6 @@ echo "==> Setting up disk health monitoring..."
 if [[ -d "/media/data" && -f "/etc/snapraid.conf" ]]; then
     echo "==> SnapRAID storage detected, configuring disk health monitoring..."
     
-    # Install required packages if not present
-    if ! command -v smartctl &> /dev/null; then
-        echo "Installing smartmontools for SMART monitoring..."
-        apt install -y smartmontools
-    fi
-    
     # Setup Discord webhook configuration
     MONITOR_CONFIG="$SCRIPT_DIR/disk-monitor.conf"
     if [[ ! -f "$MONITOR_CONFIG" ]]; then
@@ -200,6 +194,26 @@ else
     echo "==> No SnapRAID storage found, skipping disk monitoring setup"
     echo "   (Disk monitoring is designed for SnapRAID + MergerFS arrays)"
 fi
+
+# -----------------------------
+# Setup Borgmatic Backup System
+# -----------------------------
+echo "==> Setting up Borgmatic backup system..."
+echo ""
+echo "📋 BORGMATIC SETUP REQUIRED:"
+echo "   1. Adapt the borgmatic configuration file at: $HOMEPC_ROOT/borgmatic/config.yaml"
+echo "   2. Update backup destinations, encryption passphrase, and source directories"
+echo "   3. Run the following commands to install the borgmatic files:"
+echo ""
+echo "sudo cp \"$HOMEPC_ROOT/borgmatic/config.yaml\" /etc/borgmatic/config.yaml"
+echo "sudo cp \"$HOMEPC_ROOT/borgmatic/systemd/borgmatic.service\" /etc/systemd/system/borgmatic.service"
+echo "sudo cp \"$HOMEPC_ROOT/borgmatic/systemd/borgmatic.timer\" /etc/systemd/system/borgmatic.timer"
+echo ""
+echo "   4. After copying files, enable and start the timer:"
+echo "sudo systemctl daemon-reload"
+echo "sudo systemctl enable borgmatic.timer"
+echo "sudo systemctl start borgmatic.timer"
+echo ""
 
 echo "✅ Home PC bootstrap complete!"
 echo "All services are running, Traefik is ready, firewall restricted to VPS."
