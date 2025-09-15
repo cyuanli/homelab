@@ -1,0 +1,44 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+      # Media directories
+      - /media/data/media/movies:/movies:ro
+      - /media/data/media/tv:/tv:ro
+      - /media/data/media/music:/music:ro
+      - /media/data/downloads:/downloads:ro
+    ports:
+      - 8096:8096  # HTTP web interface
+      - 8920:8920  # HTTPS web interface (optional)
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jellyfin.rule=Host(`jellyfin.cliff.li`)
+      - traefik.http.routers.jellyfin.entrypoints=websecure
+      - traefik.http.routers.jellyfin.tls.certresolver=letsencrypt
+      - traefik.http.services.jellyfin.loadbalancer.server.port=8096
+    networks:
+      - traefik
+      - media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  jellyfin_config:
+  jellyfin_cache:
+
+networks:
+  traefik:
+    external: true
+  media:
+    name: media

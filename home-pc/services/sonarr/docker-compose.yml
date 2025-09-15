@@ -9,7 +9,7 @@ services:
       - TZ=Etc/UTC
     volumes:
       - sonarr_config:/config
-      - /media/data/plex/tv:/tv
+      - /media/data/media/tv:/tv
       - /media/data/downloads:/downloads
     ports:
       - 8989:8989

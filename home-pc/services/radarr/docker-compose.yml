@@ -9,7 +9,7 @@ services:
       - TZ=Etc/UTC
     volumes:
       - radarr_config:/config
-      - /media/data/plex/movies:/movies
+      - /media/data/media/movies:/movies
       - /media/data/downloads:/downloads
     ports:
       - 7878:7878

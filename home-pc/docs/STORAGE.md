@@ -131,7 +131,7 @@ sudo /usr/local/bin/snapraid-runner
 
 ### Adding New Services
 Simply point services to subdirectories under `/media/data/`:
-- `/media/data/plex` for Plex media
+- `/media/data/media` for media files (movies, TV, music)
 - `/media/data/downloads` for download clients
 - `/media/data/backups` for backup storage
 
