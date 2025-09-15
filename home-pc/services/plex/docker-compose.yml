@@ -1,0 +1,44 @@
+services:
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - VERSION=docker
+      - PLEX_CLAIM=claim-Gkx6q4AgzuhayB8y3uWt
+    volumes:
+      - plex_config:/config
+      - /media/data/plex/movies:/movies
+      - /media/data/plex/tv:/tv
+      - /media/data/plex/music:/music
+      - /media/data/downloads:/downloads
+    ports:
+      - 32400:32400
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.plex.rule=Host(`plex.cliff.li`)
+      - traefik.http.routers.plex.entrypoints=websecure
+      - traefik.http.routers.plex.tls.certresolver=letsencrypt
+      - traefik.http.services.plex.loadbalancer.server.port=32400
+      - traefik.http.middlewares.plex-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.routers.plex.middlewares=plex-headers
+    networks:
+      - traefik
+      - media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/web/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  plex_config:
+
+networks:
+  traefik:
+    external: true
+  media:
+    name: media

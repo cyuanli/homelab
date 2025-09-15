@@ -1,0 +1,38 @@
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - sonarr_config:/config
+      - /media/data/plex/tv:/tv
+      - /media/data/downloads:/downloads
+    ports:
+      - 8989:8989
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.sonarr.rule=Host(`sonarr.cliff.li`)
+      - traefik.http.routers.sonarr.entrypoints=websecure
+      - traefik.http.routers.sonarr.tls.certresolver=letsencrypt
+      - traefik.http.services.sonarr.loadbalancer.server.port=8989
+    networks:
+      - traefik
+      - media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  sonarr_config:
+
+networks:
+  traefik:
+    external: true
+  media:
+    external: true
