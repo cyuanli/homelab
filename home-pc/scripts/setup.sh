@@ -39,6 +39,11 @@ fi
 systemctl enable docker
 systemctl start docker
 
+# Add current user to docker group for non-root access
+echo "==> Adding user to docker group..."
+usermod -a -G docker $SUDO_USER
+echo "==> User added to docker group. You may need to log out and back in for changes to take effect."
+
 if ! command -v docker-compose &> /dev/null; then
     echo "==> Installing latest Docker Compose..."
     DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
