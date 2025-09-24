@@ -9,5 +9,4 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 ExecStart=/usr/bin/borgmatic --verbosity 1 --syslog-verbosity 1
-ExecStartPost=/home/cyl/homelab/home-pc/borgmatic/notify.sh success
 ExecStopPost=/home/cyl/homelab/home-pc/borgmatic/notify.sh exit-code

@@ -10,14 +10,14 @@ STATE_FILE="/var/lib/disk-monitor/state"
 ALERT_FILE="/var/lib/disk-monitor/alert-sent"
 
 # Drive Configuration - matches your SnapRAID setup
-DATA_PARTITIONS=("sda1" "sdb1" "sde1" "sdf1")
+DATA_PARTITIONS=("sdb1" "sdc1" "sdd1" "sde1")
 DATA_MOUNT_POINTS=("/mnt/data4" "/mnt/data2" "/mnt/data3" "/mnt/data1")
-PARITY_PARTITIONS=("sdd1")
+PARITY_PARTITIONS=("sdf1")
 PARITY_MOUNT_POINTS=("/mnt/parity1")
 
 # Physical drives for SMART checks (remove partition numbers)
-DATA_DRIVES=("sda" "sdb" "sde" "sdf")
-PARITY_DRIVES=("sdd")
+DATA_DRIVES=("sdb" "sdc" "sdd" "sde")
+PARITY_DRIVES=("sdf")
 
 MERGERFS_MOUNT="/media/data"
 
@@ -351,11 +351,29 @@ The array will remain locked until manual intervention." "CRITICAL"
         return 1
     else
         info "All drives are healthy"
-        # If previous failure existed, keep timestamp in STATE_FILE
+
+        # Check if we're recovering from a failure state
+        local was_failed=false
+        if [ -f "$STATE_FILE" ] && grep -q "FAILED" "$STATE_FILE" 2>/dev/null; then
+            was_failed=true
+        fi
+
+        # Update state file
         {
             printf 'HEALTHY\n%s\n' "$(date)" > "$STATE_FILE"
         } || true
         clear_alert_state
+
+        # Send recovery notification only if recovering from failure
+        if [ "$was_failed" = true ]; then
+            send_discord_alert "✅ **RECOVERY COMPLETE** - All drives are now healthy on $(hostname)!
+
+All SnapRAID drives have passed health checks:
+• $(printf '/dev/%s ' "${ALL_DRIVES[@]}")
+
+The storage array is functioning normally. Docker containers and services can be safely restarted." "INFO" "true"
+        fi
+
         return 0
     fi
 }
