@@ -115,9 +115,9 @@ check_mount_point() {
         rm -f "$tf" || true
     fi
 
-    # Check kernel logs for I/O or filesystem errors mentioning either partition or mount point
-    if dmesg -T 2>/dev/null | tail -200 | egrep -i "(I/O error|I/O err|failed command|EXT4-fs error|XFS|ntfs|journal error|Buffer I/O error)" | egrep -i "($partition|$(basename "$mount_point")|$mount_point)" >/dev/null; then
-        error "Recent filesystem/kernel I/O errors detected for $partition / $mount_point"
+    # Check kernel logs for critical hardware/filesystem errors (last 5 minutes only)
+    if dmesg -T --since "5 minutes ago" 2>/dev/null | grep -E "(ext4_mb_generate_buddy.*corruption|EXT4-fs error.*Corrupt|XFS.*Metadata corruption|xfs_inode_buf_verify.*bad magic|COMRESET failed \(errno=-16\)|link is slow to respond.*ready=0|SStatus.*SError.*UnrecovData|blk_update_request: I/O error.*sector [0-9]+|status: \{ DRDY ERR \}.*error: \{ UNC \}|ata[0-9]+\.00: exception Emask.*frozen)" | grep -i "$partition" >/dev/null; then
+        error "Critical hardware/filesystem errors detected for $partition / $mount_point"
         return 1
     fi
 
