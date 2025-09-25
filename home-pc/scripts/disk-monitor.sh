@@ -315,9 +315,29 @@ check_all_drives() {
         fi
     done
 
-    # MergerFS - warn only
+    # MergerFS - check and alert if unmounted during normal operation
+    local mergerfs_failed=false
     if ! check_mergerfs_health; then
-        info "MergerFS health check failed (may be expected during recovery)"
+        if [ "$all_healthy" = true ]; then
+            # All drives healthy but MergerFS unmounted - this needs attention
+            mergerfs_failed=true
+            warn "MergerFS mount $MERGERFS_MOUNT is not mounted while drives are healthy"
+            send_discord_alert "⚠️ **MergerFS UNMOUNTED** on $(hostname)!
+
+MergerFS mount at $MERGERFS_MOUNT is not available, but all storage drives are healthy.
+
+This means your unified storage view is not accessible even though individual drives are working.
+
+**To fix this issue:**
+1. Check MergerFS service: \`systemctl status mergerfs\`
+2. Manually remount: \`sudo mount $MERGERFS_MOUNT\`
+3. Verify access: \`ls -la $MERGERFS_MOUNT\`
+
+Individual drives are still accessible at:
+$(printf '• %s\n' "${ALL_MOUNT_POINTS[@]}")" "WARNING" "true"
+        else
+            info "MergerFS health check failed (expected during drive failure recovery)"
+        fi
     fi
 
     if [ "$all_healthy" = false ]; then
