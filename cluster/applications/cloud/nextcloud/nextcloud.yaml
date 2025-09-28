@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud
+  namespace: cloud
+  labels:
+    app: nextcloud
+    component: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+    spec:
+      containers:
+      - name: nextcloud
+        image: nextcloud:apache
+        env:
+        - name: POSTGRES_HOST
+          value: postgres
+        - name: POSTGRES_DB
+          value: nextcloud
+        - name: POSTGRES_USER
+          value: nextcloud
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-secrets
+              key: postgres-password
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_HOST_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-secrets
+              key: redis-password
+        - name: NEXTCLOUD_ADMIN_USER
+          value: admin
+        - name: NEXTCLOUD_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-secrets
+              key: nextcloud-admin-password
+        - name: NEXTCLOUD_TRUSTED_DOMAINS
+          value: drive.cliff.li
+        - name: OVERWRITEPROTOCOL
+          value: https
+        - name: OVERWRITEHOST
+          value: drive.cliff.li
+        - name: OVERWRITECLIURL
+          value: https://drive.cliff.li
+        ports:
+        - containerPort: 80
+          name: http
+        volumeMounts:
+        - name: nextcloud-data
+          mountPath: /var/www/html
+        - name: nextcloud-files
+          mountPath: /var/www/html/data
+        # Disabled probes during migration - Nextcloud needs time to process migrated data
+        # livenessProbe:
+        #   httpGet:
+        #     path: /status.php
+        #     port: http
+        #   initialDelaySeconds: 60
+        #   periodSeconds: 30
+        #   timeoutSeconds: 10
+        # readinessProbe:
+        #   httpGet:
+        #     path: /status.php
+        #     port: http
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 10
+        #   timeoutSeconds: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: nextcloud-data
+        persistentVolumeClaim:
+          claimName: nextcloud-data
+      - name: nextcloud-files
+        hostPath:
+          path: /media/data/nextcloud
+          type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-data
+  namespace: cloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nextcloud
+  namespace: cloud
+  labels:
+    app: nextcloud
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: nextcloud

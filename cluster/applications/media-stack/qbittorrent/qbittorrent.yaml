@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qbittorrent
+  namespace: media
+  labels:
+    app: qbittorrent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qbittorrent
+  template:
+    metadata:
+      labels:
+        app: qbittorrent
+    spec:
+      containers:
+      - name: qbittorrent
+        image: lscr.io/linuxserver/qbittorrent:latest
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "Etc/UTC"
+        - name: WEBUI_PORT
+          value: "8080"
+        - name: TORRENTING_PORT
+          value: "6881"
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 6881
+          name: torrent-tcp
+          protocol: TCP
+        - containerPort: 6881
+          name: torrent-udp
+          protocol: UDP
+        volumeMounts:
+        - name: qbittorrent-config
+          mountPath: /config
+        - name: incomplete-downloads
+          mountPath: /incomplete
+        - name: downloads
+          mountPath: /downloads
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: qbittorrent-config
+        hostPath:
+          path: /home/cyl/k3s-configs/media-stack/qbittorrent-config
+          type: DirectoryOrCreate
+      - name: incomplete-downloads
+        hostPath:
+          path: /home/cyl/Downloads/incomplete
+          type: DirectoryOrCreate
+      - name: downloads
+        hostPath:
+          path: /media/data/downloads
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qbittorrent
+  namespace: media
+  labels:
+    app: qbittorrent
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 6881
+    targetPort: torrent-tcp
+    protocol: TCP
+    name: torrent-tcp
+    nodePort: 30681
+  - port: 6881
+    targetPort: torrent-udp
+    protocol: UDP
+    name: torrent-udp
+    nodePort: 30681
+  selector:
+    app: qbittorrent

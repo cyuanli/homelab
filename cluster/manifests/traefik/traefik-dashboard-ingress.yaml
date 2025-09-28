@@ -1,0 +1,43 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: infrastructure
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`traefik.cliff.li`)
+    kind: Rule
+    services:
+    - name: traefik-dashboard
+      port: 8080
+  tls:
+    certResolver: letsencrypt
+---
+# Alternative: Kubernetes Ingress format
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traefik-dashboard-ingress
+  namespace: infrastructure
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - traefik.cliff.li
+    secretName: traefik-dashboard-tls
+  rules:
+  - host: traefik.cliff.li
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: traefik-dashboard
+            port:
+              number: 8080

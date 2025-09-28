@@ -1,0 +1,27 @@
+# Disk Monitoring Configuration
+# Copy to monitoring.conf and customize
+
+# Discord webhook URL for disk failure alerts
+DISK_MONITOR_WEBHOOK=""
+
+# Monitoring interval (minutes)
+DISK_MONITOR_INTERVAL=5
+
+# Drive configuration (update for your system)
+# Data partitions (without /dev/ prefix)
+DATA_PARTITIONS=("sdb1" "sdc1" "sdd1" "sde1")
+DATA_MOUNT_POINTS=("/mnt/data4" "/mnt/data2" "/mnt/data3" "/mnt/data1")
+
+# Parity partitions
+PARITY_PARTITIONS=("sdf1")
+PARITY_MOUNT_POINTS=("/mnt/parity1")
+
+# Physical drives for SMART checks (without /dev/ prefix)
+DATA_DRIVES=("sdb" "sdc" "sdd" "sde")
+PARITY_DRIVES=("sdf")
+
+# MergerFS mount point
+MERGERFS_MOUNT="/media/data"
+
+# Alert throttling (prevent spam)
+ALERT_THROTTLE_HOURS=1

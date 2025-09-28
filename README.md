@@ -1,249 +1,423 @@
 # Homelab Infrastructure
 
-A secure, automated homelab setup using Tailscale for private networking, with a VPS acting as a reverse proxy to services running on your home PC.
+A complete homelab infrastructure combining K3s cluster for applications with VPS proxy for external access.
 
-## Architecture
+## Architecture Overview
 
+### Infrastructure Stack
+- **K3s Cluster**: Lightweight Kubernetes distribution running applications
+- **VPS Proxy**: Nginx-based reverse proxy providing external access
+- **Tailscale**: Zero-config VPN connecting VPS and homelab
+- **Traefik**: K8s ingress controller with automatic SSL certificates
+- **Storage**: Local persistent volumes with monitoring
+
+### Network Flow
 ```
-Internet → VPS (Nginx) → Tailscale Tunnel → Home PC (Traefik) → Docker Services
+Internet → VPS (Nginx) → Tailscale Tunnel → K3s Cluster (Traefik) → Applications
 ```
 
-- **VPS**: Public-facing reverse proxy using Nginx stream module
-- **Home PC**: Private services behind Traefik with automatic HTTPS
-- **Tailscale**: Secure WireGuard-based mesh network connecting VPS and home PC
-- **Security**: Firewall restrictions, SSH key auth, proxy protocol support
+### Services
+- **Media Stack**: Prowlarr, Sonarr, Radarr, qBittorrent, Jellyfin
+- **Cloud Storage**: Nextcloud with PostgreSQL and Redis
+- **Location Tracking**: OwnTracks (configurable)
+- **Monitoring**: Custom storage monitoring with Discord notifications
+- **Utilities**: Whoami test service
 
 ## Quick Start
 
 ### Prerequisites
+- Fresh Debian/Ubuntu machine for K3s cluster
+- VPS with public IP for external access (optional)
+- Tailscale account and auth keys
+- Domain name with DNS pointing to VPS (if using VPS proxy)
 
-- A VPS with root access (Ubuntu/Debian recommended)
-- A home PC/server (Ubuntu/Debian recommended) 
-- A Tailscale account ([tailscale.com](https://tailscale.com))
-- A domain name with DNS pointing to your VPS IP
+### Setup Steps
 
-### 1. Setup VPS
+1. **Clone the repository**
+   ```bash
+   git clone <this-repo>
+   cd homelab
+   ```
 
-```bash
-# Clone repository on VPS
-git clone <your-repo-url>
-cd homelab/vps
+2. **Configure your environment**
+   ```bash
+   cp config/homelab.env.template config/homelab.env
+   # Edit config/homelab.env with your domain, paths, and keys
+   ```
 
-# Configure environment
-cp config/vps.env config/vps.env.local
-vim config/vps.env.local  # Set HOME_PC_NAME, TAILSCALE_AUTHKEY, SSH_PUBLIC_KEY
+3. **Deploy everything**
+   ```bash
+   ./scripts/homelab.sh setup-all
+   ```
 
-# Run setup script
-sudo bash scripts/setup.sh
+4. **Setup VPS proxy (optional)**
+   ```bash
+   # On VPS
+   cd vps/
+   cp config/vps.env config/vps.env.local
+   # Edit with your settings
+   sudo bash scripts/setup.sh
+   ```
+
+## Repository Structure
+
 ```
-
-### 2. Setup Home PC
-
-```bash
-# Clone repository on home PC
-git clone <your-repo-url>
-cd homelab/home-pc
-
-# Configure environment
-cp config/home-pc.env config/home-pc.env.local
-vim config/home-pc.env.local  # Set VPS_HOSTNAME, TAILSCALE_AUTHKEY
-
-# Run setup script
-sudo bash scripts/setup.sh
+homelab/
+├── cluster/                    # K3s manifests and configuration
+│   ├── applications/          # Application deployments
+│   │   ├── cloud/            # Nextcloud
+│   │   ├── location/         # OwnTracks
+│   │   ├── media-stack/      # Media services
+│   │   └── utilities/        # Test/utility services
+│   ├── bootstrap/            # Initial cluster setup
+│   └── manifests/            # Core infrastructure (Traefik, storage)
+├── config/                    # Configuration management
+│   ├── homelab.env           # Main configuration file
+│   ├── homelab.env.template  # Configuration template
+│   ├── node-configs/         # Node-specific configs
+│   └── service-configs/      # Service authentication configs
+├── nodes/                     # Node-specific data
+├── scripts/                   # Automation scripts
+│   ├── utils/common.sh       # Shared utilities
+│   ├── homelab.sh           # Main orchestrator
+│   ├── setup-system.sh      # System preparation
+│   ├── setup-cluster.sh     # K3s installation
+│   ├── deploy-applications.sh # Application deployment
+│   ├── monitor-storage.sh    # Storage monitoring
+│   └── manage-nodes.sh       # Node management
+├── vps/                      # VPS proxy configuration
+│   ├── config/               # VPS environment variables
+│   ├── nginx/                # Nginx configuration templates
+│   └── scripts/              # VPS setup scripts
+└── traefik/                  # Legacy Traefik config (Docker)
 ```
-
-### 3. Deploy Services
-
-Services are automatically deployed during setup. Add new services to `home-pc/services/` and they'll be discovered by Traefik automatically.
 
 ## Configuration
 
-### VPS Environment (`vps/config/vps.env.local`)
+### Main Configuration (`config/homelab.env`)
+
+Key sections:
+
+**Domain & Network**
+```bash
+DOMAIN="your-domain.com"
+ACME_EMAIL="you@your-domain.com"
+VPS_IP="100.x.x.x"  # Tailscale IP of VPS
+```
+
+**Storage Paths**
+```bash
+DATA_ROOT="/media/data"           # Main data directory
+K8S_STORAGE_ROOT="/opt/k3s-storage"  # K8s persistent volumes
+```
+
+**Services**
+```bash
+NODE_ROLE="server"                # server or agent
+ENABLE_TRAEFIK_DASHBOARD="true"
+ENABLE_DISK_MONITORING="true"
+```
+
+**Monitoring**
+```bash
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+### Service Authentication (`config/service-configs/`)
+- `auth.conf`: HTTP Basic Auth credentials for admin interfaces
+- `monitoring.conf`: Storage monitoring and Discord webhook settings
+
+## Script Usage
+
+### Main Orchestrator (`homelab.sh`)
+Central command interface:
 
 ```bash
-# Home PC configuration
-HOME_PC_NAME=your-homepc-hostname
+# Setup commands
+./scripts/homelab.sh setup-all          # Complete setup
+./scripts/homelab.sh setup-system       # System preparation only
+./scripts/homelab.sh setup-cluster      # K3s installation only
 
-# Tailscale configuration
-TAILSCALE_AUTHKEY=tskey-auth-xxxxx
+# Deployment commands
+./scripts/homelab.sh deploy              # Deploy all applications
+./scripts/homelab.sh deploy media        # Deploy media stack only
+./scripts/homelab.sh deploy cloud        # Deploy Nextcloud only
 
-# SSH public key for secure access
-SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2E..."
+# Management commands
+./scripts/homelab.sh status             # Show cluster status
+./scripts/homelab.sh nodes              # Node management
+./scripts/homelab.sh monitor            # Storage monitoring
+./scripts/homelab.sh logs jellyfin      # View service logs
 ```
 
-### Home PC Environment (`home-pc/config/home-pc.env.local`)
+### Individual Scripts
 
+**System Setup (`setup-system.sh`)**
+- Installs packages (Docker, curl, git, etc.)
+- Configures UFW firewall
+- Installs and configures Tailscale
+- Sets up user permissions
+
+**Cluster Setup (`setup-cluster.sh`)**
+- Downloads and installs K3s
+- Configures cluster with Tailscale networking
+- Sets up kubectl access
+- Installs Kustomize
+- Deploys core infrastructure
+
+**Application Deployment (`deploy-applications.sh`)**
+- Deploys applications using Kustomize
+- Supports component-based deployment
+- Handles dependencies and sequencing
+- Waits for readiness
+
+**Storage Monitoring (`monitor-storage.sh`)**
+- Monitors drive health and availability
+- Stops workloads on drive failure
+- Sends Discord notifications
+- Supports both Docker and K8s workloads
+
+**Node Management (`manage-nodes.sh`)**
+- Add/remove cluster nodes
+- Drain nodes for maintenance
+- Show node status and health
+
+## Service Details
+
+### Media Stack
+All services run in the `media` namespace:
+
+- **Prowlarr** (port 9696): Indexer manager for torrents
+- **Sonarr** (port 8989): TV series management
+- **Radarr** (port 7878): Movie management
+- **qBittorrent** (port 8080): Torrent client
+- **Jellyfin** (port 8096): Media server
+
+**Storage**: Uses `/media/data/media` with proper user permissions
+**Access**: `https://service.your-domain.com` via Traefik ingress
+
+### Nextcloud
+Runs in `cloud` namespace with:
+- **PostgreSQL**: Database backend
+- **Redis**: Caching layer
+- **Persistent Storage**: `/opt/k3s-storage/nextcloud-*`
+- **Access**: `https://drive.your-domain.com`
+
+### OwnTracks (Optional)
+Location tracking with MQTT broker
+- **Mosquitto**: MQTT broker for location data
+- **Authentication**: HTTP Basic Auth
+- **Access**: `https://owntracks.your-domain.com`
+
+### Monitoring
+- **Storage Monitoring**: Checks drive health every 5 minutes
+- **Discord Notifications**: Alerts for failures and events
+- **Workload Protection**: Stops services on storage failure
+
+## Storage Configuration
+
+### Directory Structure
 ```bash
-# VPS configuration  
-VPS_HOSTNAME=your-vps-hostname
-VPS_IP=100.121.249.71  # Tailscale IP
+/media/data/               # Main data root
+├── media/                 # Media files
+│   ├── movies/           # Movie library
+│   ├── tv/               # TV show library
+│   └── music/            # Music library
+└── downloads/            # Download staging
 
-# Tailscale configuration
-TAILSCALE_AUTHKEY=tskey-auth-xxxxx
-
-# Docker configuration
-DOCKER_USER=your-username
-
-# Traefik configuration
-TRAEFIK_DIR=~/traefik
-SERVICES_DIR=./services
+/opt/k3s-storage/         # K8s persistent volumes
+├── nextcloud-data/       # Nextcloud app data
+├── nextcloud-files/      # User files
+├── postgres-data/        # Database storage
+└── traefik-acme/         # SSL certificates
 ```
 
-## Adding Services
+### Storage Monitoring
+The monitoring system:
+- Monitors specified drives for availability
+- Stops all workloads if drives become unavailable
+- Sends Discord notifications for failures
+- Logs all activities for troubleshooting
+- Supports recovery operations
 
-### Method 1: Automatic (Recommended)
+## Network & Security
 
-1. Create service directory: `mkdir home-pc/services/my-app`
-2. Add docker-compose.yml with Traefik labels:
+### Tailscale Integration
+- Provides secure mesh networking between VPS and homelab
+- All inter-node traffic encrypted via WireGuard
+- No complex firewall rules needed between nodes
+- Easy addition of new nodes
 
-```yaml
-services:
-  my-app:
-    image: your-app:latest
-    container_name: my-app
-    restart: unless-stopped
-    networks:
-      - traefik
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.my-app.rule=Host(`my-app.yourdomain.com`)"
-      - "traefik.http.routers.my-app.entrypoints=websecure"
-      - "traefik.http.routers.my-app.tls.certresolver=letsencrypt"
-      - "traefik.http.services.my-app.loadbalancer.server.port=8080"
+### External Access
+- **VPS Proxy**: Nginx on VPS forwards traffic via Tailscale
+- **SSL Termination**: Let's Encrypt certificates via Traefik
+- **Authentication**: HTTP Basic Auth for admin interfaces
+- **DNS**: A records for each service subdomain
 
-networks:
-  traefik:
-    external: true
-```
-
-3. Deploy: `cd home-pc/services/my-app && docker-compose up -d`
-4. Access: `https://my-app.yourdomain.com` (automatic HTTPS!)
-
-### Method 2: Manual Deployment
-
-Services placed in `home-pc/services/` are automatically deployed by the setup script. Restart services with:
-
-```bash
-cd home-pc/services/service-name
-docker-compose pull && docker-compose up -d
-```
-
-## Security Features
-
-### Network Security
-- **UFW Firewall**: VPS allows only necessary ports (22, 80, 443, 51422)
-- **Tailscale Mesh**: All traffic between VPS and home PC encrypted via WireGuard
-- **Home PC Firewall**: Only accepts connections from VPS Tailscale IP
-
-### Access Control  
-- **SSH Key Authentication**: Password login disabled on VPS
-- **Proxy Protocol**: Real client IPs preserved through proxy chain
-- **Automatic HTTPS**: Let's Encrypt certificates for all services
-
-### Service Isolation
-- **Docker Networks**: Services isolated in separate network namespaces
-- **Traefik Network**: Shared network for service discovery only
-- **Container Restart Policies**: Services auto-recover from failures
-
-## Monitoring & Maintenance
-
-### Check Service Status
-```bash
-# On home PC
-docker ps
-docker-compose -f ~/traefik/docker-compose.yml logs
-
-# Check Tailscale connectivity
-tailscale status
-```
-
-### Update Services
-```bash
-# Update all services
-cd home-pc/services
-for dir in */; do
-  (cd "$dir" && docker-compose pull && docker-compose up -d)
-done
-```
-
-### View Logs
-```bash
-# Traefik logs
-docker logs traefik
-
-# Service logs
-docker logs <container-name>
-
-# Nginx logs (on VPS)
-tail -f /var/log/nginx/stream_access.log
-tail -f /var/log/nginx/stream_error.log
-```
-
-## Included Services
-
-- **Traefik Dashboard**: `http://localhost:8080` or `https://traefik.local` (home PC only)
-- **Whoami**: `https://whoami.cliff.li` - Request diagnostic tool
-- **Nextcloud**: `https://drive.cliff.li` - Complete cloud storage and collaboration platform
-
-## Ports & Protocols
-
-### VPS
-- `22/tcp`: SSH access
-- `80/tcp`: HTTP (redirects to HTTPS)
-- `443/tcp`: HTTPS traffic
-- `443/udp`: HTTP/3 support
-- `51422/tcp`: SSH passthrough to home PC
-
-### Home PC (Tailscale only)
-- `80/tcp`: Traefik HTTP entrypoint
-- `443/tcp`: Traefik HTTPS entrypoint  
-- `22/tcp`: SSH access via VPS port 51422
+### Firewall Configuration
+- **UFW**: Configured during system setup
+- **Allowed Ports**: SSH (22), HTTP (80), HTTPS (443)
+- **LAN Access**: Configurable SSH access from local network
 
 ## Troubleshooting
 
-### Tailscale Connection Issues
+### Common Issues
+
+**Pods Not Starting**
+```bash
+# Check pod status
+kubectl get pods -A
+
+# View pod logs
+kubectl logs -n media deployment/jellyfin
+
+# Describe pod for events
+kubectl describe pod -n media <pod-name>
+```
+
+**Storage Issues**
+```bash
+# Check mounted drives
+df -h /media/data
+
+# Check monitoring logs
+./scripts/homelab.sh monitor status
+
+# Test storage monitoring
+./scripts/homelab.sh monitor test-alert
+```
+
+**Network Connectivity**
 ```bash
 # Check Tailscale status
-tailscale status
+sudo tailscale status
 
-# Restart Tailscale
-sudo systemctl restart tailscaled
-tailscale up --authkey=<your-key>
+# Check K3s cluster
+kubectl get nodes -o wide
+
+# Test VPS connectivity
+curl -I http://<VPS_TAILSCALE_IP>
 ```
 
-### Service Not Accessible
-1. Check if container is running: `docker ps`
-2. Check Traefik routes: `docker logs traefik`
-3. Verify DNS points to VPS IP
-4. Check firewall rules: `sudo ufw status`
-
-### SSL Certificate Issues
+**SSL Certificate Issues**
 ```bash
 # Check certificate status
-docker exec traefik cat /acme.json
+kubectl get certificates -A
 
-# Force certificate renewal
-docker-compose -f ~/traefik/docker-compose.yml restart
+# View Traefik logs
+kubectl logs -n kube-system deployment/traefik
+
+# Force certificate refresh
+kubectl delete certificate -n <namespace> <cert-name>
 ```
 
-### Network Connectivity
+### Recovery Procedures
+
+**Cluster Recovery**
 ```bash
-# Test VPS to home PC connection
-# On VPS:
-curl -I http://<HOME_PC_TAILSCALE_IP>
+# Restart K3s
+sudo systemctl restart k3s
 
-# Test home PC to internet
-# On home PC:
-curl -I https://google.com
+# Redeploy applications
+./scripts/homelab.sh deploy
+
+# Check cluster health
+kubectl get nodes && kubectl get pods -A
 ```
 
-## Advanced Configuration
+**Storage Recovery**
+```bash
+# Stop workloads for maintenance
+./scripts/monitor-storage.sh stop-workloads
 
-### Custom Nginx Configuration
-Modify `vps/nginx/nginx.conf.template` to customize the VPS proxy behavior.
+# Fix storage issues (manual)
+# Mount drives, repair filesystems, etc.
 
-### Traefik Configuration  
-Edit `home-pc/traefik/traefik.yml` for advanced Traefik settings.
+# Restart monitoring
+./scripts/homelab.sh monitor start
+```
 
-### Environment Overrides
-Use `.env.local` files to override default configurations without committing sensitive data.
+## Maintenance
+
+### Regular Tasks
+- **Daily**: Check service status and logs
+- **Weekly**: Review storage monitoring alerts
+- **Monthly**: Update system packages
+- **Quarterly**: Update K3s and application images
+
+### Adding Services
+1. Create K8s manifests in `cluster/applications/new-service/`
+2. Add configuration to `config/homelab.env` if needed
+3. Update deployment scripts to include new service
+4. Test deployment: `./scripts/homelab.sh deploy new-service`
+
+### Adding Nodes
+```bash
+# Generate node configuration
+./scripts/manage-nodes.sh add <node-name> <node-ip>
+
+# On new node: copy homelab repo and run
+./scripts/homelab.sh setup-system
+./scripts/homelab.sh setup-cluster
+```
+
+### Scaling Services
+```bash
+# Scale deployment
+kubectl scale deployment/jellyfin -n media --replicas=2
+
+# Update resource limits
+# Edit cluster/applications/media-stack/jellyfin/jellyfin.yaml
+kubectl apply -k cluster/applications/media-stack/jellyfin/
+```
+
+## VPS Proxy Setup
+
+### Configuration
+The VPS acts as a reverse proxy using Nginx with Tailscale:
+
+**Setup Steps:**
+1. Configure `vps/config/vps.env.local` with homelab Tailscale IP
+2. Run `vps/scripts/setup.sh` on VPS
+3. Configure DNS A records to point to VPS public IP
+
+**Features:**
+- **Stream Proxy**: Direct TCP/UDP forwarding for HTTP/HTTPS
+- **Real IP Preservation**: Proxy protocol support
+- **SSL Passthrough**: Certificates handled by Traefik on homelab
+
+### VPS Management
+```bash
+# On VPS - check status
+sudo systemctl status nginx tailscaled
+
+# View proxy logs
+sudo tail -f /var/log/nginx/stream_access.log
+
+# Restart services
+sudo systemctl restart nginx
+```
+
+## Development & Customization
+
+### Script Development
+- Source `scripts/utils/common.sh` for shared functions
+- Use configuration from `config/homelab.env`
+- Implement idempotent operations
+- Follow existing error handling patterns
+
+### Adding Features
+- Update relevant scripts in `scripts/`
+- Add configuration options to `config/homelab.env.template`
+- Update documentation
+- Test on clean systems when possible
+
+### Best Practices
+- Keep scripts idempotent (safe to run multiple times)
+- Use proper error handling and logging
+- Follow the modular design patterns
+- Test individual components before full deployment
+
+---
+
+This homelab provides a robust, scalable infrastructure that can be easily reproduced and managed through automation scripts.

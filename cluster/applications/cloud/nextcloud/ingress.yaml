@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nextcloud
+  namespace: cloud
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+    # traefik.ingress.kubernetes.io/router.middlewares: cloud-nextcloud-security@kubernetescrd,cloud-nextcloud-wellknown@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - drive.cliff.li
+    secretName: nextcloud-tls
+  rules:
+  - host: drive.cliff.li
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nextcloud
+            port:
+              number: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nextcloud-security
+  namespace: cloud
+spec:
+  headers:
+    stsSeconds: 15552000
+    stsIncludeSubdomains: true
+    frameDeny: true
+    contentTypeNosniff: true
+    referrerPolicy: no-referrer
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nextcloud-wellknown
+  namespace: cloud
+spec:
+  redirectRegex:
+    permanent: true
+    regex: "https://(.*)/.well-known/(?:card|cal)dav"
+    replacement: "https://${1}/remote.php/dav/"

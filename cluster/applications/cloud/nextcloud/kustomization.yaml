@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cloud
+
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - postgres.yaml
+  - redis.yaml
+  - nextcloud.yaml
+  - ingress.yaml
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: cloud
+    app.kubernetes.io/part-of: homelab
+
+images:
+  - name: nextcloud
+    newTag: apache
+  - name: postgres
+    newTag: 16-alpine
+  - name: redis
+    newTag: 7-alpine

@@ -1,0 +1,480 @@
+#!/usr/bin/env bash
+# Homelab Main Orchestrator Script
+# Provides a unified interface for all homelab operations
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOMELAB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# shellcheck source=utils/common.sh
+source "$SCRIPT_DIR/utils/common.sh"
+
+show_usage() {
+    cat << EOF
+Homelab Management Script
+
+Usage: $0 [command] [options]
+
+${BLUE}Setup Commands:${NC}
+  setup-system           - Prepare fresh system for homelab
+  setup-cluster          - Install and configure K3s cluster
+  setup-monitoring       - Configure monitoring systems
+  setup-all              - Run complete setup from fresh system
+  setup-auth [service]   - Configure authentication for services
+
+${BLUE}Deployment Commands:${NC}
+  deploy [component]     - Deploy applications (infrastructure, cloud, media, etc.)
+  restart [component]    - Restart applications
+  delete [component]     - Delete applications
+
+${BLUE}Management Commands:${NC}
+  status                 - Show cluster and service status
+  nodes [action]         - Manage cluster nodes (add, remove, list, etc.)
+  backup [action]        - Backup and restore operations
+  monitor [action]       - Monitoring operations
+
+${BLUE}Utility Commands:${NC}
+  config                 - Show current configuration
+  logs [service]         - Show service logs
+  shell [service]        - Open shell in service container
+  help                   - Show this help message
+
+${BLUE}Examples:${NC}
+  $0 setup-all                    # Complete homelab setup
+  $0 deploy media                 # Deploy media stack
+  $0 status                       # Show status
+  $0 nodes add worker1            # Add cluster node
+  $0 setup-auth owntracks         # Setup Owntracks authentication
+  $0 monitor test-alert           # Test monitoring alerts
+
+${BLUE}Configuration:${NC}
+  Copy config/homelab.env.template to config/homelab.env and customize
+
+EOF
+}
+
+validate_environment() {
+    # Check if we're in the homelab directory
+    if [[ ! -f "$HOMELAB_ROOT/config/homelab.env.template" ]]; then
+        log_error "This script must be run from the homelab directory"
+        log_error "Current directory: $(pwd)"
+        log_error "Expected homelab root: $HOMELAB_ROOT"
+        exit 1
+    fi
+
+    # Load configuration
+    load_config
+}
+
+run_setup_system() {
+    log_step "Running system setup"
+    "$SCRIPT_DIR/setup-system.sh" "$@"
+}
+
+run_setup_cluster() {
+    log_step "Running cluster setup"
+    "$SCRIPT_DIR/setup-cluster.sh" "$@"
+}
+
+run_setup_monitoring() {
+    log_step "Running monitoring setup"
+    "$SCRIPT_DIR/setup-monitoring.sh" "$@"
+}
+
+run_setup_all() {
+    log_step "Running complete homelab setup"
+
+    # Validate prerequisites
+    check_not_root
+
+    log_info "This will set up a complete homelab from a fresh system"
+    log_info "Components: System → K3s → Infrastructure → Applications → Monitoring"
+
+    if [[ "${1:-}" != "--yes" ]]; then
+        echo ""
+        log_warning "This process will:"
+        echo "  - Install system packages and dependencies"
+        echo "  - Configure firewall and user permissions"
+        echo "  - Install K3s cluster"
+        echo "  - Deploy infrastructure (Traefik, storage)"
+        echo "  - Deploy all applications (Cloud, Media, etc.)"
+        echo "  - Configure monitoring systems"
+        echo ""
+        echo -n "Continue? (y/N): "
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_info "Setup cancelled"
+            exit 0
+        fi
+    fi
+
+    # Record start time
+    local start_time=$(date +%s)
+
+    # Run setup phases
+    run_setup_system
+    run_setup_cluster
+    "$SCRIPT_DIR/deploy-applications.sh" all deploy
+    run_setup_monitoring
+
+    # Calculate duration
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    local duration_formatted=$(printf "%02d:%02d:%02d" $((duration/3600)) $((duration%3600/60)) $((duration%60)))
+
+    # Show completion summary
+    cat << EOF
+
+${GREEN}🎉 Homelab setup completed successfully!${NC}
+
+${BLUE}Setup completed in: $duration_formatted${NC}
+
+${BLUE}Your homelab is now ready! 🚀${NC}
+
+${BLUE}Service URLs:${NC}
+EOF
+
+    if [[ -n "${DOMAIN:-}" ]]; then
+        echo "  - Traefik Dashboard: https://traefik.$DOMAIN"
+        echo "  - Nextcloud: https://nextcloud.$DOMAIN"
+        echo "  - qBittorrent: https://qbittorrent.$DOMAIN"
+        echo "  - Prowlarr: https://prowlarr.$DOMAIN"
+        echo "  - Sonarr: https://sonarr.$DOMAIN"
+        echo "  - Radarr: https://radarr.$DOMAIN"
+        echo "  - Jellyfin: https://jellyfin.$DOMAIN"
+        if [[ "${ENABLE_LOCATION_SERVICES:-false}" == "true" ]]; then
+            echo "  - Owntracks: https://owntracks.$DOMAIN"
+        fi
+    fi
+
+    cat << EOF
+
+${BLUE}Next steps:${NC}
+  1. Configure your services through their web interfaces
+  2. Set up authentication: ${CYAN}$0 setup-auth owntracks${NC}
+  3. Check status: ${CYAN}$0 status${NC}
+  4. Monitor storage: ${CYAN}$0 monitor status${NC}
+
+${BLUE}Management:${NC}
+  - Add nodes: ${CYAN}$0 nodes add [hostname]${NC}
+  - Backup configs: ${CYAN}$0 backup create${NC}
+  - View logs: ${CYAN}$0 logs [service]${NC}
+
+EOF
+}
+
+run_deploy() {
+    "$SCRIPT_DIR/deploy-applications.sh" "$@"
+}
+
+run_setup_auth() {
+    "$SCRIPT_DIR/setup-auth.sh" "$@"
+}
+
+run_nodes() {
+    "$SCRIPT_DIR/manage-nodes.sh" "$@"
+}
+
+run_monitor() {
+    local action="${1:-status}"
+    shift || true
+
+    case "$action" in
+        "status")
+            "$SCRIPT_DIR/monitor-storage.sh" status "$@"
+            ;;
+        "test-alert")
+            "$SCRIPT_DIR/monitor-storage.sh" test-alert "$@"
+            ;;
+        "clear-alert")
+            "$SCRIPT_DIR/monitor-storage.sh" clear-alert "$@"
+            ;;
+        "check")
+            "$SCRIPT_DIR/monitor-storage.sh" check "$@"
+            ;;
+        *)
+            log_error "Unknown monitor action: $action"
+            echo "Available actions: status, test-alert, clear-alert, check"
+            exit 1
+            ;;
+    esac
+}
+
+run_backup() {
+    local action="${1:-list}"
+    shift || true
+
+    case "$action" in
+        "create")
+            # Simple backup using rsync
+            local backup_dir="/home/$HOMELAB_USER/backups/homelab-$(date +%Y%m%d_%H%M%S)"
+            log_info "Creating backup: $backup_dir"
+            mkdir -p "$backup_dir"
+
+            # Backup configurations
+            cp -r "$HOMELAB_ROOT/config" "$backup_dir/"
+            cp -r "$HOMELAB_ROOT/cluster" "$backup_dir/"
+
+            # Backup K3s kubeconfig
+            if [[ -f "/home/$HOMELAB_USER/.kube/config" ]]; then
+                mkdir -p "$backup_dir/kube"
+                cp "/home/$HOMELAB_USER/.kube/config" "$backup_dir/kube/"
+            fi
+
+            log_success "Backup created: $backup_dir"
+            ;;
+        "list")
+            log_info "Available backups:"
+            local backup_base="/home/$HOMELAB_USER/backups"
+            if [[ -d "$backup_base" ]]; then
+                find "$backup_base" -name "homelab-*" -type d | sort -r | head -10
+            else
+                echo "No backups found"
+            fi
+            ;;
+        "restore")
+            local backup_path="${1:-}"
+            if [[ -z "$backup_path" ]]; then
+                log_error "Backup path not specified"
+                echo "Usage: $0 backup restore [backup-path]"
+                exit 1
+            fi
+
+            if [[ ! -d "$backup_path" ]]; then
+                log_error "Backup directory not found: $backup_path"
+                exit 1
+            fi
+
+            log_info "Restoring from backup: $backup_path"
+
+            # Restore configurations
+            if [[ -d "$backup_path/config" ]]; then
+                cp -r "$backup_path/config"/* "$HOMELAB_ROOT/config/"
+                log_info "Restored configuration files"
+            fi
+
+            # Restore cluster manifests
+            if [[ -d "$backup_path/cluster" ]]; then
+                cp -r "$backup_path/cluster"/* "$HOMELAB_ROOT/cluster/"
+                log_info "Restored cluster manifests"
+            fi
+
+            # Restore kubeconfig
+            if [[ -f "$backup_path/kube/config" ]]; then
+                mkdir -p "/home/$HOMELAB_USER/.kube"
+                cp "$backup_path/kube/config" "/home/$HOMELAB_USER/.kube/"
+                log_info "Restored kubeconfig"
+            fi
+
+            log_success "Restore completed"
+            ;;
+        *)
+            log_error "Unknown backup action: $action"
+            echo "Available actions: create, list, restore"
+            exit 1
+            ;;
+    esac
+}
+
+show_status() {
+    log_step "Homelab Status"
+
+    # Load configuration
+    validate_environment
+
+    echo ""
+    log_info "Configuration:"
+    echo "  - Domain: ${DOMAIN:-not set}"
+    echo "  - User: ${HOMELAB_USER:-not set}"
+    echo "  - Node Role: ${NODE_ROLE:-not set}"
+    echo "  - Data Root: ${DATA_ROOT:-not set}"
+
+    echo ""
+    log_info "System Status:"
+
+    # Check system components
+    if command_exists docker; then
+        echo "  - Docker: ${GREEN}Installed${NC}"
+    else
+        echo "  - Docker: ${RED}Not installed${NC}"
+    fi
+
+    if command_exists kubectl; then
+        echo "  - kubectl: ${GREEN}Installed${NC}"
+    else
+        echo "  - kubectl: ${RED}Not installed${NC}"
+    fi
+
+    if command_exists tailscale; then
+        echo "  - Tailscale: ${GREEN}Installed${NC}"
+        if tailscale status >/dev/null 2>&1; then
+            echo "  - Tailscale Status: ${GREEN}Connected${NC}"
+        else
+            echo "  - Tailscale Status: ${YELLOW}Not connected${NC}"
+        fi
+    else
+        echo "  - Tailscale: ${RED}Not installed${NC}"
+    fi
+
+    # Check K3s status
+    if check_k3s_running; then
+        echo "  - K3s: ${GREEN}Running${NC}"
+
+        echo ""
+        log_info "Cluster Status:"
+        kubectl get nodes -o wide 2>/dev/null || echo "  Unable to connect to cluster"
+
+        echo ""
+        log_info "Applications:"
+        "$SCRIPT_DIR/deploy-applications.sh" status 2>/dev/null || echo "  Unable to get application status"
+    else
+        echo "  - K3s: ${RED}Not running${NC}"
+    fi
+}
+
+show_config() {
+    validate_environment
+
+    log_step "Current Configuration"
+
+    if [[ -f "$HOMELAB_ROOT/config/homelab.env" ]]; then
+        echo ""
+        log_info "Configuration file: $HOMELAB_ROOT/config/homelab.env"
+        echo ""
+        # Show config with sensitive values masked
+        sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$HOMELAB_ROOT/config/homelab.env"
+    else
+        log_warning "Configuration file not found"
+        log_info "Copy config/homelab.env.template to config/homelab.env and customize"
+    fi
+}
+
+show_logs() {
+    local service="${1:-}"
+
+    if [[ -z "$service" ]]; then
+        log_error "Service name not specified"
+        echo "Usage: $0 logs [service-name]"
+        echo "Examples: $0 logs jellyfin, $0 logs traefik"
+        exit 1
+    fi
+
+    validate_environment
+
+    log_info "Showing logs for service: $service"
+
+    # Try to find the service in different namespaces
+    local namespaces=("media" "cloud" "infrastructure" "location" "utilities")
+    local found=false
+
+    for ns in "${namespaces[@]}"; do
+        if kubectl get deployment "$service" -n "$ns" >/dev/null 2>&1; then
+            log_info "Found $service in namespace: $ns"
+            kubectl logs -f deployment/"$service" -n "$ns"
+            found=true
+            break
+        fi
+    done
+
+    if [[ "$found" == "false" ]]; then
+        log_error "Service $service not found in any namespace"
+        echo ""
+        log_info "Available services:"
+        for ns in "${namespaces[@]}"; do
+            echo "  Namespace $ns:"
+            kubectl get deployments -n "$ns" 2>/dev/null | awk 'NR>1 {print "    - " $1}' || echo "    (no deployments)"
+        done
+    fi
+}
+
+open_shell() {
+    local service="${1:-}"
+
+    if [[ -z "$service" ]]; then
+        log_error "Service name not specified"
+        echo "Usage: $0 shell [service-name]"
+        exit 1
+    fi
+
+    validate_environment
+
+    log_info "Opening shell in service: $service"
+
+    # Try to find the service in different namespaces
+    local namespaces=("media" "cloud" "infrastructure" "location" "utilities")
+    local found=false
+
+    for ns in "${namespaces[@]}"; do
+        if kubectl get deployment "$service" -n "$ns" >/dev/null 2>&1; then
+            log_info "Found $service in namespace: $ns"
+            kubectl exec -it deployment/"$service" -n "$ns" -- /bin/bash || kubectl exec -it deployment/"$service" -n "$ns" -- /bin/sh
+            found=true
+            break
+        fi
+    done
+
+    if [[ "$found" == "false" ]]; then
+        log_error "Service $service not found"
+    fi
+}
+
+main() {
+    local command="${1:-help}"
+    shift || true
+
+    case "$command" in
+        "setup-system")
+            run_setup_system "$@"
+            ;;
+        "setup-cluster")
+            run_setup_cluster "$@"
+            ;;
+        "setup-monitoring")
+            run_setup_monitoring "$@"
+            ;;
+        "setup-all")
+            run_setup_all "$@"
+            ;;
+        "setup-auth")
+            run_setup_auth "$@"
+            ;;
+        "deploy"|"restart"|"delete")
+            run_deploy "$command" "$@"
+            ;;
+        "status")
+            show_status
+            ;;
+        "nodes")
+            run_nodes "$@"
+            ;;
+        "monitor")
+            run_monitor "$@"
+            ;;
+        "backup")
+            run_backup "$@"
+            ;;
+        "config")
+            show_config
+            ;;
+        "logs")
+            show_logs "$@"
+            ;;
+        "shell")
+            open_shell "$@"
+            ;;
+        "help"|"-h"|"--help")
+            show_usage
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            echo ""
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

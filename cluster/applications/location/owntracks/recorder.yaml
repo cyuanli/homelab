@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owntracks-recorder
+  namespace: location
+  labels:
+    app: owntracks-recorder
+    component: recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: owntracks-recorder
+  template:
+    metadata:
+      labels:
+        app: owntracks-recorder
+    spec:
+      containers:
+      - name: recorder
+        image: owntracks/recorder:latest
+        env:
+        - name: OTR_PORT
+          value: "0"
+        - name: OTR_HTTPHOST
+          value: "0.0.0.0"
+        - name: OTR_HTTPPORT
+          value: "8083"
+        - name: OTR_STORAGEDIR
+          value: "/store"
+        ports:
+        - containerPort: 8083
+          name: http
+        volumeMounts:
+        - name: owntracks-data
+          mountPath: /store
+        - name: recorder-config
+          mountPath: /config
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      volumes:
+      - name: owntracks-data
+        hostPath:
+          path: /mnt/data1/owntracks
+          type: DirectoryOrCreate
+      - name: recorder-config
+        persistentVolumeClaim:
+          claimName: recorder-config
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recorder-config
+  namespace: location
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owntracks-recorder
+  namespace: location
+  labels:
+    app: owntracks-recorder
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8083
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: owntracks-recorder

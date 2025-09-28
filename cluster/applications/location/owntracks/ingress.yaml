@@ -1,0 +1,64 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: owntracks-recorder
+  namespace: location
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+    traefik.ingress.kubernetes.io/router.priority: "100"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - owntracks.cliff.li
+    secretName: owntracks-tls
+  rules:
+  - host: owntracks.cliff.li
+    http:
+      paths:
+      - path: /pub
+        pathType: Prefix
+        backend:
+          service:
+            name: owntracks-recorder
+            port:
+              number: 8083
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: owntracks-frontend
+  namespace: location
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+    # traefik.ingress.kubernetes.io/router.middlewares: owntracks-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - owntracks.cliff.li
+    secretName: owntracks-tls
+  rules:
+  - host: owntracks.cliff.li
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: owntracks-frontend
+            port:
+              number: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: owntracks-auth
+  namespace: location
+spec:
+  basicAuth:
+    secret: owntracks-auth

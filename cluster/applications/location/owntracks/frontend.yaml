@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owntracks-frontend
+  namespace: location
+  labels:
+    app: owntracks-frontend
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: owntracks-frontend
+  template:
+    metadata:
+      labels:
+        app: owntracks-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: owntracks/frontend:latest
+        env:
+        - name: SERVER_HOST
+          value: "owntracks-recorder"
+        - name: SERVER_PORT
+          value: "8083"
+        ports:
+        - containerPort: 80
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owntracks-frontend
+  namespace: location
+  labels:
+    app: owntracks-frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: owntracks-frontend
