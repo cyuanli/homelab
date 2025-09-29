@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: boinc-project-setup
+  namespace: boinc
+spec:
+  template:
+    spec:
+      containers:
+      - name: boinc-setup
+        image: boinc/client:latest
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - |
+          # Wait for BOINC client to be ready
+          sleep 30
+
+          # Attach to popular scientific projects
+          # World Community Grid (humanitarian research)
+          echo "Attaching to World Community Grid..."
+          boinccmd --project_attach http://www.worldcommunitygrid.org/ anonymous
+
+          # Einstein@Home (gravitational wave detection)
+          echo "Attaching to Einstein@Home..."
+          boinccmd --project_attach http://einstein.phys.uwm.edu/ anonymous
+
+          # Rosetta@home (protein folding)
+          echo "Attaching to Rosetta@home..."
+          boinccmd --project_attach http://boinc.bakerlab.org/rosetta/ anonymous
+
+          # SETI@home (search for extraterrestrial intelligence)
+          echo "Attaching to SETI@home..."
+          boinccmd --project_attach http://setiathome.berkeley.edu/ anonymous
+
+          # LHC@home (Large Hadron Collider simulations)
+          echo "Attaching to LHC@home..."
+          boinccmd --project_attach http://lhcathome.cern.ch/lhcathome/ anonymous
+
+          echo "Project attachment completed!"
+
+        env:
+        - name: BOINC_GUI_RPC_PASSWORD
+          value: "boinc123"
+
+        volumeMounts:
+        - name: boinc-data
+          mountPath: /var/lib/boinc
+
+      volumes:
+      - name: boinc-data
+        emptyDir: {}
+
+      restartPolicy: OnFailure
+  backoffLimit: 3

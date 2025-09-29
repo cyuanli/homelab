@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boinc-client
+  namespace: boinc
+  labels:
+    app: boinc-client
+spec:
+  replicas: 3  # One per node
+  selector:
+    matchLabels:
+      app: boinc-client
+  template:
+    metadata:
+      labels:
+        app: boinc-client
+    spec:
+      # Spread pods across all nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: boinc-client
+              topologyKey: kubernetes.io/hostname
+
+      # Allow scheduling on control plane
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+
+      containers:
+      - name: boinc-client
+        image: boinc/client:latest
+        imagePullPolicy: Always
+
+        # Resource limits to prevent overwhelming the nodes
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m  # 2 CPU cores max per pod
+            memory: 2Gi
+
+        # Environment variables
+        env:
+        - name: BOINC_GUI_RPC_PASSWORD
+          value: "boinc123"
+
+        # BOINC command line arguments
+        command: ["/usr/bin/boinc"]
+        args: ["--allow_remote_gui_rpc", "--dir", "/var/lib/boinc"]
+
+        # Volume mounts for configuration and data persistence
+        volumeMounts:
+        - name: boinc-data
+          mountPath: /var/lib/boinc
+        - name: boinc-config
+          mountPath: /var/lib/boinc/cc_config.xml
+          subPath: cc_config.xml
+        - name: boinc-config
+          mountPath: /var/lib/boinc/global_prefs_override.xml
+          subPath: global_prefs_override.xml
+
+        # Health checks
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "pgrep boinc || exit 1"
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "pgrep boinc && ls /var/lib/boinc/client_state.xml"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: boinc-data
+        emptyDir:
+          sizeLimit: 20Gi
+      - name: boinc-config
+        configMap:
+          name: boinc-config
+
+      # Security context
+      securityContext:
+        runAsUser: 0
+        fsGroup: 0
+
+      # Restart policy
+      restartPolicy: Always

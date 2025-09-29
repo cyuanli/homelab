@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: boinc
+  labels:
+    name: boinc
+    purpose: scientific-computing

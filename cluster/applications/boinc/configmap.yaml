@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boinc-config
+  namespace: boinc
+data:
+  # BOINC client configuration
+  cc_config.xml: |
+    <cc_config>
+      <log_flags>
+        <task>1</task>
+        <file_xfer>1</file_xfer>
+        <sched_ops>1</sched_ops>
+      </log_flags>
+      <options>
+        <allow_multiple_clients>1</allow_multiple_clients>
+        <start_delay>10</start_delay>
+        <!-- Use 75% of available CPUs -->
+        <max_ncpus_pct>75</max_ncpus_pct>
+        <!-- Only use 80% of available memory -->
+        <ram_max_used_busy_frac>0.8</ram_max_used_busy_frac>
+        <ram_max_used_idle_frac>0.9</ram_max_used_idle_frac>
+        <!-- Network settings -->
+        <network_test_url>http://www.google.com/</network_test_url>
+        <dont_verify_images>1</dont_verify_images>
+      </options>
+    </cc_config>
+
+  # Global preferences
+  global_prefs_override.xml: |
+    <global_preferences>
+      <run_on_batteries>0</run_on_batteries>
+      <run_if_user_active>1</run_if_user_active>
+      <run_gpu_if_user_active>1</run_gpu_if_user_active>
+      <idle_time_to_run>3</idle_time_to_run>
+      <suspend_if_no_recent_input>0</suspend_if_no_recent_input>
+      <start_hour>0</start_hour>
+      <end_hour>24</end_hour>
+      <net_start_hour>0</net_start_hour>
+      <net_end_hour>24</net_end_hour>
+      <max_bytes_sec_down>0</max_bytes_sec_down>
+      <max_bytes_sec_up>0</max_bytes_sec_up>
+      <cpu_scheduling_period_minutes>60</cpu_scheduling_period_minutes>
+      <disk_interval>60</disk_interval>
+      <disk_max_used_gb>10</disk_max_used_gb>
+      <disk_max_used_pct>50</disk_max_used_pct>
+      <disk_min_free_gb>1</disk_min_free_gb>
+      <vm_max_used_frac>0.75</vm_max_used_frac>
+      <work_buf_min_days>0.1</work_buf_min_days>
+      <work_buf_additional_days>0.25</work_buf_additional_days>
+      <max_cpus>0</max_cpus>
+      <cpu_usage_limit>75</cpu_usage_limit>
+    </global_preferences>
