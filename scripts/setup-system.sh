@@ -279,7 +279,7 @@ ${BLUE}Configuration:${NC}
 ${BLUE}Notes:${NC}
 - You may need to log out and back in for Docker group membership to take effect
 - If using Tailscale, ensure it's properly connected
-- Update config/homelab.env as needed before proceeding
+- Update config/homelab.env.local as needed before proceeding
 
 EOF
 }

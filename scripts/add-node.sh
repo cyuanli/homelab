@@ -67,7 +67,8 @@ create_node_config() {
     fi
 
     local node_dir="$HOMELAB_DIR/nodes/$node_name"
-    local config_file="$node_dir/config.env"
+    local template_file="$node_dir/config.env"
+    local config_file="$node_dir/config.env.local"
 
     # Create node directory
     mkdir -p "$node_dir"
@@ -91,7 +92,16 @@ create_node_config() {
         exit 1
     fi
 
-    # Create config file
+    # Create template file
+    cat > "$template_file" << EOF
+# K3s Node Configuration Template for $node_name
+NODE_ROLE=agent
+CLUSTER_TOKEN=REPLACE_WITH_CLUSTER_TOKEN
+SERVER_URL=REPLACE_WITH_SERVER_URL
+TAILSCALE_AUTHKEY=REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY
+EOF
+
+    # Create config file with actual values
     cat > "$config_file" << EOF
 # K3s Node Configuration for $node_name
 NODE_ROLE=agent
@@ -100,6 +110,7 @@ SERVER_URL=$server_url
 TAILSCALE_AUTHKEY=REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY
 EOF
 
+    success "Created template file: $template_file"
     success "Created config file: $config_file"
     warn "Please update TAILSCALE_AUTHKEY in the config file"
 

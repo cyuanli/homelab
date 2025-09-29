@@ -41,10 +41,16 @@ check_requirements() {
 
     # Check if config exists
     local hostname=$(hostname)
-    local config_file="$HOMELAB_DIR/nodes/$hostname/config.env"
+    local config_file_local="$HOMELAB_DIR/nodes/$hostname/config.env.local"
+    local config_file_template="$HOMELAB_DIR/nodes/$hostname/config.env"
+    local config_file=""
 
-    if [[ ! -f "$config_file" ]]; then
-        error "Config file not found: $config_file"
+    if [[ -f "$config_file_local" ]]; then
+        config_file="$config_file_local"
+    elif [[ -f "$config_file_template" ]]; then
+        config_file="$config_file_template"
+    else
+        error "Config file not found: $config_file_local or $config_file_template"
         echo "Please create it with:"
         echo "  NODE_ROLE=server|agent"
         echo "  CLUSTER_TOKEN=your-secret-token"
@@ -130,7 +136,7 @@ Next steps:
    ${BLUE}https://traefik.cliff.li${NC}
 
 4. To add more nodes:
-   ${BLUE}# On new nodes, update their config.env with:
+   ${BLUE}# On new nodes, update their config.env.local with:
    NODE_ROLE=agent
    SERVER_URL=https://$(tailscale ip -4 2>/dev/null || echo "TAILSCALE_IP"):6443
    CLUSTER_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token 2>/dev/null || echo "TOKEN_FROM_SERVER")${NC}

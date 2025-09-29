@@ -78,8 +78,9 @@ create_node_config() {
 
     log_step "Creating configuration for node: $node_name"
 
-    local node_dir="$HOMELAB_ROOT/config/node-configs/$node_name"
-    local config_file="$node_dir/config.env"
+    local node_dir="$HOMELAB_ROOT/nodes/$node_name"
+    local template_file="$node_dir/config.env"
+    local config_file="$node_dir/config.env.local"
 
     # Create node directory
     mkdir -p "$node_dir"
@@ -103,7 +104,85 @@ create_node_config() {
         return 1
     fi
 
-    # Create config file based on main config
+    # Create template file with placeholders
+    cat > "$template_file" << EOF
+# Homelab Configuration Template for $node_name
+# Copy to config.env.local and customize with your secrets
+
+# =======================
+# BASIC CONFIGURATION
+# =======================
+
+# Domain and networking
+DOMAIN="$DOMAIN"
+ACME_EMAIL="$ACME_EMAIL"
+
+# User configuration
+HOMELAB_USER="$HOMELAB_USER"
+HOMELAB_UID="$HOMELAB_UID"
+HOMELAB_GID="$HOMELAB_GID"
+
+# =======================
+# K3S CONFIGURATION
+# =======================
+
+# Node role and cluster info
+NODE_ROLE=agent
+CLUSTER_TOKEN=REPLACE_WITH_CLUSTER_TOKEN
+SERVER_URL=REPLACE_WITH_SERVER_URL
+
+# K3s version
+K3S_VERSION="$K3S_VERSION"
+KUBECTL_VERSION="$KUBECTL_VERSION"
+
+# =======================
+# TAILSCALE CONFIGURATION
+# =======================
+
+# Tailscale authentication key
+TAILSCALE_AUTHKEY=REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY
+
+# =======================
+# STORAGE CONFIGURATION
+# =======================
+
+# Storage configuration (inherited from main cluster)
+DATA_ROOT="$DATA_ROOT"
+K8S_STORAGE_ROOT="$K8S_STORAGE_ROOT"
+
+# =======================
+# SERVICE CONFIGURATION
+# =======================
+
+# Container user/group IDs
+PUID="$PUID"
+PGID="$PGID"
+TIMEZONE="$TIMEZONE"
+
+# Feature flags
+ENABLE_TRAEFIK_DASHBOARD="false"
+ENABLE_LOCATION_SERVICES="$ENABLE_LOCATION_SERVICES"
+ENABLE_DISK_MONITORING="$ENABLE_DISK_MONITORING"
+ENABLE_BACKUP_MONITORING="$ENABLE_BACKUP_MONITORING"
+
+# =======================
+# MONITORING & NOTIFICATIONS
+# =======================
+
+# Discord webhook (inherited)
+DISCORD_WEBHOOK_URL=REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL
+
+# =======================
+# ADVANCED CONFIGURATION
+# =======================
+
+# UFW firewall configuration
+ENABLE_UFW="$ENABLE_UFW"
+ALLOW_SSH_FROM_LAN="$ALLOW_SSH_FROM_LAN"
+LAN_CIDR="$LAN_CIDR"
+EOF
+
+    # Create actual config file with real values
     cat > "$config_file" << EOF
 # Homelab Configuration for $node_name
 # Based on main homelab configuration
@@ -138,8 +217,8 @@ KUBECTL_VERSION="$KUBECTL_VERSION"
 # TAILSCALE CONFIGURATION
 # =======================
 
-# Tailscale authentication key (REPLACE WITH YOUR OWN)
-TAILSCALE_AUTHKEY="REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY"
+# Tailscale authentication key
+TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY"
 
 # =======================
 # STORAGE CONFIGURATION
@@ -181,8 +260,9 @@ ALLOW_SSH_FROM_LAN="$ALLOW_SSH_FROM_LAN"
 LAN_CIDR="$LAN_CIDR"
 EOF
 
+    log_success "Created template file: $template_file"
     log_success "Created config file: $config_file"
-    log_warning "Please update TAILSCALE_AUTHKEY in the config file"
+    log_info "Template contains placeholders, actual config has real secrets from server"
 
     # Create setup instructions
     cat > "$node_dir/README.md" << EOF
@@ -206,13 +286,11 @@ EOF
    cd ~/homelab
    \`\`\`
 
-3. **Update configuration:**
+3. **Configuration is ready:**
    \`\`\`bash
-   # Copy the node-specific config
-   cp config/node-configs/$node_name/config.env config/homelab.env
-
-   # Edit and set your Tailscale auth key
-   vim config/homelab.env
+   # Config with secrets already created: nodes/$node_name/config.env.local
+   # Template available at: nodes/$node_name/config.env
+   # No editing needed - secrets copied from server
    \`\`\`
 
 4. **Run setup scripts:**
@@ -247,25 +325,22 @@ EOF
 ${GREEN}✅ Node configuration created for $node_name${NC}
 
 ${BLUE}Configuration created:${NC}
-- Config file: $config_file
+- Template file: $template_file
+- Config file: $config_file (with secrets)
 - Instructions: $node_dir/README.md
 
 ${BLUE}To add this node to the cluster:${NC}
 
-1. Update the Tailscale auth key:
-   ${CYAN}vim $config_file${NC}
+1. Copy the homelab directory to the new node:
+   scp -r $(dirname "$HOMELAB_ROOT") user@$node_name:~/homelab
 
-2. Copy the homelab directory to the new node:
-   ${CYAN}scp -r $(dirname "$HOMELAB_ROOT") user@$node_name:~/homelab${NC}
-
-3. SSH to the new node and run:
-   ${CYAN}cd ~/homelab
-   cp config/node-configs/$node_name/config.env config/homelab.env
-   vim config/homelab.env  # Set TAILSCALE_AUTHKEY
+2. SSH to the new node and run:
+   cd ~/homelab
+   # Configuration with secrets already ready at nodes/$node_name/config.env.local
    ./scripts/setup-system.sh
-   ./scripts/setup-cluster.sh${NC}
+   ./scripts/setup-cluster.sh
 
-4. Verify the node joined:
+3. Verify the node joined:
    ${CYAN}kubectl get nodes${NC}
 
 ${BLUE}Current cluster info:${NC}
@@ -303,7 +378,7 @@ remove_node() {
     kubectl delete node "$node_name"
 
     # Remove node configuration
-    local node_dir="$HOMELAB_ROOT/config/node-configs/$node_name"
+    local node_dir="$HOMELAB_ROOT/nodes/$node_name"
     if [[ -d "$node_dir" ]]; then
         log_info "Removing node configuration: $node_dir"
         rm -rf "$node_dir"
@@ -320,12 +395,12 @@ list_nodes() {
 
     echo ""
     log_info "Node configurations:"
-    local node_configs_dir="$HOMELAB_ROOT/config/node-configs"
+    local node_configs_dir="$HOMELAB_ROOT/nodes"
     if [[ -d "$node_configs_dir" ]]; then
         for node_dir in "$node_configs_dir"/*; do
             if [[ -d "$node_dir" ]]; then
                 local node_name=$(basename "$node_dir")
-                echo "  - $node_name (config: $node_dir/config.env)"
+                echo "  - $node_name (template: $node_dir/config.env, config: $node_dir/config.env.local)"
             fi
         done
     else

@@ -40,31 +40,58 @@ set_error_handling() {
 load_config() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
     local homelab_root="$(cd "$script_dir/.." && pwd)"
-    local config_file="${1:-$homelab_root/config/homelab.env}"
+    local config_file="${1:-}"
+
+    # If no specific config file provided, try node-specific config first
+    if [[ -z "$config_file" ]]; then
+        local hostname=$(hostname)
+        local node_config="$homelab_root/nodes/$hostname/config.env.local"
+
+        if [[ -f "$node_config" ]]; then
+            config_file="$node_config"
+        else
+            config_file="$homelab_root/config/homelab.env.local"
+        fi
+    fi
 
     if [[ ! -f "$config_file" ]]; then
-        config_file="$homelab_root/config/homelab.env.template"
-        log_warning "No homelab.env found, using template. Please copy and customize it."
-    fi
-
-    if [[ -f "$config_file" ]]; then
-        log_info "Loading configuration from $config_file"
-        # shellcheck source=/dev/null
-        source "$config_file"
-
-        # Export commonly used variables
-        export HOMELAB_ROOT="$homelab_root"
-        export CONFIG_FILE="$config_file"
-    else
         log_error "Configuration file not found: $config_file"
-        log_error "Please copy config/homelab.env.template to config/homelab.env and customize it"
+        log_error "Please create nodes/$(hostname)/config.env.local with secrets"
+        log_error "Do NOT use the .env template - it contains placeholder values"
         exit 1
     fi
+
+    log_info "Loading configuration from $config_file"
+    # shellcheck source=/dev/null
+    source "$config_file"
+
+    # Export commonly used variables
+    export HOMELAB_ROOT="$homelab_root"
+    export CONFIG_FILE="$config_file"
 }
 
 # Check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Check required variables are set
+check_required_vars() {
+    local missing_vars=()
+
+    for var in "$@"; do
+        if [[ -z "${!var:-}" ]]; then
+            missing_vars+=("$var")
+        fi
+    done
+
+    if [[ ${#missing_vars[@]} -gt 0 ]]; then
+        log_error "Missing required configuration variables:"
+        for var in "${missing_vars[@]}"; do
+            log_error "  - $var"
+        done
+        exit 1
+    fi
 }
 
 # Wait for condition with timeout

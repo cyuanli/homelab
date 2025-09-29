@@ -4,9 +4,9 @@ Scripts for setting up the K3s cluster.
 
 ## Prerequisites
 
-1. Create node-specific config files:
+1. Create node-specific config files in the repository root:
    ```bash
-   # For the first server node
+   # For the first server node (from repository root)
    mkdir -p nodes/node1
    cat > nodes/node1/config.env << EOF
    NODE_ROLE=server
@@ -14,7 +14,7 @@ Scripts for setting up the K3s cluster.
    TAILSCALE_AUTHKEY=tskey-auth-xxxxx
    EOF
 
-   # For additional nodes
+   # For additional nodes (from repository root)
    mkdir -p nodes/node2
    cat > nodes/node2/config.env << EOF
    NODE_ROLE=agent
@@ -27,6 +27,18 @@ Scripts for setting up the K3s cluster.
 2. Ensure each machine can reach the others via Tailscale
 
 ## Installation
+
+### Automated Approach (Recommended)
+
+For adding nodes to an existing cluster, use the management script:
+
+```bash
+# On existing server node
+./scripts/manage-nodes.sh add <new-hostname>
+# Follow the printed instructions
+```
+
+### Manual Approach
 
 1. On the first node (server):
    ```bash

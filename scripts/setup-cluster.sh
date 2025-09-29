@@ -325,7 +325,7 @@ ${BLUE}Server Details:${NC}
 
 ${BLUE}To add agent nodes:${NC}
 1. Copy homelab repository to new node
-2. Update config/homelab.env on new node:
+2. Update nodes/HOSTNAME/config.env.local on new node:
    NODE_ROLE=agent
    SERVER_URL=$server_url
    CLUSTER_TOKEN=$cluster_token

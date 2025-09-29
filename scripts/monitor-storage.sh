@@ -523,7 +523,7 @@ Commands:
   clear-alert - Clear alert state (allows new alerts)
 
 Configuration:
-  Set DISCORD_WEBHOOK_URL in config/homelab.env
+  Set DISCORD_WEBHOOK_URL in config/homelab.env.local
   Customize drive configuration in config/service-configs/monitoring.conf
 EOF
             exit 1

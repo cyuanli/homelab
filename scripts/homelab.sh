@@ -48,14 +48,14 @@ ${BLUE}Examples:${NC}
   $0 monitor test-alert           # Test monitoring alerts
 
 ${BLUE}Configuration:${NC}
-  Copy config/homelab.env.template to config/homelab.env and customize
+  Copy config/homelab.env to config/homelab.env.local and customize
 
 EOF
 }
 
 validate_environment() {
     # Check if we're in the homelab directory
-    if [[ ! -f "$HOMELAB_ROOT/config/homelab.env.template" ]]; then
+    if [[ ! -f "$HOMELAB_ROOT/config/homelab.env" ]]; then
         log_error "This script must be run from the homelab directory"
         log_error "Current directory: $(pwd)"
         log_error "Expected homelab root: $HOMELAB_ROOT"
@@ -337,15 +337,15 @@ show_config() {
 
     log_step "Current Configuration"
 
-    if [[ -f "$HOMELAB_ROOT/config/homelab.env" ]]; then
+    if [[ -f "$HOMELAB_ROOT/config/homelab.env.local" ]]; then
         echo ""
-        log_info "Configuration file: $HOMELAB_ROOT/config/homelab.env"
+        log_info "Configuration file: $HOMELAB_ROOT/config/homelab.env.local"
         echo ""
         # Show config with sensitive values masked
-        sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$HOMELAB_ROOT/config/homelab.env"
+        sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$HOMELAB_ROOT/config/homelab.env.local"
     else
         log_warning "Configuration file not found"
-        log_info "Copy config/homelab.env.template to config/homelab.env and customize"
+        log_info "Copy config/homelab.env to config/homelab.env.local and customize"
     fi
 }
 

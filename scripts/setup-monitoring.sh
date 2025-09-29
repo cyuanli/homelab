@@ -280,7 +280,7 @@ EOF
 ${BLUE}Configuration Files:${NC}
 - Disk monitoring: $HOMELAB_ROOT/config/service-configs/monitoring.conf
 - Backup config: /etc/borgmatic/config.yaml
-- Discord webhook: Set in config/homelab.env
+- Discord webhook: Set in config/homelab.env.local
 
 ${BLUE}Management Commands:${NC}
 - Check disk status: ${CYAN}./scripts/monitor-storage.sh status${NC}

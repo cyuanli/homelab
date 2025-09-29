@@ -5,20 +5,22 @@ set -euo pipefail
 # This script sets up K3s with Tailscale networking
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/../../nodes/$(hostname)/config.env"
+CONFIG_FILE_LOCAL="${SCRIPT_DIR}/../../nodes/$(hostname)/config.env.local"
 
-# Load configuration
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo "Config file not found: $CONFIG_FILE"
-    echo "Please create it with the following variables:"
+# Load configuration - MUST have .local file with real secrets
+if [[ ! -f "$CONFIG_FILE_LOCAL" ]]; then
+    echo "ERROR: Configuration file not found: $CONFIG_FILE_LOCAL"
+    echo "Please create it with secret values, not placeholders"
+    echo "Required variables:"
     echo "  NODE_ROLE=server|agent"
-    echo "  CLUSTER_TOKEN=your-secret-token"
+    echo "  CLUSTER_TOKEN=your-cluster-token"
     echo "  SERVER_URL=https://first-server-ip:6443 (for agents only)"
     echo "  TAILSCALE_AUTHKEY=your-tailscale-key"
     exit 1
 fi
+
+CONFIG_FILE="$CONFIG_FILE_LOCAL"
+source "$CONFIG_FILE"
 
 # Ensure Tailscale is installed and connected
 install_tailscale() {
