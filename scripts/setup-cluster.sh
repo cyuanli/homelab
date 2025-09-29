@@ -141,11 +141,23 @@ install_k3s() {
     fi
 
     log_info "Running: $install_cmd"
-    eval "$install_cmd"
+    eval "$install_cmd" || true  # Don't fail if service doesn't start initially
+
+    # Ensure token is in service environment file for agents
+    if [[ "${NODE_ROLE}" != "server" ]] && [[ -n "${CLUSTER_TOKEN:-}" ]]; then
+        log_info "Ensuring K3s agent service has token in environment file"
+        echo "K3S_TOKEN=${CLUSTER_TOKEN}" | sudo tee /etc/systemd/system/k3s-agent.service.env > /dev/null
+        sudo systemctl daemon-reload
+        sudo systemctl restart k3s-agent.service
+    fi
 
     # Wait for K3s to start
     log_info "Waiting for K3s to start"
-    wait_for_condition "systemctl is-active --quiet k3s" 120
+    if [[ "${NODE_ROLE}" == "server" ]]; then
+        wait_for_condition "systemctl is-active --quiet k3s" 120
+    else
+        wait_for_condition "systemctl is-active --quiet k3s-agent" 120
+    fi
 
     log_success "K3s installed and running"
 }
@@ -241,11 +253,20 @@ deploy_infrastructure() {
     # Deploy Traefik
     if [[ -d "$HOMELAB_ROOT/cluster/manifests/traefik" ]]; then
         log_info "Deploying Traefik ingress controller"
-        kubectl apply -f "$HOMELAB_ROOT/cluster/manifests/traefik/"
 
-        # Wait for Traefik to be ready
+        # Apply all files except IngressRoute (which needs CRDs)
+        while IFS= read -r file; do
+            [[ -f "$file" ]] && kubectl apply -f "$file"
+        done < <(find "$HOMELAB_ROOT/cluster/manifests/traefik/" -name "*.yaml" -exec grep -L "kind: IngressRoute" {} \;)
+
+        # Wait for Traefik to be ready and install CRDs
         log_info "Waiting for Traefik to be ready"
         wait_for_deployment "traefik" "infrastructure"
+
+        # Now apply IngressRoute files (if any)
+        while IFS= read -r file; do
+            [[ -f "$file" ]] && kubectl apply -f "$file"
+        done < <(find "$HOMELAB_ROOT/cluster/manifests/traefik/" -name "*.yaml" -exec grep -l "kind: IngressRoute" {} \;)
     fi
 
     # Deploy cert-manager if available

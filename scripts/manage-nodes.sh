@@ -8,6 +8,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
 
+get_server_ip() {
+    local server_ip
+    server_ip=$(hostname -I | awk '{print $1}')
+
+    if [[ -z "$server_ip" ]]; then
+        log_error "Could not determine local network IP"
+        return 1
+    fi
+
+    echo "$server_ip"
+}
+
 show_usage() {
     cat << EOF
 Node Management Script
@@ -37,16 +49,9 @@ EOF
 get_cluster_info() {
     log_info "Gathering cluster information"
 
-    # Get server URL (Tailscale IP of current node)
-    local server_ip=""
-    if command_exists tailscale; then
-        server_ip=$(tailscale ip -4 2>/dev/null) || true
-    fi
-
-    if [[ -z "$server_ip" ]]; then
-        # Fallback to local IP
-        server_ip=$(hostname -I | awk '{print $1}')
-    fi
+    # Get server URL (local network IP)
+    local server_ip
+    server_ip=$(get_server_ip) || return 1
 
     local server_url="https://${server_ip}:6443"
 
@@ -85,15 +90,9 @@ create_node_config() {
     # Create node directory
     mkdir -p "$node_dir"
 
-    # Get cluster info
-    local server_ip=""
-    if command_exists tailscale; then
-        server_ip=$(tailscale ip -4 2>/dev/null) || true
-    fi
-
-    if [[ -z "$server_ip" ]]; then
-        server_ip=$(hostname -I | awk '{print $1}')
-    fi
+    # Get cluster info - use local network IP
+    local server_ip
+    server_ip=$(get_server_ip) || return 1
 
     local server_url="https://${server_ip}:6443"
     local cluster_token=""

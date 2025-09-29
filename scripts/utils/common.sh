@@ -7,6 +7,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Logging functions
@@ -42,22 +43,14 @@ load_config() {
     local homelab_root="$(cd "$script_dir/.." && pwd)"
     local config_file="${1:-}"
 
-    # If no specific config file provided, try node-specific config first
     if [[ -z "$config_file" ]]; then
         local hostname=$(hostname)
-        local node_config="$homelab_root/nodes/$hostname/config.env.local"
-
-        if [[ -f "$node_config" ]]; then
-            config_file="$node_config"
-        else
-            config_file="$homelab_root/config/homelab.env.local"
-        fi
+        config_file="$homelab_root/nodes/$hostname/config.env.local"
     fi
 
     if [[ ! -f "$config_file" ]]; then
-        log_error "Configuration file not found: $config_file"
-        log_error "Please create nodes/$(hostname)/config.env.local with secrets"
-        log_error "Do NOT use the .env template - it contains placeholder values"
+        log_error "Node configuration file not found: $config_file"
+        log_error "Every node MUST have its own config file"
         exit 1
     fi
 
@@ -182,7 +175,26 @@ wait_for_namespace_ready() {
 
 # Check if K3s is running
 check_k3s_running() {
-    systemctl is-active --quiet k3s && kubectl get nodes >/dev/null 2>&1
+    local service_name="k3s"
+    if [[ "${NODE_ROLE:-}" == "agent" ]]; then
+        service_name="k3s-agent"
+    fi
+
+    systemctl is-active --quiet "$service_name" && kubectl get nodes >/dev/null 2>&1
+}
+
+# Ensure service is enabled and started
+ensure_service_enabled() {
+    local service_name="$1"
+
+    log_info "Enabling and starting service: $service_name"
+    sudo systemctl enable "$service_name"
+    sudo systemctl start "$service_name"
+
+    if ! sudo systemctl is-active --quiet "$service_name"; then
+        log_error "Failed to start service: $service_name"
+        return 1
+    fi
 }
 
 # Backup configuration files

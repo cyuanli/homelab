@@ -65,7 +65,11 @@ spec:
           claimName: traefik-acme
       nodeSelector:
         kubernetes.io/arch: amd64
+        node-role.kubernetes.io/control-plane: "true"
       tolerations:
       - key: node-role.kubernetes.io/master
+        operator: Equal
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
         operator: Equal
         effect: NoSchedule
