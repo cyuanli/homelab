@@ -180,7 +180,17 @@ check_k3s_running() {
         service_name="k3s-agent"
     fi
 
-    systemctl is-active --quiet "$service_name" && kubectl get nodes >/dev/null 2>&1
+    # For agent nodes, just check if the service is active
+    # For server nodes, also verify kubectl works
+    if systemctl is-active --quiet "$service_name"; then
+        if [[ "${NODE_ROLE:-}" == "agent" ]]; then
+            return 0
+        else
+            kubectl get nodes >/dev/null 2>&1
+        fi
+    else
+        return 1
+    fi
 }
 
 # Ensure service is enabled and started

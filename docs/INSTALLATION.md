@@ -127,7 +127,7 @@ The setup process will:
 1. Install required packages (Docker, curl, git, etc.)
 2. Configure UFW firewall
 3. Install and configure Tailscale
-4. Install K3s with Tailscale networking
+4. Install K3s v1.33.5+k3s1 (latest stable) with Tailscale networking
 5. Deploy core infrastructure (Traefik, storage)
 6. Deploy applications (media stack, Nextcloud, etc.)
 7. Setup monitoring and notifications
@@ -332,6 +332,22 @@ sudo rm -rf /opt/k3s-storage/*
 # Redeploy applications without system setup
 ./scripts/homelab.sh deploy
 ```
+
+**K3s Version Upgrade**
+```bash
+# Upgrade K3s on each node by running setup-cluster.sh again
+# The script is idempotent and will upgrade to the version specified in config
+
+# For multi-node clusters, upgrade each node one at a time:
+# 1. Upgrade server nodes first
+# 2. Then upgrade agent nodes
+# 3. Verify cluster health between each node
+
+# Manual upgrade alternative:
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.33.5+k3s1 sh -s - [server|agent options]
+```
+
+**Note**: For multi-node clusters, ensure all nodes run the same K3s version to avoid networking and compatibility issues.
 
 ### Verification Commands
 

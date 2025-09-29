@@ -81,7 +81,7 @@ install_k3s() {
         return 0
     fi
 
-    local k3s_version="${K3S_VERSION:-v1.28.8+k3s1}"
+    local k3s_version="${K3S_VERSION:-v1.33.5+k3s1}"
     log_info "Installing K3s version $k3s_version"
 
     # Prepare install command
@@ -287,12 +287,16 @@ validate_cluster() {
         return 1
     fi
 
-    # Check node status
-    local node_status
-    node_status=$(kubectl get nodes --no-headers | awk '{print $2}')
-    if [[ "$node_status" != "Ready" ]]; then
-        log_error "Node is not ready: $node_status"
-        return 1
+    # Check node status (only for server nodes that have kubectl configured)
+    if [[ "${NODE_ROLE}" == "server" ]]; then
+        local node_status
+        node_status=$(kubectl get nodes --no-headers | awk '{print $2}')
+        if [[ "$node_status" != "Ready" ]]; then
+            log_error "Node is not ready: $node_status"
+            return 1
+        fi
+    else
+        log_info "Agent node service is active - validation successful"
     fi
 
     # For server nodes, check infrastructure
