@@ -1,0 +1,13 @@
+[Unit]
+Description=Run borgmatic backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ExecStart=/usr/bin/borgmatic --verbosity 1 --syslog-verbosity 1
+ExecStartPost=/home/cyl/homelab/scripts/backup-notify.sh success
+ExecStopPost=/home/cyl/homelab/scripts/backup-notify.sh exit-code
