@@ -1,0 +1,26 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority-preemptible
+value: -10
+globalDefault: false
+description: "Low priority for background tasks like BOINC that should be preempted by real workloads"
+preemptionPolicy: PreemptLowerPriority
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal-priority
+value: 0
+globalDefault: true
+description: "Normal priority for regular workloads - can preempt low priority tasks"
+preemptionPolicy: PreemptLowerPriority
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000
+globalDefault: false
+description: "High priority for critical workloads like databases and core services"
+preemptionPolicy: PreemptLowerPriority

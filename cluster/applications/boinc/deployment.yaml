@@ -1,12 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: boinc-client
   namespace: boinc
   labels:
     app: boinc-client
 spec:
-  replicas: 3  # One per node
   selector:
     matchLabels:
       app: boinc-client
@@ -15,16 +14,8 @@ spec:
       labels:
         app: boinc-client
     spec:
-      # Spread pods across all nodes
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: boinc-client
-              topologyKey: kubernetes.io/hostname
+      # Low priority - will be preempted by real workloads
+      priorityClassName: low-priority-preemptible
 
       # Allow scheduling on control plane
       tolerations:
@@ -34,6 +25,65 @@ spec:
       - key: node-role.kubernetes.io/master
         operator: Exists
         effect: NoSchedule
+
+      # Init container to handle Science United attachment
+      initContainers:
+      - name: setup-account-manager
+        image: boinc/client:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Start BOINC temporarily in background
+          /usr/bin/boinc --dir /var/lib/boinc --allow_remote_gui_rpc &
+          BOINC_PID=$!
+
+          # Wait for BOINC to be ready
+          echo "Waiting for BOINC to start..."
+          for i in {1..30}; do
+            if /usr/bin/boinccmd --get_cc_status >/dev/null 2>&1; then
+              echo "BOINC ready"
+              break
+            fi
+            sleep 2
+          done
+
+          # Check if already attached to Science United
+          if /usr/bin/boinccmd --acct_mgr info 2>/dev/null | grep -q "scienceunited.org"; then
+            echo "Already attached to Science United"
+          else
+            echo "Attaching to Science United..."
+            /usr/bin/boinccmd --acct_mgr attach https://scienceunited.org "$SCIENCE_UNITED_EMAIL" "$SCIENCE_UNITED_PASSWORD" 2>&1 || true
+            sleep 10
+          fi
+
+          # Stop temporary BOINC instance
+          kill $BOINC_PID 2>/dev/null || true
+          wait $BOINC_PID 2>/dev/null || true
+
+          echo "Setup complete"
+        env:
+        - name: BOINC_GUI_RPC_PASSWORD
+          value: "boinc123"
+        - name: SCIENCE_UNITED_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: science-united-email
+        - name: SCIENCE_UNITED_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: science-united-password
+        volumeMounts:
+        - name: boinc-data
+          mountPath: /var/lib/boinc
+        - name: boinc-config
+          mountPath: /var/lib/boinc/cc_config.xml
+          subPath: cc_config.xml
+        - name: boinc-config
+          mountPath: /var/lib/boinc/global_prefs_override.xml
+          subPath: global_prefs_override.xml
 
       containers:
       - name: boinc-client
@@ -53,6 +103,16 @@ spec:
         env:
         - name: BOINC_GUI_RPC_PASSWORD
           value: "boinc123"
+        - name: SCIENCE_UNITED_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: science-united-email
+        - name: SCIENCE_UNITED_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: science-united-password
 
         # BOINC command line arguments
         command: ["/usr/bin/boinc"]

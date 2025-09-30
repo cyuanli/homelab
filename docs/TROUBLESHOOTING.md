@@ -201,6 +201,33 @@ nslookup your-domain.com
 # Verify internal Kubernetes DNS is working
 ```
 
+**Cross-Node Pod Communication Failure (VXLAN)**
+
+If pods on worker nodes cannot reach pods on other nodes (including CoreDNS), check if Flannel VXLAN traffic is blocked:
+
+```bash
+# Symptom: DNS resolution fails on worker nodes but works on control plane
+# Symptom: Cannot ping pods on other nodes (e.g., ping 10.42.0.4 times out)
+
+# Test cross-node connectivity
+kubectl run test-pod --image=busybox --rm -it -- ping <pod-ip-on-other-node>
+
+# Check if vxlan interface exists
+ip addr show flannel.1
+
+# Check if vxlan port is listening
+sudo netstat -tulpn | grep 8472
+
+# Check firewall rules
+sudo ufw status | grep 8472
+
+# Solution: Allow Flannel VXLAN traffic (UDP port 8472) from LAN
+sudo ufw allow from 192.168.0.0/16 to any port 8472 proto udp
+
+# This rule is automatically added by setup-system.sh
+# If you set up nodes manually, ensure this rule exists on ALL nodes
+```
+
 **Tailscale Connectivity**
 ```bash
 # Check Tailscale status

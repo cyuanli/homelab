@@ -15,5 +15,4 @@ id_ed25519*
 acme.json
 
 # Kubernetes secrets
-cluster/applications/*/secrets.yaml
-cluster/applications/*/*/secrets.yaml
+cluster/applications/**/secrets.yaml

@@ -7,10 +7,10 @@ metadata:
 
 resources:
   - namespace.yaml
+  - secrets.yaml
   - configmap.yaml
   - deployment.yaml
   - service.yaml
-  - project-attachments.yaml
 
 commonLabels:
   app.kubernetes.io/name: boinc

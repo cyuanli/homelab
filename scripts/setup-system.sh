@@ -163,8 +163,10 @@ configure_firewall() {
 
     # Allow K3s ports for cluster communication
     log_info "Allowing K3s cluster ports"
+    local lan_cidr="${LAN_CIDR:-192.168.0.0/16}"
     sudo ufw allow 6443/tcp   # K3s API server
     sudo ufw allow 10250/tcp  # kubelet
+    sudo ufw allow from "$lan_cidr" to any port 8472 proto udp  # Flannel VXLAN
 
     # Allow HTTP/HTTPS for services
     sudo ufw allow 80/tcp
