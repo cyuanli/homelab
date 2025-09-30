@@ -1,0 +1,17 @@
+# SnapRAID + MergerFS Storage Pool
+# Added on 2025-08-29
+
+# Root filesystem
+UUID=5d0349bc-9c4b-4463-b21e-8ccaf6f861d1 / ext4 defaults 0 1
+
+# Parity drive (XFS)
+UUID=813d8234-916d-42e1-89ce-cff117feab67 /mnt/parity1 xfs defaults,noatime 0 2
+
+# Data drives (ext4) - ordered by size
+UUID=53c59e25-4e9a-4c82-a83a-40941151e959 /mnt/data1 ext4 defaults,noatime,nodiratime 0 2
+UUID=cade9ae8-5631-4ceb-9be4-af09085bcc8a /mnt/data2 ext4 defaults,noatime,nodiratime 0 2
+UUID=f3671b3e-6a45-4904-aec5-e5cfa774b64c /mnt/data3 ext4 defaults,noatime,nodiratime 0 2
+UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodiratime 0 2
+
+# MergerFS unified pool
+/mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true 0 0

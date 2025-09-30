@@ -1,0 +1,19 @@
+NAME     SIZE MODEL                 SERIAL
+sda    465.8G ST3500830AS           9QG5N35P
+└─sda1 465.8G                       
+sdb    447.1G KINGSTON SA400S37480G 50026B7380689D75
+├─sdb1 439.2G                       
+├─sdb2     1K                       
+└─sdb5   7.9G                       
+sdc    931.5G WDC WD10EADX-00TDHB0  WD-WCAV5S398441
+└─sdc1 931.5G                       
+sdd      1.8T ST2000DM006-2DM164    Z560WFLZ
+└─sdd1   1.8T                       
+sde      3.6T WDC WD40EFRX-68N32N0  WD-WCC7K5JFY8XT
+└─sde1   3.6T                       
+sdf      3.6T WDC WD40EFRX-68N32N0  WD-WCC7K2UYA5A3
+└─sdf1   3.6T                       
+sdg        0B USB HS-CF Card        0000021291C7
+sdh        0B USB HS-xD/SM          0000021291C7
+sdi        0B USB HS-MS Card        0000021291C7
+sdj        0B USB HS-SD Card        0000021291C7
