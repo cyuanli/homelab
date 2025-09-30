@@ -168,6 +168,10 @@ configure_firewall() {
     sudo ufw allow 10250/tcp  # kubelet
     sudo ufw allow from "$lan_cidr" to any port 8472 proto udp  # Flannel VXLAN
 
+    # Allow monitoring ports for Prometheus/Node Exporter
+    log_info "Allowing monitoring ports"
+    sudo ufw allow from "$lan_cidr" to any port 9100 proto tcp
+
     # Allow HTTP/HTTPS for services
     sudo ufw allow 80/tcp
     sudo ufw allow 443/tcp
