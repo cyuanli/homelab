@@ -26,9 +26,9 @@ spec:
         operator: Exists
         effect: NoSchedule
 
-      # Init container to handle Science United attachment
+      # Init container to handle project attachment
       initContainers:
-      - name: setup-account-manager
+      - name: setup-projects
         image: boinc/client:latest
         command:
         - /bin/bash
@@ -48,13 +48,76 @@ spec:
             sleep 2
           done
 
-          # Check if already attached to Science United
-          if /usr/bin/boinccmd --acct_mgr info 2>/dev/null | grep -q "scienceunited.org"; then
-            echo "Already attached to Science United"
+          # Attach to Einstein@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "einsteinathome.org"; then
+            echo "Already attached to Einstein@home"
           else
-            echo "Attaching to Science United..."
-            /usr/bin/boinccmd --acct_mgr attach https://scienceunited.org "$SCIENCE_UNITED_EMAIL" "$SCIENCE_UNITED_PASSWORD" 2>&1 || true
-            sleep 10
+            echo "Attaching to Einstein@home..."
+            /usr/bin/boinccmd --project_attach https://einsteinathome.org/ "$EINSTEIN_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to World Community Grid if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "worldcommunitygrid.org"; then
+            echo "Already attached to World Community Grid"
+          else
+            echo "Attaching to World Community Grid..."
+            /usr/bin/boinccmd --project_attach https://www.worldcommunitygrid.org/ "$WCG_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to DENIS@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "denisathome"; then
+            echo "Already attached to DENIS@home"
+          else
+            echo "Attaching to DENIS@home..."
+            /usr/bin/boinccmd --project_attach https://denis.usj.es/denisathome/ "$DENIS_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to Milkyway@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "milkyway"; then
+            echo "Already attached to Milkyway@home"
+          else
+            echo "Attaching to Milkyway@home..."
+            /usr/bin/boinccmd --project_attach https://milkyway.cs.rpi.edu/milkyway/ "$MILKYWAY_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to SiDock@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "sidock"; then
+            echo "Already attached to SiDock@home"
+          else
+            echo "Attaching to SiDock@home..."
+            /usr/bin/boinccmd --project_attach https://www.sidock.si/sidock/ "$SIDOCK_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to Asteroids@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "asteroidsathome"; then
+            echo "Already attached to Asteroids@home"
+          else
+            echo "Attaching to Asteroids@home..."
+            /usr/bin/boinccmd --project_attach https://asteroidsathome.net/boinc/ "$ASTEROIDS_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to Yoyo@home if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "yoyo"; then
+            echo "Already attached to Yoyo@home"
+          else
+            echo "Attaching to Yoyo@home..."
+            /usr/bin/boinccmd --project_attach https://www.rechenkraft.net/yoyo/ "$YOYO_AUTH" 2>&1 || true
+            sleep 5
+          fi
+
+          # Attach to Climateprediction.net if not already attached
+          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "climateprediction"; then
+            echo "Already attached to Climateprediction.net"
+          else
+            echo "Attaching to Climateprediction.net..."
+            /usr/bin/boinccmd --project_attach https://www.climateprediction.net/ "$CLIMATE_AUTH" 2>&1 || true
+            sleep 5
           fi
 
           # Stop temporary BOINC instance
@@ -65,16 +128,46 @@ spec:
         env:
         - name: BOINC_GUI_RPC_PASSWORD
           value: "boinc123"
-        - name: SCIENCE_UNITED_EMAIL
+        - name: EINSTEIN_AUTH
           valueFrom:
             secretKeyRef:
               name: boinc-credentials
-              key: science-united-email
-        - name: SCIENCE_UNITED_PASSWORD
+              key: einstein-auth
+        - name: WCG_AUTH
           valueFrom:
             secretKeyRef:
               name: boinc-credentials
-              key: science-united-password
+              key: worldcommunitygrid-auth
+        - name: DENIS_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: denis-auth
+        - name: MILKYWAY_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: milkyway-auth
+        - name: SIDOCK_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: sidock-auth
+        - name: ASTEROIDS_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: asteroids-auth
+        - name: YOYO_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: yoyo-auth
+        - name: CLIMATE_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: climateprediction-auth
         volumeMounts:
         - name: boinc-data
           mountPath: /var/lib/boinc
@@ -103,16 +196,6 @@ spec:
         env:
         - name: BOINC_GUI_RPC_PASSWORD
           value: "boinc123"
-        - name: SCIENCE_UNITED_EMAIL
-          valueFrom:
-            secretKeyRef:
-              name: boinc-credentials
-              key: science-united-email
-        - name: SCIENCE_UNITED_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: boinc-credentials
-              key: science-united-password
 
         # BOINC command line arguments
         command: ["/usr/bin/boinc"]
