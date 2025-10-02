@@ -15,7 +15,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
     echo "==> Loading configuration from $CONFIG_FILE"
     source "$CONFIG_FILE"
 else
-    echo "==> Loading default configuration from $PROJECT_ROOT/config/vps.env"
+    echo "==> Loading default configuration from $VPS_ROOT/config/vps.env"
     source "$VPS_ROOT/config/vps.env"
 fi
 echo "==> Updating system..."
