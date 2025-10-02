@@ -62,9 +62,9 @@ fi
 declare -a PC_IPS
 for pc_name in $PC_NAMES; do
     echo "  - Looking up $pc_name..."
-    pc_ip=$(tailscale status --json | jq -r ".Peer[] | select(.HostName==\"$pc_name\") | .Addresses[0]")
+    pc_ip=$(tailscale status --json | jq -r ".Peer[] | select(.HostName==\"$pc_name\") | .TailscaleIPs[0]")
 
-    if [[ -z "$pc_ip" ]]; then
+    if [[ -z "$pc_ip" || "$pc_ip" == "null" ]]; then
         echo "WARNING: $pc_name not found on Tailscale, skipping."
         continue
     fi
