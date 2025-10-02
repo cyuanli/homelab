@@ -84,12 +84,16 @@ install_k3s() {
     local k3s_version="${K3S_VERSION:-v1.33.5+k3s1}"
     log_info "Installing K3s version $k3s_version"
 
+    # Export K3S_TOKEN if provided so the installer can pick it up
+    if [[ -n "${CLUSTER_TOKEN:-}" ]]; then
+        export K3S_TOKEN="$CLUSTER_TOKEN"
+        log_info "K3S_TOKEN exported for installer"
+    fi
+
     # Prepare install command
     local install_cmd="curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=\"$k3s_version\" sh -s -"
 
     if [[ "${NODE_ROLE}" == "server" ]]; then
-        log_info "Installing K3s server node"
-
         # Server-specific options
         local server_opts=(
             "--write-kubeconfig-mode 644"
@@ -99,8 +103,18 @@ install_k3s() {
             "--node-name $(hostname)"
         )
 
-        # Add cluster init for first server
+        # Determine if this is first server or joining existing cluster
         if [[ -z "${CLUSTER_TOKEN:-}" ]]; then
+            # First server - initialize new cluster
+            log_info "Installing K3s server node (first server - initializing cluster)"
+            server_opts+=("--cluster-init")
+        elif [[ -n "${SERVER_URL:-}" ]]; then
+            # Additional control plane node - join existing cluster
+            log_info "Installing K3s server node (joining existing cluster at $SERVER_URL)"
+            server_opts+=("--server" "$SERVER_URL")
+        else
+            # Server with token but no URL - still init (fallback)
+            log_info "Installing K3s server node (initializing cluster)"
             server_opts+=("--cluster-init")
         fi
 
@@ -112,13 +126,8 @@ install_k3s() {
             fi
         fi
 
-        # Add cluster token if provided
-        if [[ -n "${CLUSTER_TOKEN:-}" ]]; then
-            install_cmd="K3S_TOKEN=\"$CLUSTER_TOKEN\" $install_cmd"
-        fi
-
-        # Append server options
-        install_cmd="$install_cmd ${server_opts[*]}"
+        # Append server subcommand and options
+        install_cmd="$install_cmd server ${server_opts[*]}"
 
     else
         log_info "Installing K3s agent node"
@@ -137,19 +146,11 @@ install_k3s() {
         fi
 
         # Agent requires server URL and token
-        install_cmd="K3S_TOKEN=\"$CLUSTER_TOKEN\" $install_cmd agent --server \"$SERVER_URL\" ${agent_opts[*]}"
+        install_cmd="$install_cmd agent --server \"$SERVER_URL\" ${agent_opts[*]}"
     fi
 
     log_info "Running: $install_cmd"
-    eval "$install_cmd" || true  # Don't fail if service doesn't start initially
-
-    # Ensure token is in service environment file for agents
-    if [[ "${NODE_ROLE}" != "server" ]] && [[ -n "${CLUSTER_TOKEN:-}" ]]; then
-        log_info "Ensuring K3s agent service has token in environment file"
-        echo "K3S_TOKEN=${CLUSTER_TOKEN}" | sudo tee /etc/systemd/system/k3s-agent.service.env > /dev/null
-        sudo systemctl daemon-reload
-        sudo systemctl restart k3s-agent.service
-    fi
+    eval "$install_cmd"
 
     # Wait for K3s to start
     log_info "Waiting for K3s to start"
@@ -201,6 +202,22 @@ setup_networking() {
         return 0
     fi
 
+    # Skip for additional control plane nodes joining existing cluster
+    if [[ -n "${SERVER_URL:-}" ]]; then
+        log_info "Skipping networking setup - joining existing cluster"
+        log_info "Only labeling this node"
+
+        # Wait for node to be ready
+        log_info "Waiting for node to be ready"
+        wait_for_condition "kubectl get nodes --no-headers | grep $(hostname) | awk '{print \$2}' | grep -q Ready" 180
+
+        # Label the node for scheduling
+        kubectl label node "$(hostname)" homelab=true --overwrite
+
+        log_success "Node labeled successfully"
+        return 0
+    fi
+
     log_info "Setting up cluster networking"
 
     # Wait for node to be ready
@@ -224,6 +241,13 @@ setup_networking() {
 deploy_infrastructure() {
     if [[ "${NODE_ROLE}" != "server" ]]; then
         log_info "Skipping infrastructure deployment for agent node"
+        return 0
+    fi
+
+    # Skip for additional control plane nodes joining existing cluster
+    if [[ -n "${SERVER_URL:-}" ]]; then
+        log_info "Skipping infrastructure deployment - joining existing cluster"
+        log_info "Infrastructure already deployed on the existing control plane"
         return 0
     fi
 
@@ -290,7 +314,7 @@ validate_cluster() {
     # Check node status (only for server nodes that have kubectl configured)
     if [[ "${NODE_ROLE}" == "server" ]]; then
         local node_status
-        node_status=$(kubectl get nodes --no-headers | awk '{print $2}')
+        node_status=$(kubectl get nodes --no-headers | grep $(hostname) | awk '{print $2}')
         if [[ "$node_status" != "Ready" ]]; then
             log_error "Node is not ready: $node_status"
             return 1
@@ -299,8 +323,8 @@ validate_cluster() {
         log_info "Agent node service is active - validation successful"
     fi
 
-    # For server nodes, check infrastructure
-    if [[ "${NODE_ROLE}" == "server" ]]; then
+    # For first server node only, check infrastructure
+    if [[ "${NODE_ROLE}" == "server" && -z "${SERVER_URL:-}" ]]; then
         # Check system pods
         log_info "Checking system pods"
         wait_for_namespace_ready "kube-system"
@@ -313,6 +337,8 @@ validate_cluster() {
         if kubectl get deployment traefik -n infrastructure >/dev/null 2>&1; then
             wait_for_deployment "traefik" "infrastructure"
         fi
+    elif [[ "${NODE_ROLE}" == "server" && -n "${SERVER_URL:-}" ]]; then
+        log_info "Skipping infrastructure validation - joined existing cluster"
     fi
 
     log_success "Cluster validation completed"

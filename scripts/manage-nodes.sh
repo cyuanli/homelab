@@ -27,16 +27,21 @@ Node Management Script
 Usage: $0 [command] [options]
 
 Commands:
-  add [hostname]          - Create configuration for new node
-  remove [hostname]       - Remove node from cluster
-  list                    - List all nodes in cluster
-  status                  - Show cluster status
-  info                    - Show cluster connection info
-  drain [hostname]        - Drain node for maintenance
-  uncordon [hostname]     - Mark node as schedulable
+  add [hostname] [--role server|agent]  - Create configuration for new node
+  remove [hostname]                     - Remove node from cluster
+  list                                  - List all nodes in cluster
+  status                                - Show cluster status
+  info                                  - Show cluster connection info
+  drain [hostname]                      - Drain node for maintenance
+  uncordon [hostname]                   - Mark node as schedulable
+
+Options:
+  --role server|agent     - Node role (default: agent)
 
 Examples:
   $0 add worker1
+  $0 add worker1 --role agent
+  $0 add control2 --role server
   $0 remove worker1
   $0 list
   $0 status
@@ -71,6 +76,7 @@ get_cluster_info() {
 
 create_node_config() {
     local node_name="$1"
+    local node_role="${2:-agent}"  # Default to agent if not specified
 
     if [[ -z "$node_name" ]]; then
         log_error "Node hostname not provided"
@@ -78,10 +84,16 @@ create_node_config() {
         return 1
     fi
 
+    # Validate role
+    if [[ "$node_role" != "server" && "$node_role" != "agent" ]]; then
+        log_error "Invalid role: $node_role. Must be 'server' or 'agent'"
+        return 1
+    fi
+
     # Load configuration
     load_config
 
-    log_step "Creating configuration for node: $node_name"
+    log_step "Creating configuration for node: $node_name (role: $node_role)"
 
     local node_dir="$HOMELAB_ROOT/nodes/$node_name"
     local template_file="$node_dir/config.env"
@@ -126,7 +138,7 @@ HOMELAB_GID="$HOMELAB_GID"
 # =======================
 
 # Node role and cluster info
-NODE_ROLE=agent
+NODE_ROLE=$node_role
 CLUSTER_TOKEN=REPLACE_WITH_CLUSTER_TOKEN
 SERVER_URL=REPLACE_WITH_SERVER_URL
 
@@ -204,7 +216,7 @@ HOMELAB_GID="$HOMELAB_GID"
 # =======================
 
 # Node role and cluster info
-NODE_ROLE=agent
+NODE_ROLE=$node_role
 CLUSTER_TOKEN=$cluster_token
 SERVER_URL=$server_url
 
@@ -310,23 +322,24 @@ EOF
 ## Configuration Details
 - Server URL: $server_url
 - Cluster Token: ${cluster_token:0:20}... (truncated)
-- Node Role: agent
+- Node Role: $node_role
 
 ## Troubleshooting
 - Ensure Tailscale is connected: \`tailscale status\`
-- Check K3s logs: \`sudo journalctl -u k3s-agent\`
+- Check K3s logs: \`sudo journalctl -u k3s$([ "$node_role" = "agent" ] && echo "-agent")\`
 - Verify network connectivity: \`ping $server_ip\`
 EOF
 
     # Show instructions
     cat << EOF
 
-${GREEN}✅ Node configuration created for $node_name${NC}
+${GREEN}✅ Node configuration created for $node_name (role: $node_role)${NC}
 
 ${BLUE}Configuration created:${NC}
 - Template file: $template_file
 - Config file: $config_file (with secrets)
 - Instructions: $node_dir/README.md
+- Role: ${CYAN}$node_role${NC}
 
 ${BLUE}To add this node to the cluster:${NC}
 
@@ -345,6 +358,7 @@ ${BLUE}To add this node to the cluster:${NC}
 ${BLUE}Current cluster info:${NC}
 - Server URL: ${CYAN}$server_url${NC}
 - Token: ${CYAN}${cluster_token:0:20}...${NC}
+- Node Role: ${CYAN}$node_role${NC}
 
 EOF
 }
@@ -490,7 +504,25 @@ main() {
                 log_error "This command must be run on a K3s server node"
                 exit 1
             fi
-            create_node_config "${1:-}"
+
+            # Parse arguments for add command
+            local hostname=""
+            local role="agent"
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --role)
+                        role="$2"
+                        shift 2
+                        ;;
+                    *)
+                        hostname="$1"
+                        shift
+                        ;;
+                esac
+            done
+
+            create_node_config "$hostname" "$role"
             ;;
         "remove")
             remove_node "${1:-}"

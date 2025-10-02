@@ -164,9 +164,11 @@ configure_firewall() {
     # Allow K3s ports for cluster communication
     log_info "Allowing K3s cluster ports"
     local lan_cidr="${LAN_CIDR:-192.168.0.0/16}"
-    sudo ufw allow 6443/tcp   # K3s API server
-    sudo ufw allow 10250/tcp  # kubelet
-    sudo ufw allow from "$lan_cidr" to any port 8472 proto udp  # Flannel VXLAN
+    sudo ufw allow from "$lan_cidr" to any port 6443 proto tcp   # K3s API server
+    sudo ufw allow from "$lan_cidr" to any port 2379 proto tcp   # etcd client
+    sudo ufw allow from "$lan_cidr" to any port 2380 proto tcp   # etcd peer
+    sudo ufw allow from "$lan_cidr" to any port 10250 proto tcp  # kubelet
+    sudo ufw allow from "$lan_cidr" to any port 8472 proto udp   # Flannel VXLAN
 
     # Allow monitoring ports for Prometheus/Node Exporter
     log_info "Allowing monitoring ports"
