@@ -69,6 +69,15 @@ spec:
           limits:
             cpu: 2000m
             memory: 2Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - cyl-homelab
       volumes:
       - name: jellyfin-config
         hostPath:

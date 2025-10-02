@@ -68,6 +68,15 @@ spec:
           limits:
             cpu: 1000m
             memory: 1Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - cyl-homelab
       volumes:
       - name: qbittorrent-config
         hostPath:

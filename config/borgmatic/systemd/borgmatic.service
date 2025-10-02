@@ -8,6 +8,7 @@ Type=oneshot
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
+Environment="KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
 ExecStart=/usr/bin/borgmatic --verbosity 1 --syslog-verbosity 1
 ExecStartPost=/home/cyl/homelab/scripts/backup-notify.sh success
 ExecStopPost=/home/cyl/homelab/scripts/backup-notify.sh exit-code
