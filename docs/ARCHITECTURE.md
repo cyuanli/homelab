@@ -33,8 +33,10 @@ Applications (Pods)
 - **Protocols**: HTTP/HTTPS (80/443), SSH passthrough (51422)
 
 **2. VPS Proxy Layer**
-- **Technology**: Nginx stream module
-- **Function**: TCP/UDP stream forwarding
+- **Technology**: Nginx stream module with upstream load balancing
+- **Function**: TCP/UDP stream forwarding with automatic failover
+- **Load Balancing**: Round-robin across multiple control plane nodes
+- **Health Checks**: `max_fails=2 fail_timeout=5s` per backend
 - **Features**: Proxy protocol support, real IP preservation
 - **Security**: UFW firewall, SSH key authentication only
 
@@ -59,11 +61,12 @@ Applications (Pods)
 
 ### K3s Cluster Components
 
-**Control Plane (Single Node)**
-- **API Server**: Kubernetes API with Tailscale networking
-- **etcd**: Embedded SQLite database (K3s default)
-- **Controller Manager**: Standard Kubernetes controllers
-- **Scheduler**: Pod scheduling and placement
+**Control Plane (Multi-Node HA)**
+- **API Server**: Kubernetes API with Tailscale networking (runs on all control planes)
+- **etcd**: Embedded etcd cluster with raft consensus (K3s HA mode)
+- **Controller Manager**: Standard Kubernetes controllers (leader election)
+- **Scheduler**: Pod scheduling and placement (leader election)
+- **High Availability**: 3 control plane nodes for quorum (tolerates 1 failure)
 
 **Worker Components**
 - **kubelet**: Container lifecycle management
@@ -216,17 +219,26 @@ Log Event
 - **Storage**: Persistent volume expansion (manual)
 - **Network**: Tailscale mesh scales automatically
 
+### High Availability Features
+
+**Implemented HA**
+- **Control Plane**: 3-node etcd cluster with automatic failover
+- **Load Balancing**: VPS nginx distributes traffic across all control planes
+- **Fault Tolerance**: Can tolerate 1 control plane failure
+- **Service Discovery**: Traefik runs on all nodes for ingress redundancy
+
 ### Limitations
 
-**Single Points of Failure**
-- **Storage**: Local storage limits availability
-- **Database**: Single PostgreSQL instance
-- **Ingress**: Single Traefik instance (can be scaled)
+**Remaining Single Points of Failure**
+- **Storage**: Local storage limits availability (application-level)
+- **Database**: Single PostgreSQL instance (Nextcloud)
+- **VPS Proxy**: Single VPS for external access
 
 **Mitigation Strategies**
 - **Backups**: Borgmatic for data protection
 - **Monitoring**: Storage health monitoring
 - **Recovery**: Documented recovery procedures
+- **Control Plane HA**: Implemented with 3-node etcd cluster
 
 ## Configuration Management
 
@@ -335,10 +347,11 @@ Running Applications
 
 ### Planned Enhancements
 
-**High Availability**
-- Multi-node K3s cluster
-- External database (PostgreSQL cluster)
-- Distributed storage (Longhorn, Ceph)
+**High Availability** (✅ Partially Implemented)
+- ✅ Multi-node K3s cluster with embedded etcd
+- ✅ VPS load balancing across control planes
+- 🔄 External database (PostgreSQL cluster)
+- 🔄 Distributed storage (Longhorn, Ceph)
 
 **Monitoring Improvements**
 - Prometheus + Grafana stack

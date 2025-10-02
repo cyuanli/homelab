@@ -153,8 +153,11 @@ kubectl rollout history deployment/jellyfin -n media
 
 **Add New Node**
 ```bash
-# Generate configuration for new node
-./scripts/manage-nodes.sh add worker2 192.168.1.102
+# Generate configuration for agent node (worker)
+./scripts/manage-nodes.sh add worker2
+
+# Or generate configuration for control plane node
+./scripts/manage-nodes.sh add control2 --role server
 
 # Copy homelab to new node
 scp -r ~/homelab user@worker2:~/
@@ -165,6 +168,8 @@ cd ~/homelab
 ./scripts/homelab.sh setup-system
 ./scripts/homelab.sh setup-cluster
 ```
+
+**Note**: For HA control plane, use 3 or 5 server nodes (odd number for etcd quorum).
 
 **Remove Node**
 ```bash
@@ -188,6 +193,26 @@ kubectl cordon worker2
 
 # Uncordon node
 kubectl uncordon worker2
+```
+
+**Convert Agent to Control Plane**
+```bash
+# 1. Update node configuration
+nano ~/homelab/nodes/worker2/config.env.local
+# Change: NODE_ROLE=agent → NODE_ROLE=server
+
+# 2. On the agent node, uninstall K3s
+ssh user@worker2
+sudo /usr/local/bin/k3s-agent-uninstall.sh
+sudo rm -rf /var/lib/rancher /etc/rancher /var/lib/kubelet
+sudo rm -rf ~/.kube
+
+# 3. Re-run cluster setup (will install as server)
+cd ~/homelab
+./scripts/setup-cluster.sh
+
+# 4. Verify node joined as control plane
+kubectl get nodes -l node-role.kubernetes.io/control-plane
 ```
 
 ### Cluster Updates

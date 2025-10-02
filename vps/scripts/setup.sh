@@ -43,18 +43,63 @@ else
 fi
 
 # -----------------------------
-# Detect Home PC Tailscale IP
+# Detect Home PC Tailscale IPs
 # -----------------------------
 
-echo "==> Detecting home PC Tailscale IP..."
-HOME_PC_IP=$(tailscale status --json | jq -r ".Peer[] | select(.HostName==\"$HOME_PC_NAME\") | .Addresses[0]")
+echo "==> Detecting home PC Tailscale IPs..."
 
-if [[ -z "$HOME_PC_IP" ]]; then
-    echo "ERROR: Home PC not found on Tailscale."
+# Support both HOME_PC_NAMES (multiple) and HOME_PC_NAME (single, legacy)
+if [[ -n "${HOME_PC_NAMES:-}" ]]; then
+    PC_NAMES="$HOME_PC_NAMES"
+elif [[ -n "${HOME_PC_NAME:-}" ]]; then
+    PC_NAMES="$HOME_PC_NAME"
+else
+    echo "ERROR: Neither HOME_PC_NAMES nor HOME_PC_NAME is set."
     exit 1
 fi
 
-echo "Detected home PC Tailscale IP: $HOME_PC_IP"
+# Detect IPs for all specified PCs
+declare -a PC_IPS
+for pc_name in $PC_NAMES; do
+    echo "  - Looking up $pc_name..."
+    pc_ip=$(tailscale status --json | jq -r ".Peer[] | select(.HostName==\"$pc_name\") | .Addresses[0]")
+
+    if [[ -z "$pc_ip" ]]; then
+        echo "WARNING: $pc_name not found on Tailscale, skipping."
+        continue
+    fi
+
+    echo "  - Found $pc_name: $pc_ip"
+    PC_IPS+=("$pc_ip")
+done
+
+if [[ ${#PC_IPS[@]} -eq 0 ]]; then
+    echo "ERROR: No home PCs found on Tailscale."
+    exit 1
+fi
+
+echo "Detected ${#PC_IPS[@]} home PC(s) on Tailscale"
+
+# -----------------------------
+# Generate upstream blocks
+# -----------------------------
+
+echo "==> Generating upstream configurations..."
+
+# Generate server lines for each IP
+UPSTREAM_HTTPS=""
+UPSTREAM_HTTP3=""
+UPSTREAM_HTTP=""
+UPSTREAM_SSH=""
+
+for ip in "${PC_IPS[@]}"; do
+    UPSTREAM_HTTPS+="    server $ip:443 max_fails=2 fail_timeout=5s;\n"
+    UPSTREAM_HTTP3+="    server $ip:443 max_fails=2 fail_timeout=5s;\n"
+    UPSTREAM_HTTP+="    server $ip:80 max_fails=2 fail_timeout=5s;\n"
+done
+
+# SSH uses only the first backend (no load balancing needed)
+UPSTREAM_SSH="    server ${PC_IPS[0]}:22;"
 
 # -----------------------------
 # Deploy and generate Nginx config
@@ -72,7 +117,12 @@ fi
 cp "$SOURCE_TEMPLATE" "$TEMPLATE_FILE"
 
 echo "==> Generating Nginx configuration..."
-sed "s/{{HOME_PC_IP}}/$HOME_PC_IP/g" "$TEMPLATE_FILE" > "$NGINX_CONF"
+# Replace placeholders with upstream blocks
+sed -e "s|{{UPSTREAM_HTTPS}}|$UPSTREAM_HTTPS|g" \
+    -e "s|{{UPSTREAM_HTTP3}}|$UPSTREAM_HTTP3|g" \
+    -e "s|{{UPSTREAM_HTTP}}|$UPSTREAM_HTTP|g" \
+    -e "s|{{UPSTREAM_SSH}}|$UPSTREAM_SSH|g" \
+    "$TEMPLATE_FILE" > "$NGINX_CONF"
 
 # -----------------------------
 # Configure UFW

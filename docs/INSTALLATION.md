@@ -194,10 +194,17 @@ nano config/vps.env.local
 **5.2 VPS Configuration Values**
 ```bash
 # In vps/config/vps.env.local
-HOME_PC_TAILSCALE_IP="100.x.x.x"          # Your homelab's Tailscale IP
-DOMAIN="your-domain.com"                   # Same domain as homelab
+
+# For single control plane
+HOME_PC_NAME="cyl-homelab"
+
+# Or for HA with multiple control planes (recommended)
+HOME_PC_NAMES="cyl-homelab cyl-optiplex9020 cyl-mitx"
+
 TAILSCALE_AUTHKEY="tskey-auth-xxxxx"       # Tailscale auth key
 ```
+
+**Note**: The setup script auto-detects Tailscale IPs for the specified hostnames.
 
 **5.3 Run VPS Setup**
 ```bash
@@ -255,9 +262,67 @@ Access Nextcloud at https://drive.your-domain.com:
 2. Create admin account
 3. Configure storage and apps as needed
 
-### Step 7: Monitoring Setup
+### Step 7: High Availability Setup (Optional)
 
-**7.1 Test Storage Monitoring**
+For production use, set up a multi-node control plane:
+
+**7.1 Add Additional Control Plane Nodes**
+```bash
+# On management node (cyl-homelab), generate config for second control plane
+./scripts/manage-nodes.sh add cyl-optiplex9020 --role server
+
+# Copy homelab to new control plane node
+scp -r ~/homelab user@cyl-optiplex9020:~/
+
+# On new node, run setup
+ssh user@cyl-optiplex9020
+cd ~/homelab
+./scripts/setup-system.sh
+./scripts/setup-cluster.sh
+```
+
+**7.2 Add Third Control Plane Node (for true HA)**
+```bash
+# Repeat for third node
+./scripts/manage-nodes.sh add cyl-mitx --role server
+scp -r ~/homelab user@cyl-mitx:~/
+ssh user@cyl-mitx "cd ~/homelab && ./scripts/setup-system.sh && ./scripts/setup-cluster.sh"
+```
+
+**7.3 Verify HA Cluster**
+```bash
+# Check all control plane nodes are Ready
+kubectl get nodes
+
+# Should see 3 nodes with control-plane role
+kubectl get nodes -l node-role.kubernetes.io/control-plane
+
+# Check etcd cluster health
+sudo k3s kubectl get etcdsnapshotfiles -A
+```
+
+**7.4 Update VPS for Load Balancing**
+```bash
+# Update VPS config with all control plane hostnames
+nano ~/homelab/vps/config/vps.env.local
+# Set: HOME_PC_NAMES="cyl-homelab cyl-optiplex9020 cyl-mitx"
+
+# On VPS, re-run setup to configure load balancing
+ssh root@your-vps
+cd homelab/vps
+sudo bash scripts/setup.sh
+```
+
+**HA Benefits:**
+- Tolerates 1 control plane failure
+- VPS automatically fails over to healthy nodes
+- etcd maintains quorum with 2/3 nodes
+
+**Important:** Always use an odd number of control planes (3, 5, 7) for proper etcd quorum.
+
+### Step 8: Monitoring Setup
+
+**8.1 Test Storage Monitoring**
 ```bash
 # Test monitoring system
 ./scripts/homelab.sh monitor test-alert
@@ -265,7 +330,7 @@ Access Nextcloud at https://drive.your-domain.com:
 # Should receive Discord notification if webhook configured
 ```
 
-**7.2 Configure Monitoring**
+**8.2 Configure Monitoring**
 ```bash
 # View monitoring configuration
 cat config/service-configs/monitoring.conf

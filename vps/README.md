@@ -107,14 +107,8 @@ nano config/vps.env.local
 
 **Required Configuration Values**
 ```bash
-# Your homelab's Tailscale hostname
-HOME_PC_NAME="your-homelab-hostname"
-
-# Your homelab's Tailscale IP (check with: tailscale status)
-HOME_PC_IP="100.xxx.xxx.xxx"
-
-# Your domain name
-DOMAIN="your-domain.com"
+# Your homelab Tailscale hostnames (space-separated for multiple control planes)
+HOME_PC_NAMES="cyl-homelab cyl-optiplex9020"
 
 # Tailscale auth key for VPS
 TAILSCALE_AUTHKEY="tskey-auth-xxxxxxxxxxxxxxxx"
@@ -122,6 +116,8 @@ TAILSCALE_AUTHKEY="tskey-auth-xxxxxxxxxxxxxxxx"
 # SSH public key for VPS access (optional, if not set during VPS creation)
 SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2E..."
 ```
+
+**Note**: The setup script automatically detects Tailscale IPs for the specified hostnames. For multiple control plane nodes, the script will configure nginx with load balancing across all available nodes.
 
 ### 3. Run Setup Script
 
@@ -168,12 +164,11 @@ dig @1.1.1.1 your-domain.com
 
 **Required Settings**
 ```bash
-# Homelab identification
-HOME_PC_NAME="homelab-server"       # Tailscale hostname of homelab
-HOME_PC_IP="100.121.249.71"         # Tailscale IP of homelab
+# Homelab identification (multiple control planes for HA)
+HOME_PC_NAMES="cyl-homelab cyl-optiplex9020"  # Space-separated Tailscale hostnames
 
-# Domain configuration
-DOMAIN="example.com"                 # Your primary domain
+# Or single control plane (legacy)
+# HOME_PC_NAME="homelab-server"
 
 # Tailscale configuration
 TAILSCALE_AUTHKEY="tskey-auth-xxx"   # Auth key from Tailscale admin
@@ -181,6 +176,12 @@ TAILSCALE_AUTHKEY="tskey-auth-xxx"   # Auth key from Tailscale admin
 # SSH configuration (optional)
 SSH_PUBLIC_KEY="ssh-rsa AAAAB3..."   # Your SSH public key
 ```
+
+**Note**: When using `HOME_PC_NAMES` with multiple hostnames, the setup script automatically:
+- Detects Tailscale IPs for all specified hosts
+- Configures nginx with upstream load balancing
+- Sets up health checks with `max_fails=2 fail_timeout=5s`
+- Routes traffic to all available control plane nodes
 
 **Optional Settings**
 ```bash
@@ -484,34 +485,53 @@ fi
 
 ## Advanced Configuration
 
-### Load Balancing
+### High Availability with Multiple Control Planes
 
-For multiple homelab instances:
+The setup script automatically configures load balancing when you specify multiple hostnames:
 
+**Configuration** (`config/vps.env.local`)
+```bash
+# Specify multiple control plane nodes
+HOME_PC_NAMES="cyl-homelab cyl-optiplex9020"
+```
+
+**Generated Nginx Configuration**
 ```nginx
-# /etc/nginx/stream.d/homelab-lb.conf
-upstream homelab_http {
-    server 100.xxx.xxx.1:80;
-    server 100.xxx.xxx.2:80;
+# Automatically generated upstream blocks
+upstream traefik_https {
+    server 100.xxx.xxx.1:443 max_fails=2 fail_timeout=5s;
+    server 100.xxx.xxx.2:443 max_fails=2 fail_timeout=5s;
 }
 
-upstream homelab_https {
-    server 100.xxx.xxx.1:443;
-    server 100.xxx.xxx.2:443;
-}
-
-server {
-    listen 80;
-    proxy_pass homelab_http;
-    proxy_protocol on;
+upstream traefik_http {
+    server 100.xxx.xxx.1:80 max_fails=2 fail_timeout=5s;
+    server 100.xxx.xxx.2:80 max_fails=2 fail_timeout=5s;
 }
 
 server {
     listen 443;
-    proxy_pass homelab_https;
+    listen [::]:443;
+    proxy_pass traefik_https;
     proxy_protocol on;
+    proxy_connect_timeout 5s;
+    proxy_timeout 30s;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    proxy_pass traefik_http;
+    proxy_protocol on;
+    proxy_connect_timeout 5s;
+    proxy_timeout 30s;
 }
 ```
+
+**Benefits**:
+- Round-robin load balancing across all nodes
+- Automatic failover if a node becomes unavailable
+- Health checks with configurable thresholds
+- No single point of failure
 
 ### SSL Termination on VPS
 

@@ -5,11 +5,11 @@ A complete homelab infrastructure combining K3s cluster for applications with VP
 ## Architecture Overview
 
 ### Infrastructure Stack
-- **K3s Cluster**: Lightweight Kubernetes distribution running applications
-- **VPS Proxy**: Nginx-based reverse proxy providing external access
-- **Tailscale**: Zero-config VPN connecting VPS and homelab
+- **K3s Cluster**: Lightweight Kubernetes with HA control plane (3 nodes with embedded etcd)
+- **VPS Proxy**: Nginx-based reverse proxy with load balancing across control planes
+- **Tailscale**: Zero-config VPN mesh network connecting all nodes
 - **Traefik**: K8s ingress controller with automatic SSL certificates
-- **Storage**: Local persistent volumes with monitoring
+- **Storage**: Local persistent volumes with health monitoring
 
 ### Network Flow
 ```
@@ -353,13 +353,18 @@ kubectl get nodes && kubectl get pods -A
 
 ### Adding Nodes
 ```bash
-# Generate node configuration
-./scripts/manage-nodes.sh add <node-name> <node-ip>
+# Generate node configuration (agent node by default)
+./scripts/manage-nodes.sh add <node-name>
+
+# Or add as control plane node
+./scripts/manage-nodes.sh add <node-name> --role server
 
 # On new node: copy homelab repo and run
 ./scripts/homelab.sh setup-system
 ./scripts/homelab.sh setup-cluster
 ```
+
+**Note**: For high availability, use 3 or 5 control plane nodes (odd number for etcd quorum). 2 control planes provide no HA benefit.
 
 ### Scaling Services
 ```bash
@@ -374,14 +379,19 @@ kubectl apply -k cluster/applications/media-stack/jellyfin/
 ## VPS Proxy Setup
 
 ### Configuration
-The VPS acts as a reverse proxy using Nginx with Tailscale:
+The VPS acts as a load-balancing reverse proxy using Nginx with Tailscale:
 
 **Setup Steps:**
-1. Configure `vps/config/vps.env.local` with homelab Tailscale IP
-2. Run `vps/scripts/setup.sh` on VPS
+1. Configure `vps/config/vps.env.local` with homelab control plane hostnames:
+   ```bash
+   HOME_PC_NAMES="cyl-homelab cyl-optiplex9020 cyl-mitx"
+   ```
+2. Run `vps/scripts/setup.sh` on VPS (auto-detects Tailscale IPs)
 3. Configure DNS A records to point to VPS public IP
 
 **Features:**
+- **Load Balancing**: Round-robin across all control plane nodes
+- **Automatic Failover**: Health checks with `max_fails=2 fail_timeout=5s`
 - **Stream Proxy**: Direct TCP/UDP forwarding for HTTP/HTTPS
 - **Real IP Preservation**: Proxy protocol support
 - **SSL Passthrough**: Certificates handled by Traefik on homelab
