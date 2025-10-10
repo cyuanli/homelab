@@ -1,26 +1,25 @@
-location:
-  source_directories:
-    - /media/data/nextcloud/*/files
-  repositories:
-    - ssh://cyl-optiplex9020/media/wd_elements/borg
+source_directories:
+  - /media/data/nextcloud/*/files
 
-storage:
-  encryption_passphrase: "floss-hunger-unpopular6"
-  compression: zstd
+repositories:
+  - path: ssh://cyl-optiplex9020/media/wd_elements/borg
 
-retention:
-  keep_daily: 7
-  keep_weekly: 4
-  keep_monthly: 6
+encryption_passphrase: "floss-hunger-unpopular6"
+compression: zstd
 
-consistency:
-  checks:
-    - repository
-    - archives
+keep_daily: 7
+keep_weekly: 4
+keep_monthly: 6
 
-hooks:
-  before_backup:
-    - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --on"
+checks:
+  - name: repository
+  - name: archives
 
-  after_backup:
-    - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
+before_backup:
+  - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --on"
+
+after_backup:
+  - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
+
+on_error:
+  - /home/cyl/homelab/scripts/backup-notify.sh error

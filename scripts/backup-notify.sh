@@ -61,6 +61,26 @@ Check full logs with: journalctl -u borgmatic.service"
 
         send_discord_notification "$message" "ERROR"
         ;;
+    "error")
+        # Get recent borgmatic logs (called from borgmatic on_error hook)
+        recent_logs=$(journalctl -u borgmatic.service --since="1 hour ago" --no-pager -n 20 | tail -10)
+
+        message="Borgmatic hook or action FAILED at $(date)
+
+This error was caught by borgmatic's error hook, which may indicate:
+- Maintenance mode command failed
+- Backup/prune/compact/check operation failed
+- Hook execution error
+
+Recent log entries:
+\`\`\`
+$recent_logs
+\`\`\`
+
+Check full logs with: journalctl -u borgmatic.service"
+
+        send_discord_notification "$message" "ERROR"
+        ;;
     "success")
         message="Borgmatic backup completed successfully at $(date)"
         send_discord_notification "$message" "SUCCESS"
