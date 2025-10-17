@@ -187,10 +187,10 @@ spec:
         resources:
           requests:
             cpu: 100m
-            memory: 128Mi
+            memory: 256Mi
           limits:
             cpu: 2000m  # 2 CPU cores max per pod
-            memory: 2Gi
+            memory: 4Gi
 
         # Environment variables
         env:
