@@ -61,21 +61,28 @@ spec:
           mountPath: /var/www/html
         - name: nextcloud-files
           mountPath: /var/www/html/data
-        # Disabled probes during migration - Nextcloud needs time to process migrated data
-        # livenessProbe:
-        #   httpGet:
-        #     path: /status.php
-        #     port: http
-        #   initialDelaySeconds: 60
-        #   periodSeconds: 30
-        #   timeoutSeconds: 10
-        # readinessProbe:
-        #   httpGet:
-        #     path: /status.php
-        #     port: http
-        #   initialDelaySeconds: 30
-        #   periodSeconds: 10
-        #   timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /status.php
+            port: http
+            httpHeaders:
+            - name: Host
+              value: drive.cliff.li
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /status.php
+            port: http
+            httpHeaders:
+            - name: Host
+              value: drive.cliff.li
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
         resources:
           requests:
             cpu: 200m

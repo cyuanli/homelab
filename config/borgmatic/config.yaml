@@ -4,7 +4,8 @@ source_directories:
 repositories:
   - path: ssh://cyl-optiplex9020/media/wd_elements/borg
 
-encryption_passphrase: "floss-hunger-unpopular6"
+# Passphrase is loaded from environment variable BORG_PASSPHRASE
+# Set in /etc/systemd/system/borgmatic.service
 compression: zstd
 
 keep_daily: 7
