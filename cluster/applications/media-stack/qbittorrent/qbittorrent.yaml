@@ -68,28 +68,16 @@ spec:
           limits:
             cpu: 1000m
             memory: 1Gi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: qbittorrent-config
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/qbittorrent-config
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: qbittorrent-config
       - name: incomplete-downloads
-        hostPath:
-          path: /home/cyl/Downloads/incomplete
-          type: DirectoryOrCreate
+        emptyDir:
+          sizeLimit: 50Gi
       - name: downloads
-        hostPath:
-          path: /media/data/downloads
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-downloads
 ---
 apiVersion: v1
 kind: Service

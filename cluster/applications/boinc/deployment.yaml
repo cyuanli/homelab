@@ -26,6 +26,16 @@ spec:
         operator: Exists
         effect: NoSchedule
 
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                - cyl-homelab
+
       # Init container to handle project attachment
       initContainers:
       - name: setup-projects

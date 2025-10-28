@@ -128,6 +128,33 @@ deploy_media() {
         return 1
     fi
 
+    # Deploy media storage (PVs and PVCs) first if using NFS
+    if [[ -d "$app_path/storage" ]]; then
+        log_info "Deploying media storage (PVs and PVCs)"
+        kubectl apply -f "$app_path/storage/media-pvs.yaml"
+        kubectl apply -f "$app_path/storage/media-pvcs.yaml"
+
+        # Wait for PVCs to be bound
+        log_info "Waiting for PVCs to be bound"
+        local timeout=60
+        local elapsed=0
+        while [[ $elapsed -lt $timeout ]]; do
+            local pending_pvcs
+            pending_pvcs=$(kubectl get pvc -n media -o jsonpath='{range .items[?(@.status.phase!="Bound")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | wc -l)
+            if [[ $pending_pvcs -eq 0 ]]; then
+                log_success "All PVCs bound successfully"
+                break
+            fi
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+
+        if [[ $elapsed -ge $timeout ]]; then
+            log_warning "Some PVCs may still be pending, continuing anyway"
+            kubectl get pvc -n media 2>/dev/null || true
+        fi
+    fi
+
     log_info "Deploying media stack (Prowlarr, Sonarr, Radarr, qBittorrent, Jellyfin)"
     kubectl apply -k "$app_path"
 

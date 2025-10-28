@@ -58,28 +58,16 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: radarr-config
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/radarr-config
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: radarr-config
       - name: movies
-        hostPath:
-          path: /media/data/media/movies
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-movies
       - name: downloads
-        hostPath:
-          path: /media/data/downloads
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-downloads
 ---
 apiVersion: v1
 kind: Service

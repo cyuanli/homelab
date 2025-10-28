@@ -69,40 +69,25 @@ spec:
           limits:
             cpu: 2000m
             memory: 2Gi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: jellyfin-config
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/jellyfin-config
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: jellyfin-config
       - name: jellyfin-cache
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/jellyfin-cache
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: jellyfin-cache
       - name: movies
-        hostPath:
-          path: /media/data/media/movies
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-movies
       - name: tv-shows
-        hostPath:
-          path: /media/data/media/tv
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-tv
       - name: music
-        hostPath:
-          path: /media/data/media/music
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-music
       - name: downloads
-        hostPath:
-          path: /media/data/downloads
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-downloads
 ---
 apiVersion: v1
 kind: Service

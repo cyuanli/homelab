@@ -585,3 +585,256 @@ The monitoring system consists of:
 **🎯 Result**: You now have a unified `/media/data` directory with all your drives pooled together, protected by SnapRAID parity, AND continuously monitored for failures!
 
 Your Nextcloud (and other services) can use `/media/data/nextcloud` for multi-terabyte storage with redundancy protection and automatic failure detection.
+
+---
+
+## Step 12: NFS Server Setup for K3s Cluster Storage
+
+**Purpose:** Enable Kubernetes pods to access the SnapRAID+MergerFS storage from any node in the cluster, not just the storage node.
+
+### Why NFS for K3s?
+
+Without NFS, Kubernetes PersistentVolumes using `hostPath` can only be accessed from the node where the storage physically exists. This means all pods needing storage get pinned to that one node, causing:
+- Memory pressure on the storage node
+- Inefficient cluster resource utilization
+- Single point of failure
+
+With NFS CSI driver, pods can run on any node while accessing centralized storage over the network.
+
+### Automatic Setup (Recommended)
+
+The setup script handles NFS server and client installation automatically:
+
+```bash
+# Run on the storage node (e.g., cyl-homelab)
+./scripts/setup-nfs-storage.sh
+```
+
+This script will:
+- Install NFS kernel server (on storage nodes only)
+- Configure NFS exports with proper security settings
+- Set up firewall rules for NFS traffic
+- Install NFS client utilities (on all nodes)
+
+### Manual Setup
+
+If you need to set up NFS manually:
+
+#### On the Storage Node (e.g., cyl-homelab):
+
+**Install NFS Server:**
+```bash
+sudo apt update
+sudo apt install -y nfs-kernel-server
+sudo systemctl enable --now nfs-kernel-server
+```
+
+**Configure NFS Exports:**
+```bash
+sudo nano /etc/exports
+```
+
+Add the following (adjust the network range to match your LAN):
+```bash
+# K3s cluster storage
+/media/data 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+```
+
+**Key export options explained:**
+- `rw` - Read-write access
+- `sync` - Write operations complete before acknowledging (safer)
+- `no_subtree_check` - Better performance, safe for single filesystem exports
+- `no_root_squash` - Preserve root permissions (needed for containers)
+- `fsid=0` - NFSv4 pseudo-root (allows relative paths in mounts)
+
+**Apply the exports:**
+```bash
+sudo exportfs -ra
+sudo exportfs -v  # Verify
+```
+
+**Configure Firewall:**
+```bash
+# Allow NFS from your LAN
+sudo ufw allow from 192.168.0.0/16 to any port 111 proto tcp comment 'NFS rpcbind'
+sudo ufw allow from 192.168.0.0/16 to any port 111 proto udp comment 'NFS rpcbind'
+sudo ufw allow from 192.168.0.0/16 to any port 2049 proto tcp comment 'NFS server'
+sudo ufw allow from 192.168.0.0/16 to any port 2049 proto udp comment 'NFS server'
+sudo ufw reload
+```
+
+#### On ALL K3s Nodes:
+
+**Install NFS Client:**
+```bash
+sudo apt update
+sudo apt install -y nfs-common
+```
+
+**Test NFS connectivity:**
+```bash
+# From a non-storage node
+showmount -e 192.168.1.94  # Replace with your storage node IP
+
+# Should show:
+# Export list for 192.168.1.94:
+# /media/data 192.168.1.0/24
+```
+
+### Deploy NFS CSI Driver to K3s
+
+The NFS CSI driver provides Kubernetes-native storage management using NFS as the backend.
+
+**Deploy infrastructure (automatically done by setup-cluster.sh):**
+```bash
+# Deploy NFS CSI driver
+kubectl apply -f cluster/infrastructure/csi-driver-nfs/
+
+# Wait for controller to be ready
+kubectl wait --for=condition=Ready pod -l app=csi-nfs-controller -n kube-system --timeout=120s
+
+# Deploy NFS StorageClass
+kubectl apply -f cluster/infrastructure/storage/nfs-storageclass.yaml
+```
+
+**Verify deployment:**
+```bash
+# Check CSI driver pods
+kubectl get pods -n kube-system | grep csi-nfs
+
+# Check StorageClass
+kubectl get storageclass nfs-media
+```
+
+### Create Media Storage PersistentVolumes
+
+Static PV provisioning for media applications:
+
+```bash
+# Create PVs and PVCs for media stack
+kubectl apply -f cluster/applications/media-stack/storage/media-pvs.yaml
+kubectl apply -f cluster/applications/media-stack/storage/media-pvcs.yaml
+
+# Verify all PVCs are bound
+kubectl get pv,pvc -n media
+```
+
+**The media PVs include:**
+- `media-movies` - 2Ti (ReadWriteMany)
+- `media-tv` - 2Ti (ReadWriteMany)
+- `media-music` - 500Gi (ReadWriteMany)
+- `media-downloads` - 2Ti (ReadWriteMany)
+- `jellyfin-config` - 10Gi (ReadWriteOnce)
+- `jellyfin-cache` - 50Gi (ReadWriteOnce)
+- `prowlarr-config` - 5Gi (ReadWriteOnce)
+- `radarr-config` - 5Gi (ReadWriteOnce)
+- `sonarr-config` - 5Gi (ReadWriteOnce)
+- `qbittorrent-config` - 5Gi (ReadWriteOnce)
+
+### Directory Structure on Storage Node
+
+Ensure these directories exist on the storage node:
+
+```bash
+sudo mkdir -p /media/data/media/{movies,tv,music}
+sudo mkdir -p /media/data/downloads
+sudo mkdir -p /media/data/k3s-configs/media-stack/{jellyfin-config,jellyfin-cache}
+sudo mkdir -p /media/data/k3s-configs/media-stack/{prowlarr-config,radarr-config,sonarr-config,qbittorrent-config}
+```
+
+### NFSv4 Path Considerations
+
+**Important:** With `fsid=0` on the export, `/media/data` becomes the NFSv4 pseudo-root. All PV paths are relative to this root:
+
+- Export: `/media/data` with `fsid=0`
+- Physical path on server: `/media/data/media/movies`
+- Path in PV spec: `/media/movies` (relative)
+
+**Example PV configuration:**
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: media-movies
+spec:
+  capacity:
+    storage: 2Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: media-movies
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /media/movies  # Relative to export root
+```
+
+### Troubleshooting
+
+**Mount timeouts:**
+```bash
+# Ensure nfs-common is installed on all nodes
+kubectl get nodes -o wide
+# SSH to each node and verify:
+dpkg -l | grep nfs-common
+```
+
+**Permission denied:**
+```bash
+# Verify no_root_squash is set
+sudo exportfs -v | grep media/data
+
+# Check directory permissions on storage node
+ls -la /media/data
+```
+
+**Stale file handle errors:**
+```bash
+# On storage node, unexport and re-export
+sudo exportfs -ua
+sudo exportfs -ra
+```
+
+**Connection refused:**
+```bash
+# Check firewall on storage node
+sudo ufw status | grep -E "(111|2049)"
+
+# Test connectivity from worker node
+telnet 192.168.1.94 2049
+```
+
+### Integration with Media Services
+
+After NFS setup, media services (Jellyfin, Sonarr, Radarr, Prowlarr, qBittorrent) can:
+- Run on ANY cluster node (not pinned to storage node)
+- Access shared media libraries via NFS
+- Use persistent configs stored on NFS
+- Distribute load across cluster
+
+**Deploy media stack:**
+```bash
+./scripts/deploy-applications.sh media deploy
+```
+
+The deployment will automatically:
+1. Create NFS-backed PVs and PVCs
+2. Deploy all media services
+3. Distribute pods across available nodes
+4. Mount NFS volumes as needed
+
+**Verify distributed deployment:**
+```bash
+kubectl get pods -n media -o wide
+```
+
+You should see pods running on different nodes, not all on the storage node.
+
+---
+
+**🎯 Result**: Your K3s cluster now has Kubernetes-native access to the SnapRAID+MergerFS storage pool. Pods can run on any node while accessing centralized storage, enabling efficient resource utilization and high availability!

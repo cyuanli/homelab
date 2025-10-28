@@ -58,28 +58,16 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: sonarr-config
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/sonarr-config
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: sonarr-config
       - name: tv-shows
-        hostPath:
-          path: /media/data/media/tv
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-tv
       - name: downloads
-        hostPath:
-          path: /media/data/downloads
-          type: Directory
+        persistentVolumeClaim:
+          claimName: media-downloads
 ---
 apiVersion: v1
 kind: Service

@@ -54,20 +54,10 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: prowlarr-config
-        hostPath:
-          path: /home/cyl/k3s-configs/media-stack/prowlarr-config
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: prowlarr-config
 ---
 apiVersion: v1
 kind: Service

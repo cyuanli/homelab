@@ -41,7 +41,10 @@ main() {
     log_step "7. Creating directory structure"
     create_directory_structure
 
-    log_step "8. Installing Kubernetes tools"
+    log_step "8. Setting up NFS storage"
+    setup_nfs_storage
+
+    log_step "9. Installing Kubernetes tools"
     install_k8s_tools
 
     log_success "System setup completed successfully!"
@@ -233,6 +236,23 @@ create_directory_structure() {
     create_directory "/home/$HOMELAB_USER/Downloads/incomplete"
 
     log_success "Directory structure created"
+}
+
+setup_nfs_storage() {
+    if [[ "${ENABLE_NFS_STORAGE:-true}" != "true" ]]; then
+        log_info "NFS storage disabled in configuration, skipping"
+        return 0
+    fi
+
+    log_info "Setting up NFS storage"
+
+    # Run the NFS storage setup script
+    if [[ -f "$SCRIPT_DIR/setup-nfs-storage.sh" ]]; then
+        bash "$SCRIPT_DIR/setup-nfs-storage.sh"
+    else
+        log_warning "NFS storage setup script not found, skipping"
+        log_info "To set up NFS manually, run: $SCRIPT_DIR/setup-nfs-storage.sh"
+    fi
 }
 
 install_k8s_tools() {
