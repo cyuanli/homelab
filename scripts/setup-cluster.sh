@@ -126,6 +126,12 @@ install_k3s() {
             fi
         fi
 
+        # Configure etcd encryption if enabled
+        if [[ "${ENABLE_ETCD_ENCRYPTION:-false}" == "true" ]]; then
+            setup_etcd_encryption
+            server_opts+=("--secrets-encryption")
+        fi
+
         # Append server subcommand and options
         install_cmd="$install_cmd server ${server_opts[*]}"
 
@@ -161,6 +167,38 @@ install_k3s() {
     fi
 
     log_success "K3s installed and running"
+}
+
+setup_etcd_encryption() {
+    log_info "Setting up etcd encryption at rest"
+
+    local encryption_config="/etc/rancher/k3s/encryption-config.yaml"
+
+    # Generate encryption key
+    local encryption_key
+    encryption_key=$(openssl rand -base64 32)
+
+    # Create encryption config
+    sudo mkdir -p "$(dirname "$encryption_config")"
+    sudo tee "$encryption_config" > /dev/null <<EOF
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key1
+              secret: $encryption_key
+      - identity: {}
+EOF
+
+    sudo chmod 600 "$encryption_config"
+
+    log_success "etcd encryption configured"
+    log_warning "Encryption key: $encryption_key"
+    log_warning "Save this key securely! Required for disaster recovery"
 }
 
 configure_kubectl() {
