@@ -72,6 +72,17 @@ spec:
           mountPath: /var/lib/grafana
         - name: grafana-datasources
           mountPath: /etc/grafana/provisioning/datasources
+        - name: grafana-dashboard-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-dashboard-cluster-overview
+          mountPath: /var/lib/grafana/dashboards/cluster-overview.json
+          subPath: cluster-overview.json
+        - name: grafana-dashboard-node-metrics
+          mountPath: /var/lib/grafana/dashboards/node-metrics.json
+          subPath: node-metrics.json
+        - name: grafana-dashboard-external-services
+          mountPath: /var/lib/grafana/dashboards/external-services.json
+          subPath: external-services.json
         resources:
           requests:
             cpu: 250m
@@ -98,6 +109,18 @@ spec:
       - name: grafana-datasources
         configMap:
           name: grafana-datasources
+      - name: grafana-dashboard-provider
+        configMap:
+          name: grafana-dashboard-provider
+      - name: grafana-dashboard-cluster-overview
+        configMap:
+          name: grafana-dashboard-cluster-overview
+      - name: grafana-dashboard-node-metrics
+        configMap:
+          name: grafana-dashboard-node-metrics
+      - name: grafana-dashboard-external-services
+        configMap:
+          name: grafana-dashboard-external-services
 
 ---
 apiVersion: v1

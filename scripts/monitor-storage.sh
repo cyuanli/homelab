@@ -9,6 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
 
+# shellcheck source=utils/metrics.sh
+source "$SCRIPT_DIR/utils/metrics.sh"
+
 LOG_FILE="/var/log/disk-monitor.log"
 STATE_FILE="/var/lib/disk-monitor/state"
 ALERT_FILE="/var/lib/disk-monitor/alert-sent"
@@ -292,6 +295,71 @@ clear_alert_state() {
     rm -f "$ALERT_FILE" || true
 }
 
+export_disk_metrics() {
+    local overall_status="$1"  # 1=healthy, 0=failed
+    local smart_results="$2"   # Associative array as string
+    local mount_results="$3"   # Associative array as string
+    local mergerfs_status="$4" # 1=ok, 0=failed
+
+    local timestamp=$(get_timestamp)
+    local metrics_content=""
+
+    # Overall disk monitor status
+    metrics_content+=$(export_gauge "disk_monitor_status" "$overall_status" 'type="overall"' "Disk monitoring overall status (1=healthy, 0=failed)")
+    metrics_content+=$'\n'
+
+    # Individual drive SMART health - output header once, then all data lines
+    metrics_content+=$(export_gauge_header "disk_smart_health" "SMART health status per drive (1=pass, 0=fail)")
+    metrics_content+=$'\n'
+    for i in "${!ALL_DRIVES[@]}"; do
+        local drive="${ALL_DRIVES[$i]}"
+        local drive_type="data"
+
+        # Determine if this is a parity drive
+        for parity_drive in "${PARITY_DRIVES[@]}"; do
+            if [ "$drive" = "$parity_drive" ]; then
+                drive_type="parity"
+                break
+            fi
+        done
+
+        # Check SMART health (1=pass, 0=fail)
+        local smart_value=1
+        if ! check_smart_health "$drive" >/dev/null 2>&1; then
+            smart_value=0
+        fi
+
+        metrics_content+=$(export_gauge_line "disk_smart_health" "$smart_value" "device=\"$drive\",type=\"$drive_type\"")
+        metrics_content+=$'\n'
+    done
+
+    # Mount point accessibility - output header once, then all data lines
+    metrics_content+=$(export_gauge_header "disk_mount_accessible" "Mount point accessibility (1=ok, 0=failed)")
+    metrics_content+=$'\n'
+    for i in "${!ALL_MOUNT_POINTS[@]}"; do
+        local mount_point="${ALL_MOUNT_POINTS[$i]}"
+        local mount_value=1
+
+        if ! mountpoint -q "$mount_point"; then
+            mount_value=0
+        fi
+
+        metrics_content+=$(export_gauge_line "disk_mount_accessible" "$mount_value" "mount=\"$mount_point\"")
+        metrics_content+=$'\n'
+    done
+
+    # MergerFS status
+    metrics_content+=$(export_gauge "disk_mergerfs_status" "$mergerfs_status" "mount=\"$MERGERFS_MOUNT\"" "MergerFS pool status (1=ok, 0=failed)")
+    metrics_content+=$'\n'
+
+    # Last run timestamp
+    metrics_content+=$(export_gauge "disk_monitor_last_run_timestamp_seconds" "$timestamp" "" "Last successful monitoring run timestamp")
+    metrics_content+=$'\n'
+
+    # Write metrics to file
+    write_metric_file "disk_monitor.prom" "$metrics_content"
+}
+
 check_all_drives() {
     local failures=()
     local all_healthy=true
@@ -388,6 +456,11 @@ The array will remain locked until manual intervention." "CRITICAL"
             printf 'FAILED\n%s\n%s\n' "$(date)" "$failure_message" > "$STATE_FILE"
         } || true
 
+        # Export failure metrics to Prometheus
+        local mergerfs_ok=0
+        check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
+        export_disk_metrics 0 "" "" "$mergerfs_ok"
+
         return 1
     else
         info "All drives are healthy"
@@ -413,6 +486,11 @@ All SnapRAID drives have passed health checks:
 
 The storage array is functioning normally. Workloads can be safely restarted." "INFO" "true"
         fi
+
+        # Export success metrics to Prometheus
+        local mergerfs_ok=0
+        check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
+        export_disk_metrics 1 "" "" "$mergerfs_ok"
 
         return 0
     fi

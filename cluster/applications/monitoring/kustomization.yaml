@@ -4,8 +4,12 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - prometheus/prometheus.yaml
+  - prometheus/alerts.yaml
   - prometheus/auth.yaml
+  - alertmanager/alertmanager.yaml
+  - blackbox-exporter/blackbox-exporter.yaml
   - grafana/grafana.yaml
+  - grafana/dashboards.yaml
   - node-exporter/node-exporter.yaml
   - kube-state-metrics/kube-state-metrics.yaml
   - ingress.yaml

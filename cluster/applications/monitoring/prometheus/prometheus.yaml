@@ -56,6 +56,15 @@ data:
       external_labels:
         cluster: 'homelab'
 
+    rule_files:
+      - /etc/prometheus/alerts/*.yml
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager.monitoring.svc.cluster.local:9093
+
     scrape_configs:
       # Prometheus itself
       - job_name: 'prometheus'
@@ -148,6 +157,33 @@ data:
           action: keep
           regex: "9100"
 
+      # Blackbox Exporter - External endpoint monitoring
+      - job_name: 'blackbox-http'
+        metrics_path: /probe
+        params:
+          module: [http_2xx]
+        static_configs:
+          - targets:
+            - https://alertmanager.cliff.li
+            - https://drive.cliff.li
+            - https://grafana.cliff.li
+            - https://jellyfin.cliff.li
+            - https://owntracks.cliff.li
+            - https://prometheus.cliff.li
+            - https://prowlarr.cliff.li
+            - https://qbittorrent.cliff.li
+            - https://radarr.cliff.li
+            - https://sonarr.cliff.li
+            - https://traefik.cliff.li
+            - https://whoami.cliff.li
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -172,6 +208,8 @@ metadata:
     app: prometheus
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus
@@ -197,6 +235,8 @@ spec:
         volumeMounts:
         - name: prometheus-config
           mountPath: /etc/prometheus
+        - name: prometheus-alerts
+          mountPath: /etc/prometheus/alerts
         - name: prometheus-data
           mountPath: /prometheus
         resources:
@@ -210,6 +250,9 @@ spec:
       - name: prometheus-config
         configMap:
           name: prometheus-config
+      - name: prometheus-alerts
+        configMap:
+          name: prometheus-alerts
       - name: prometheus-data
         persistentVolumeClaim:
           claimName: prometheus-data

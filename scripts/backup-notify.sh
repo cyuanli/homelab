@@ -7,6 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
 
+# shellcheck source=utils/metrics.sh
+source "$SCRIPT_DIR/utils/metrics.sh"
+
 SERVICE_RESULT="${1:-unknown}"
 HOSTNAME="$(hostname)"
 
@@ -15,6 +18,23 @@ load_config
 
 # Use webhook from config
 WEBHOOK_URL="${BORGMATIC_WEBHOOK_URL:-$DISCORD_WEBHOOK_URL}"
+
+export_borgmatic_metrics() {
+    local status="$1"  # 1=success, 0=failed
+    local timestamp=$(get_timestamp)
+    local metrics_content=""
+
+    # Backup status
+    metrics_content+=$(export_gauge "borgmatic_last_run_status" "$status" "" "Last Borgmatic backup status (1=success, 0=failed)")
+    metrics_content+=$'\n'
+
+    # Last run timestamp
+    metrics_content+=$(export_gauge "borgmatic_last_run_timestamp_seconds" "$timestamp" "" "Last Borgmatic backup run timestamp")
+    metrics_content+=$'\n'
+
+    # Write metrics to file
+    write_metric_file "borgmatic.prom" "$metrics_content"
+}
 
 send_discord_notification() {
     local message="$1"
@@ -60,6 +80,7 @@ $recent_logs
 Check full logs with: journalctl -u borgmatic.service"
 
         send_discord_notification "$message" "ERROR"
+        export_borgmatic_metrics 0
         ;;
     "error")
         # Get recent borgmatic logs (called from borgmatic on_error hook)
@@ -80,10 +101,12 @@ $recent_logs
 Check full logs with: journalctl -u borgmatic.service"
 
         send_discord_notification "$message" "ERROR"
+        export_borgmatic_metrics 0
         ;;
     "success")
         message="Borgmatic backup completed successfully at $(date)"
         send_discord_notification "$message" "SUCCESS"
+        export_borgmatic_metrics 1
         ;;
     *)
         log_error "Unknown service result: $SERVICE_RESULT"
