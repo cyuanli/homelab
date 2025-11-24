@@ -1,0 +1,26 @@
+# Select nodes with low CPU and low memory
+# Exclude cyl-homelab (control plane with desktop)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: boinc-client
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: homelab/cpu-tier
+                operator: In
+                values:
+                - low
+              - key: homelab/memory-tier
+                operator: In
+                values:
+                - low
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                - cyl-homelab

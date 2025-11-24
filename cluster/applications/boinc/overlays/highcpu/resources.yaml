@@ -1,0 +1,18 @@
+# Tier 3: High CPU (8 cores) + Low Memory (8GB)
+# Resource limits for cyl-xps13
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: boinc-client
+spec:
+  template:
+    spec:
+      containers:
+      - name: boinc-client
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "6"      # 6 out of 8 cores
+            memory: 6Gi   # 6GB out of 8GB

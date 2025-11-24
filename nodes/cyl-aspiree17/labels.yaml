@@ -1,0 +1,11 @@
+# Node labels for cyl-aspiree17
+# Apply with: kubectl apply -f labels.yaml
+#
+# Hardware specs: 4 CPUs, 16GB RAM
+apiVersion: v1
+kind: Node
+metadata:
+  name: cyl-aspiree17
+  labels:
+    homelab/cpu-tier: low
+    homelab/memory-tier: high

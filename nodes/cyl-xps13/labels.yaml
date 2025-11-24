@@ -1,0 +1,11 @@
+# Node labels for cyl-xps13
+# Apply with: kubectl apply -f labels.yaml
+#
+# Hardware specs: 8 CPUs, 8GB RAM
+apiVersion: v1
+kind: Node
+metadata:
+  name: cyl-xps13
+  labels:
+    homelab/cpu-tier: high
+    homelab/memory-tier: low

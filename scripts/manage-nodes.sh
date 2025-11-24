@@ -261,6 +261,33 @@ EOF
     log_success "Created config file: $config_file"
     log_info "Template contains placeholders, actual config has real secrets from server"
 
+    # Create default labels.yaml (can be customized later)
+    local labels_file="$node_dir/labels.yaml"
+    cat > "$labels_file" << EOF
+# Node labels for $node_name
+# Apply with: kubectl apply -f labels.yaml
+#
+# Customize these labels based on node hardware specs:
+# - homelab/cpu-tier: high (8+ cores) or low (4 cores)
+# - homelab/memory-tier: high (16GB+) or low (8GB)
+apiVersion: v1
+kind: Node
+metadata:
+  name: $node_name
+  labels:
+    homelab/cpu-tier: low
+    homelab/memory-tier: low
+EOF
+
+    log_success "Created labels file: $labels_file"
+    log_info "Remember to update labels.yaml with actual node specs (cpu-tier: high/low, memory-tier: high/low)"
+
+    # Fix ownership of node directory
+    if [[ -n "$HOMELAB_USER" ]]; then
+        chown -R "$HOMELAB_USER:$HOMELAB_USER" "$node_dir"
+        log_success "Set ownership of $node_dir to $HOMELAB_USER:$HOMELAB_USER"
+    fi
+
     # Create setup instructions
     cat > "$node_dir/README.md" << EOF
 # Node Setup Instructions for $node_name
@@ -303,6 +330,13 @@ EOF
    \`\`\`bash
    # On server node:
    kubectl get nodes
+   \`\`\`
+
+6. **Apply node labels (after verifying hardware specs):**
+   \`\`\`bash
+   # Edit labels.yaml to match actual node specs
+   # Then apply:
+   kubectl apply -f nodes/$node_name/labels.yaml
    \`\`\`
 
 ## Configuration Details

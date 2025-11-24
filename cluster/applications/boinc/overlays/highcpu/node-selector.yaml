@@ -1,0 +1,21 @@
+# Select nodes with high CPU and low memory
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: boinc-client
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: homelab/cpu-tier
+                operator: In
+                values:
+                - high
+              - key: homelab/memory-tier
+                operator: In
+                values:
+                - low

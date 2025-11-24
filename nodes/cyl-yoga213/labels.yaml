@@ -1,0 +1,9 @@
+# Node labels for cyl-yoga213
+# Apply with: kubectl apply -f labels.yaml
+apiVersion: v1
+kind: Node
+metadata:
+  name: cyl-yoga213
+  labels:
+    homelab/cpu-tier: low
+    homelab/memory-tier: low

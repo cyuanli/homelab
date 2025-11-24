@@ -1,0 +1,11 @@
+# Node labels for cyl-optiplex9020
+# Apply with: kubectl apply -f labels.yaml
+#
+# Hardware specs: 4 CPUs, 8GB RAM
+apiVersion: v1
+kind: Node
+metadata:
+  name: cyl-optiplex9020
+  labels:
+    homelab/cpu-tier: low
+    homelab/memory-tier: low

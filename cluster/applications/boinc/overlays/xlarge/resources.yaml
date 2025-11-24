@@ -1,0 +1,18 @@
+# Tier 1: High CPU (12 cores) + High Memory (16GB)
+# Resource limits for cyl-mitx
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: boinc-client
+spec:
+  template:
+    spec:
+      containers:
+      - name: boinc-client
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "10"      # 10 out of 12 cores
+            memory: 12Gi   # 12GB out of 16GB

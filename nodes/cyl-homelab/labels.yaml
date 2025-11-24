@@ -1,0 +1,11 @@
+# Node labels for cyl-homelab
+# Apply with: kubectl apply -f labels.yaml
+#
+# Hardware specs: 4 CPUs, 8GB RAM (control plane - no BOINC)
+apiVersion: v1
+kind: Node
+metadata:
+  name: cyl-homelab
+  labels:
+    homelab/cpu-tier: low
+    homelab/memory-tier: low

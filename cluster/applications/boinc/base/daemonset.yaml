@@ -26,16 +26,6 @@ spec:
         operator: Exists
         effect: NoSchedule
 
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: NotIn
-                values:
-                - cyl-homelab
-
       # Init container to handle project attachment
       initContainers:
       - name: setup-projects
@@ -192,15 +182,6 @@ spec:
       - name: boinc-client
         image: boinc/client:latest
         imagePullPolicy: Always
-
-        # Resource limits to prevent overwhelming the nodes
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 2000m  # 2 CPU cores max per pod
-            memory: 4Gi
 
         # Environment variables
         env:

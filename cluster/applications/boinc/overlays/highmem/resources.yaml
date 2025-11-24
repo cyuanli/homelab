@@ -1,0 +1,18 @@
+# Tier 2: Low CPU (4 cores) + High Memory (16GB)
+# Resource limits for cyl-aspiree17
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: boinc-client
+spec:
+  template:
+    spec:
+      containers:
+      - name: boinc-client
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "3"       # 3 out of 4 cores
+            memory: 12Gi   # 12GB out of 16GB
