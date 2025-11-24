@@ -1,11 +1,7 @@
 # Disk Monitoring Configuration
 # Copy to monitoring.conf and customize
-
-# Discord webhook URL for disk failure alerts
-DISK_MONITOR_WEBHOOK=""
-
-# Monitoring interval (minutes)
-DISK_MONITOR_INTERVAL=5
+# Alerts are sent via Prometheus/Alertmanager
+# Monitoring runs every 5 minutes via cron
 
 # Drive configuration (update for your system)
 # Data partitions (without /dev/ prefix)
@@ -22,6 +18,3 @@ PARITY_DRIVES=("sdf")
 
 # MergerFS mount point
 MERGERFS_MOUNT="/media/data"
-
-# Alert throttling (prevent spam)
-ALERT_THROTTLE_HOURS=1

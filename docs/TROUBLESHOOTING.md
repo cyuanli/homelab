@@ -657,8 +657,8 @@ curl http://<node-ip>:<nodeport>
 crontab -e
 # Add: */5 * * * * /home/user/homelab/scripts/homelab.sh status | grep -q "operational" || echo "Health check failed" | mail -s "Homelab Alert" admin@domain.com
 
-# Configure Discord notifications
-./scripts/homelab.sh monitor test-alert
+# Verify Prometheus monitoring
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
 
 # Set up log monitoring
 journalctl -u k3s -f | grep -i error &

@@ -119,13 +119,14 @@ ENABLE_DISK_MONITORING="true"
 ```
 
 **Monitoring**
-```bash
-DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+All monitoring alerts are centralized through Prometheus and Alertmanager. Discord webhook is configured in:
+```
+cluster/applications/monitoring/alertmanager/alertmanager.yaml
 ```
 
 ### Service Authentication (`config/service-configs/`)
 - `auth.conf`: HTTP Basic Auth credentials for admin interfaces
-- `monitoring.conf`: Storage monitoring and Discord webhook settings
+- `monitoring.conf`: Storage drive configuration for disk health monitoring
 
 ## Script Usage
 
@@ -280,11 +281,11 @@ kubectl describe pod -n media <pod-name>
 # Check mounted drives
 df -h /media/data
 
-# Check monitoring logs
+# Check monitoring status
 ./scripts/homelab.sh monitor status
 
-# Test storage monitoring
-./scripts/homelab.sh monitor test-alert
+# View exported metrics
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
 ```
 
 **Network Connectivity**

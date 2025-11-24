@@ -14,7 +14,6 @@ source "$SCRIPT_DIR/utils/metrics.sh"
 
 LOG_FILE="/var/log/disk-monitor.log"
 STATE_FILE="/var/lib/disk-monitor/state"
-ALERT_FILE="/var/lib/disk-monitor/alert-sent"
 
 # Default drive configuration - can be overridden by config
 DATA_PARTITIONS=("sdb1" "sdc1" "sdd1" "sde1")
@@ -32,9 +31,6 @@ ALL_PARTITIONS=("${DATA_PARTITIONS[@]}" "${PARITY_PARTITIONS[@]}")
 ALL_DRIVES=("${DATA_DRIVES[@]}" "${PARITY_DRIVES[@]}")
 ALL_MOUNT_POINTS=("${DATA_MOUNT_POINTS[@]}" "${PARITY_MOUNT_POINTS[@]}")
 
-# Discord webhook - will be loaded from config
-DISCORD_WEBHOOK_URL=""
-
 # Load configuration
 load_monitoring_config() {
     load_config
@@ -46,9 +42,6 @@ load_monitoring_config() {
         # shellcheck source=/dev/null
         source "$monitoring_config"
     fi
-
-    # Set webhook URL
-    DISCORD_WEBHOOK_URL="${DISK_MONITOR_WEBHOOK:-$DISCORD_WEBHOOK_URL}"
 }
 
 log() {
@@ -79,7 +72,6 @@ check_dependencies() {
 ensure_directories() {
     mkdir -p "$(dirname "$STATE_FILE")"
     mkdir -p "$(dirname "$LOG_FILE")"
-    mkdir -p "$(dirname "$ALERT_FILE")"
     touch "$LOG_FILE"
     touch "$STATE_FILE" || true
     chmod 640 "$LOG_FILE" 2>/dev/null || true
@@ -249,51 +241,6 @@ lockdown_array() {
     info "Array lockdown complete - all drives protected"
 }
 
-send_discord_alert() {
-    local message="$1"
-    local severity="${2:-ERROR}"
-    local bypass_throttle="${3:-false}"
-
-    if [ "$bypass_throttle" != "true" ] && [ -f "$ALERT_FILE" ]; then
-        return 0
-    fi
-
-    if [ "$bypass_throttle" != "true" ]; then
-        touch "$ALERT_FILE"
-    fi
-
-    log "ALERT [$severity]: $message"
-
-    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
-        local emoji
-        case "$severity" in
-            "ERROR"|"CRITICAL") emoji=":rotating_light:" ;;
-            "WARNING") emoji=":warning:" ;;
-            "SCRIPT_ERROR") emoji=":boom:" ;;
-            "TEST") emoji=":test_tube:" ;;
-            *) emoji=":information_source:" ;;
-        esac
-
-        # Escape message for JSON
-        local escaped_message
-        escaped_message=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')
-
-        if curl -s -H "Content-Type: application/json" -X POST -d "{\"content\": \"$emoji **Homelab Storage Alert [$severity]**\\n\\n$escaped_message\"}" "$DISCORD_WEBHOOK_URL" >/dev/null 2>&1; then
-            info "Discord alert sent successfully"
-            return 0
-        else
-            warn "Failed to send Discord alert"
-            return 1
-        fi
-    else
-        warn "Discord webhook URL not configured"
-        return 1
-    fi
-}
-
-clear_alert_state() {
-    rm -f "$ALERT_FILE" || true
-}
 
 export_disk_metrics() {
     local overall_status="$1"  # 1=healthy, 0=failed
@@ -410,19 +357,6 @@ check_all_drives() {
         if [ "$all_healthy" = true ]; then
             mergerfs_failed=true
             warn "MergerFS mount $MERGERFS_MOUNT is not mounted while drives are healthy"
-            send_discord_alert "⚠️ **MergerFS UNMOUNTED** on $(hostname)!
-
-MergerFS mount at $MERGERFS_MOUNT is not available, but all storage drives are healthy.
-
-This means your unified storage view is not accessible even though individual drives are working.
-
-**To fix this issue:**
-1. Check MergerFS service: \`systemctl status mergerfs\`
-2. Manually remount: \`sudo mount $MERGERFS_MOUNT\`
-3. Verify access: \`ls -la $MERGERFS_MOUNT\`
-
-Individual drives are still accessible at:
-$(printf '• %s\n' "${ALL_MOUNT_POINTS[@]}")" "WARNING" "true"
         else
             info "MergerFS health check failed (expected during drive failure recovery)"
         fi
@@ -436,21 +370,6 @@ $(printf '• %s\n' "${ALL_MOUNT_POINTS[@]}")" "WARNING" "true"
         error "$failure_message"
 
         lockdown_array
-
-        send_discord_alert "CRITICAL: Drive failure detected on $(hostname)!
-
-All workloads have been stopped and the storage array has been locked down (remounted read-only) to prevent data loss.
-
-Failures detected:
-$failure_message
-
-IMMEDIATE ACTION REQUIRED:
-1. Investigate the failed drive(s)
-2. Replace any failed hardware
-3. Verify array integrity with SnapRAID
-4. Manually restart services only after confirming data safety
-
-The array will remain locked until manual intervention." "CRITICAL"
 
         {
             printf 'FAILED\n%s\n%s\n' "$(date)" "$failure_message" > "$STATE_FILE"
@@ -475,16 +394,11 @@ The array will remain locked until manual intervention." "CRITICAL"
         {
             printf 'HEALTHY\n%s\n' "$(date)" > "$STATE_FILE"
         } || true
-        clear_alert_state
 
-        # Send recovery notification only if recovering from failure
+        # Log recovery notification if recovering from failure
         if [ "$was_failed" = true ]; then
-            send_discord_alert "✅ **RECOVERY COMPLETE** - All drives are now healthy on $(hostname)!
-
-All SnapRAID drives have passed health checks:
-• $(printf '/dev/%s ' "${ALL_DRIVES[@]}")
-
-The storage array is functioning normally. Workloads can be safely restarted." "INFO" "true"
+            info "RECOVERY COMPLETE - All drives are now healthy on $(hostname)"
+            info "All SnapRAID drives have passed health checks: $(printf '/dev/%s ' "${ALL_DRIVES[@]}")"
         fi
 
         # Export success metrics to Prometheus
@@ -554,10 +468,6 @@ show_status() {
     done
 }
 
-test_alert() {
-    clear_alert_state
-    send_discord_alert "This is a test alert from the disk monitoring system on $(hostname). If you see this message, Discord notifications are working correctly." "TEST"
-}
 
 main() {
     case "${1:-check}" in
@@ -582,27 +492,17 @@ main() {
             load_monitoring_config
             show_status
             ;;
-        test-alert)
-            load_monitoring_config
-            test_alert
-            ;;
-        clear-alert)
-            clear_alert_state
-            info "Alert state cleared - new alerts will be sent on next failure"
-            ;;
         *)
             cat <<EOF
-Usage: $0 {check|status|test-alert|clear-alert}
+Usage: $0 {check|status}
 
 Commands:
   check       - Run comprehensive disk health check (default)
   status      - Show current system status
-  test-alert  - Send a test Discord alert
-  clear-alert - Clear alert state (allows new alerts)
 
 Configuration:
-  Set DISCORD_WEBHOOK_URL in config/homelab.env.local
   Customize drive configuration in config/service-configs/monitoring.conf
+  Alerts are handled by Prometheus/Alertmanager
 EOF
             exit 1
             ;;

@@ -515,12 +515,12 @@ sudo crontab -e
 1. **Stops ALL Docker containers** - Prevents new writes
 2. **Unmounts MergerFS pool** - Disables unified storage access
 3. **Remounts ALL drives as read-only** - Complete write protection
-4. **Sends Discord alert** - Immediate notification with failure details
+4. **Exports Prometheus metrics** - Status exported for alerting
 
-**📱 Alert Types:**
-- 🚨 **Drive Failures** - SMART failures, mount issues, filesystem errors
-- 💥 **Script Errors** - Monitoring system failures (always sent)
-- 🧪 **Test Alerts** - Manual testing (`sudo scripts/disk-monitor.sh test-alert`)
+**📊 Metric Types:**
+- 🚨 **Drive Health** - SMART failures, mount issues, filesystem errors
+- 💾 **MergerFS Status** - Pool availability monitoring
+- 📈 **Timestamp Tracking** - Last run and recovery states
 
 ### Testing the System
 
@@ -529,10 +529,12 @@ sudo crontab -e
 sudo scripts/disk-monitor.sh status
 ```
 
-**Test Discord Alerts:**
+**View Prometheus Metrics:**
 ```bash
-sudo scripts/disk-monitor.sh test-alert
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
 ```
+
+**Note:** Alerts are sent via Prometheus/Alertmanager, not directly from scripts.
 
 **View Monitoring Logs:**
 ```bash

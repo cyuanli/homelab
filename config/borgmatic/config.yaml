@@ -21,6 +21,7 @@ before_backup:
 
 after_backup:
   - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
+  - /home/cyl/homelab/scripts/backup-notify.sh success
 
 on_error:
   - /home/cyl/homelab/scripts/backup-notify.sh error

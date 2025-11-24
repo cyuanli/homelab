@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Borgmatic backup notification script
+# Borgmatic backup metrics export script
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,9 +15,6 @@ HOSTNAME="$(hostname)"
 
 # Load configuration
 load_config
-
-# Use webhook from config
-WEBHOOK_URL="${BORGMATIC_WEBHOOK_URL:-$DISCORD_WEBHOOK_URL}"
 
 export_borgmatic_metrics() {
     local status="$1"  # 1=success, 0=failed
@@ -36,76 +33,19 @@ export_borgmatic_metrics() {
     write_metric_file "borgmatic.prom" "$metrics_content"
 }
 
-send_discord_notification() {
-    local message="$1"
-    local severity="$2"
-
-    if [ -z "$WEBHOOK_URL" ]; then
-        log_error "No webhook URL configured"
-        return 1
-    fi
-
-    local emoji
-    case "$severity" in
-        "ERROR") emoji=":rotating_light:" ;;
-        "SUCCESS") emoji=":white_check_mark:" ;;
-        *) emoji=":information_source:" ;;
-    esac
-
-    # Escape message for JSON
-    local escaped_message
-    escaped_message=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')
-
-    if curl -s -H "Content-Type: application/json" -X POST -d "{\"content\": \"$emoji **Borgmatic Backup [$severity] on $HOSTNAME**\\n\\n$escaped_message\"}" "$WEBHOOK_URL" >/dev/null 2>&1; then
-        log_info "Discord notification sent successfully"
-        return 0
-    else
-        log_error "Failed to send Discord notification"
-        return 1
-    fi
-}
-
 case "$SERVICE_RESULT" in
     "exit-code")
-        # Get recent borgmatic logs
-        recent_logs=$(journalctl -u borgmatic.service --since="1 hour ago" --no-pager -n 20 | tail -10)
-
-        message="Borgmatic backup FAILED at $(date)
-
-Recent log entries:
-\`\`\`
-$recent_logs
-\`\`\`
-
-Check full logs with: journalctl -u borgmatic.service"
-
-        send_discord_notification "$message" "ERROR"
+        log_error "Borgmatic backup FAILED at $(date)"
+        log_info "Check full logs with: journalctl -u borgmatic.service"
         export_borgmatic_metrics 0
         ;;
     "error")
-        # Get recent borgmatic logs (called from borgmatic on_error hook)
-        recent_logs=$(journalctl -u borgmatic.service --since="1 hour ago" --no-pager -n 20 | tail -10)
-
-        message="Borgmatic hook or action FAILED at $(date)
-
-This error was caught by borgmatic's error hook, which may indicate:
-- Maintenance mode command failed
-- Backup/prune/compact/check operation failed
-- Hook execution error
-
-Recent log entries:
-\`\`\`
-$recent_logs
-\`\`\`
-
-Check full logs with: journalctl -u borgmatic.service"
-
-        send_discord_notification "$message" "ERROR"
+        log_error "Borgmatic hook or action FAILED at $(date)"
+        log_info "Check full logs with: journalctl -u borgmatic.service"
         export_borgmatic_metrics 0
         ;;
     "success")
-        message="Borgmatic backup completed successfully at $(date)"
-        send_discord_notification "$message" "SUCCESS"
+        log_info "Borgmatic backup completed successfully at $(date)"
         export_borgmatic_metrics 1
         ;;
     *)

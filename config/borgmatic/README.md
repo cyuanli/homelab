@@ -1,13 +1,13 @@
 # Borgmatic Backup Setup
 
 ## Overview
-This directory contains the configuration for automated backups using borgmatic with systemd timer scheduling and Discord notifications.
+This directory contains the configuration for automated backups using borgmatic with systemd timer scheduling and Prometheus metrics export.
 
 ## Files
 - `systemd/borgmatic.service` - Systemd service unit for running borgmatic
 - `systemd/borgmatic.timer` - Systemd timer for daily backup scheduling (3:00 AM)
-- `config.yaml` - Borgmatic backup configuration
-- `../../scripts/backup-notify.sh` - Discord notification script for backup success/failure alerts
+- `config.yaml` - Borgmatic backup configuration with hooks for metrics export
+- `../../scripts/backup-notify.sh` - Exports backup success/failure metrics to Prometheus
 
 ## Installation
 
@@ -28,19 +28,7 @@ sudo cp systemd/borgmatic.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
-### 4. Configure Discord Notifications
-Set up the webhook URL using systemctl edit:
-```bash
-sudo systemctl edit borgmatic.service
-```
-
-Add the following:
-```ini
-[Service]
-Environment="BORGMATIC_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_TOKEN"
-```
-
-### 5. Enable and Start
+### 4. Enable and Start
 ```bash
 sudo systemctl enable borgmatic.timer
 sudo systemctl start borgmatic.timer
@@ -64,14 +52,22 @@ journalctl -u borgmatic.service
 sudo systemctl start borgmatic.service
 ```
 
-### Test Notifications
+### Test Metrics Export
 ```bash
-# Test success notification
-BORGMATIC_WEBHOOK_URL="your_webhook_url" /home/cyl/homelab/scripts/backup-notify.sh success
+# Test success metrics export
+/home/cyl/homelab/scripts/backup-notify.sh success
 
-# Test failure notification
-BORGMATIC_WEBHOOK_URL="your_webhook_url" /home/cyl/homelab/scripts/backup-notify.sh exit-code
+# Test failure metrics export
+/home/cyl/homelab/scripts/backup-notify.sh error
+
+# View exported metrics
+cat /var/lib/node_exporter/textfile_collector/borgmatic.prom
 ```
+
+### Alerting
+Backup alerts are handled by Prometheus/Alertmanager. See:
+- Alert rules: `cluster/applications/monitoring/prometheus/alerts.yaml`
+- Alertmanager config: `cluster/applications/monitoring/alertmanager/alertmanager.yaml`
 
 ## Configuration Details
 

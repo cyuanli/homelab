@@ -45,7 +45,7 @@ ${BLUE}Examples:${NC}
   $0 status                       # Show status
   $0 nodes add worker1            # Add cluster node
   $0 setup-auth owntracks         # Setup Owntracks authentication
-  $0 monitor test-alert           # Test monitoring alerts
+  $0 monitor status               # Check monitoring status
 
 ${BLUE}Configuration:${NC}
   Copy config/homelab.env to config/homelab.env.local and customize
@@ -183,18 +183,12 @@ run_monitor() {
         "status")
             "$SCRIPT_DIR/monitor-storage.sh" status "$@"
             ;;
-        "test-alert")
-            "$SCRIPT_DIR/monitor-storage.sh" test-alert "$@"
-            ;;
-        "clear-alert")
-            "$SCRIPT_DIR/monitor-storage.sh" clear-alert "$@"
-            ;;
         "check")
             "$SCRIPT_DIR/monitor-storage.sh" check "$@"
             ;;
         *)
             log_error "Unknown monitor action: $action"
-            echo "Available actions: status, test-alert, clear-alert, check"
+            echo "Available actions: status, check"
             exit 1
             ;;
     esac

@@ -324,10 +324,13 @@ sudo bash scripts/setup.sh
 
 **8.1 Test Storage Monitoring**
 ```bash
-# Test monitoring system
-./scripts/homelab.sh monitor test-alert
+# Check monitoring status
+./scripts/homelab.sh monitor status
 
-# Should receive Discord notification if webhook configured
+# Verify metrics are being exported
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
+
+# Metrics are scraped by Prometheus and alerts sent via Alertmanager
 ```
 
 **8.2 Configure Monitoring**

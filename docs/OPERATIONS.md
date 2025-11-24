@@ -76,8 +76,11 @@ sudo smartctl -H /dev/sda
 
 **Test Monitoring System**
 ```bash
-# Test Discord notifications
-./scripts/homelab.sh monitor test-alert
+# Check monitoring status
+./scripts/homelab.sh monitor status
+
+# View disk metrics
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
 
 # Manual monitoring check
 ./scripts/monitor-storage.sh check
@@ -466,20 +469,30 @@ kubectl logs -n kube-system deployment/traefik -f
 
 ## Monitoring and Alerting
 
-### Discord Notifications
+### Prometheus Metrics
 
-**Test Notifications**
+All monitoring is centralized through Prometheus/Alertmanager.
+
+**View Metrics**
 ```bash
-# Test storage monitoring alert
-./scripts/homelab.sh monitor test-alert
+# Disk monitoring metrics
+cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
 
-# Test backup notification
-./scripts/backup-notify.sh test
+# Backup metrics
+cat /var/lib/node_exporter/textfile_collector/borgmatic.prom
 
-# Manual Discord notification
-curl -X POST "${DISCORD_WEBHOOK_URL}" \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Test notification from homelab"}'
+# SnapRAID metrics
+cat /var/lib/node_exporter/textfile_collector/snapraid.prom
+```
+
+**Check Alerts**
+```bash
+# View alert rules
+kubectl get configmap -n monitoring prometheus-alerts -o yaml | grep "alert:"
+
+# Check active alerts in Prometheus
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+# Then visit: http://localhost:9090/alerts
 ```
 
 **Configure Notifications**

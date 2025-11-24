@@ -54,7 +54,6 @@ setup_disk_monitoring() {
         log_warning "Please customize the monitoring configuration:"
         log_warning "  Edit: $monitoring_config"
         log_warning "  Update drive configuration for your system"
-        log_warning "  Set Discord webhook URL for alerts"
     fi
 
     # Setup cron job for monitoring
@@ -161,8 +160,6 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/borgmatic --verbosity 1
-Environment=BORGMATIC_WEBHOOK_URL=
-EnvironmentFile=-/etc/borgmatic/environment
 EOF
 
     # Borgmatic timer
@@ -179,15 +176,6 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    # Create environment file for webhook URL
-    local env_file="/etc/borgmatic/environment"
-    if [[ ! -f "$env_file" ]]; then
-        sudo tee "$env_file" > /dev/null << EOF
-# Borgmatic environment variables
-BORGMATIC_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-EOF
-    fi
-
     # Reload systemd and enable timer
     sudo systemctl daemon-reload
     sudo systemctl enable borgmatic.timer
@@ -203,10 +191,10 @@ test_monitoring() {
     if [[ "${ENABLE_DISK_MONITORING:-true}" == "true" ]]; then
         if command_exists "$SCRIPT_DIR/monitor-storage.sh"; then
             log_info "Testing disk monitoring alert system"
-            if "$SCRIPT_DIR/monitor-storage.sh" test-alert >/dev/null 2>&1; then
-                log_success "Disk monitoring alerts working"
+            if "$SCRIPT_DIR/monitor-storage.sh" status >/dev/null 2>&1; then
+                log_success "Disk monitoring operational"
             else
-                log_warning "Disk monitoring alerts not configured (no webhook URL?)"
+                log_warning "Disk monitoring may need configuration"
             fi
         fi
     fi
@@ -243,12 +231,7 @@ EOF
         if [[ -f "$monitoring_config" ]]; then
             echo "  - Configuration: $monitoring_config"
         fi
-
-        if [[ -n "${DISCORD_WEBHOOK_URL:-}" ]]; then
-            echo "  - Discord alerts: Configured"
-        else
-            echo "  - Discord alerts: ${YELLOW}Not configured${NC}"
-        fi
+        echo "  - Alerts: Prometheus/Alertmanager"
     else
         echo "${YELLOW}⚠ Disk Health Monitoring: Disabled${NC}"
     fi
@@ -261,7 +244,7 @@ EOF
             echo "${GREEN}✅ Backup Monitoring${NC}"
             echo "  - Borgmatic integration enabled"
             echo "  - Systemd timer configured"
-            echo "  - Success/failure notifications"
+            echo "  - Metrics exported to Prometheus"
 
             if systemctl is-enabled borgmatic.timer >/dev/null 2>&1; then
                 echo "  - Timer: ${GREEN}Enabled${NC}"
@@ -280,12 +263,12 @@ EOF
 ${BLUE}Configuration Files:${NC}
 - Disk monitoring: $HOMELAB_ROOT/config/service-configs/monitoring.conf
 - Backup config: /etc/borgmatic/config.yaml
-- Discord webhook: Set in config/homelab.env.local
+- Alert rules: cluster/applications/monitoring/prometheus/alerts.yaml
+- Alertmanager: cluster/applications/monitoring/alertmanager/alertmanager.yaml
 
 ${BLUE}Management Commands:${NC}
 - Check disk status: ${CYAN}./scripts/monitor-storage.sh status${NC}
-- Test disk alerts: ${CYAN}./scripts/monitor-storage.sh test-alert${NC}
-- Clear disk alerts: ${CYAN}./scripts/monitor-storage.sh clear-alert${NC}
+- View disk metrics: ${CYAN}cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom${NC}
 - Check backup status: ${CYAN}sudo systemctl status borgmatic.timer${NC}
 - Run backup manually: ${CYAN}sudo borgmatic --verbosity 1${NC}
 
