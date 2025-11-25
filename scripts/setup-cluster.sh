@@ -108,6 +108,33 @@ install_k3s() {
         server_opts+=("--kubelet-arg=eviction-soft=memory.available<1Gi")
         server_opts+=("--kubelet-arg=eviction-soft-grace-period=memory.available=1m30s")
 
+        # Add node-specific kubelet resource reservations if configured
+        if [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]]; then
+            local system_reserved=""
+            [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] && system_reserved+="cpu=$KUBELET_SYSTEM_RESERVED_CPU"
+            [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]] && {
+                [[ -n "$system_reserved" ]] && system_reserved+=","
+                system_reserved+="memory=$KUBELET_SYSTEM_RESERVED_MEMORY"
+            }
+            if [[ -n "$system_reserved" ]]; then
+                log_info "Applying system reservation: $system_reserved"
+                server_opts+=("--kubelet-arg=system-reserved=$system_reserved")
+            fi
+        fi
+
+        if [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]]; then
+            local kube_reserved=""
+            [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] && kube_reserved+="cpu=$KUBELET_KUBE_RESERVED_CPU"
+            [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]] && {
+                [[ -n "$kube_reserved" ]] && kube_reserved+=","
+                kube_reserved+="memory=$KUBELET_KUBE_RESERVED_MEMORY"
+            }
+            if [[ -n "$kube_reserved" ]]; then
+                log_info "Applying kube reservation: $kube_reserved"
+                server_opts+=("--kubelet-arg=kube-reserved=$kube_reserved")
+            fi
+        fi
+
         # Determine if this is first server or joining existing cluster
         if [[ -z "${CLUSTER_TOKEN:-}" ]]; then
             # First server - initialize new cluster
