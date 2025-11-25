@@ -1,7 +1,8 @@
-# Node labels for cyl-optiplex9020
+# Node labels and taints for cyl-optiplex9020
 # Apply with: kubectl apply -f labels.yaml
 #
 # Hardware specs: 4 CPUs, 8GB RAM
+# Taints: Restrict to essential workloads only (monitoring, infrastructure)
 apiVersion: v1
 kind: Node
 metadata:
@@ -9,3 +10,8 @@ metadata:
   labels:
     homelab/cpu-tier: low
     homelab/memory-tier: low
+spec:
+  taints:
+  - key: workload
+    value: essential-only
+    effect: NoSchedule
