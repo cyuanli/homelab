@@ -1,0 +1,17 @@
+# /etc/exports: the access control list for filesystems which may be exported
+#		to NFS clients.  See exports(5).
+#
+# Example for NFSv2 and NFSv3:
+# /srv/homes       hostname1(rw,sync,no_subtree_check) hostname2(ro,sync,no_subtree_check)
+#
+# Example for NFSv4:
+# /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
+# /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
+
+# K3s cluster storage - Media files (movies, tv, music, downloads)
+# fsid=0 makes this the NFS root
+/media/data 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+
+# K3s cluster storage - Application configs (moved off snapraid)
+# fsid=1 for separate export
+/srv/k3s-configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=1)

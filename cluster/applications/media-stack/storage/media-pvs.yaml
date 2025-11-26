@@ -108,7 +108,7 @@ spec:
     volumeHandle: jellyfin-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/jellyfin-config
+      share: /srv/k3s-configs/media-stack/jellyfin-config
 
 ---
 apiVersion: v1
@@ -130,7 +130,7 @@ spec:
     volumeHandle: jellyfin-cache
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/jellyfin-cache
+      share: /srv/k3s-configs/media-stack/jellyfin-cache
 
 ---
 # Prowlarr config
@@ -153,7 +153,7 @@ spec:
     volumeHandle: prowlarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/prowlarr-config
+      share: /srv/k3s-configs/media-stack/prowlarr-config
 
 ---
 # Radarr config
@@ -176,7 +176,7 @@ spec:
     volumeHandle: radarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/radarr-config
+      share: /srv/k3s-configs/media-stack/radarr-config
 
 ---
 # Sonarr config
@@ -199,7 +199,7 @@ spec:
     volumeHandle: sonarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/sonarr-config
+      share: /srv/k3s-configs/media-stack/sonarr-config
 
 ---
 # QBittorrent config
@@ -222,4 +222,4 @@ spec:
     volumeHandle: qbittorrent-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /k3s-configs/media-stack/qbittorrent-config
+      share: /srv/k3s-configs/media-stack/qbittorrent-config
