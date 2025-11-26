@@ -19,7 +19,7 @@ spec:
     volumeHandle: media-movies
     volumeAttributes:
       server: 192.168.1.94
-      share: /media/movies
+      share: /media/media/movies
 
 ---
 apiVersion: v1
@@ -41,7 +41,7 @@ spec:
     volumeHandle: media-tv
     volumeAttributes:
       server: 192.168.1.94
-      share: /media/tv
+      share: /media/media/tv
 
 ---
 apiVersion: v1
@@ -63,7 +63,7 @@ spec:
     volumeHandle: media-music
     volumeAttributes:
       server: 192.168.1.94
-      share: /media/music
+      share: /media/media/music
 
 ---
 apiVersion: v1
@@ -85,7 +85,7 @@ spec:
     volumeHandle: media-downloads
     volumeAttributes:
       server: 192.168.1.94
-      share: /downloads
+      share: /media/downloads
 
 ---
 # Jellyfin config and cache
@@ -108,7 +108,7 @@ spec:
     volumeHandle: jellyfin-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/jellyfin-config
+      share: /configs/media-stack/jellyfin-config
 
 ---
 apiVersion: v1
@@ -130,7 +130,7 @@ spec:
     volumeHandle: jellyfin-cache
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/jellyfin-cache
+      share: /configs/media-stack/jellyfin-cache
 
 ---
 # Prowlarr config
@@ -153,7 +153,7 @@ spec:
     volumeHandle: prowlarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/prowlarr-config
+      share: /configs/media-stack/prowlarr-config
 
 ---
 # Radarr config
@@ -176,7 +176,7 @@ spec:
     volumeHandle: radarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/radarr-config
+      share: /configs/media-stack/radarr-config
 
 ---
 # Sonarr config
@@ -199,7 +199,7 @@ spec:
     volumeHandle: sonarr-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/sonarr-config
+      share: /configs/media-stack/sonarr-config
 
 ---
 # QBittorrent config
@@ -222,4 +222,4 @@ spec:
     volumeHandle: qbittorrent-config
     volumeAttributes:
       server: 192.168.1.94
-      share: /srv/k3s-configs/media-stack/qbittorrent-config
+      share: /configs/media-stack/qbittorrent-config

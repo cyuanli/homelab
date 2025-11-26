@@ -15,3 +15,7 @@ UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodir
 
 # MergerFS unified pool
 /mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true 0 0
+
+# NFS export bind mounts (NFSv4 requires single root with fsid=0)
+/media/data /exports/media none bind 0 0
+/srv/k3s-configs /exports/configs none bind 0 0

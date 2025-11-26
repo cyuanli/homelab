@@ -64,39 +64,74 @@ setup_nfs_server() {
 
 configure_nfs_exports() {
     local data_root="${DATA_ROOT:-/media/data}"
-    local lan_cidr="${LAN_CIDR:-192.168.1.0/24}"
+    local configs_root="${K3S_CONFIGS_ROOT:-/srv/k3s-configs}"
+    local exports_root="/exports"
 
-    if [[ ! -d "$data_root" ]]; then
-        log_error "Data root directory not found: $data_root"
-        log_error "Please create the directory first or update DATA_ROOT in config"
+    # Check required directories exist
+    for dir in "$data_root" "$configs_root"; do
+        if [[ ! -d "$dir" ]]; then
+            log_error "Required directory not found: $dir"
+            log_error "Please create the directory first or update config"
+            exit 1
+        fi
+    done
+
+    log_info "Setting up NFSv4 bind mount structure"
+
+    # Create exports root
+    if [[ ! -d "$exports_root" ]]; then
+        log_info "Creating $exports_root directory"
+        sudo mkdir -p "$exports_root"
+    fi
+
+    # Create bind mount points
+    sudo mkdir -p "$exports_root/media" "$exports_root/configs"
+
+    # Set up bind mounts
+    log_info "Configuring bind mounts"
+
+    # Check if bind mounts already exist in /etc/fstab
+    if ! grep -q "$data_root $exports_root/media" /etc/fstab; then
+        log_info "Adding bind mount for $data_root"
+        echo "$data_root $exports_root/media none bind 0 0" | sudo tee -a /etc/fstab >/dev/null
+    fi
+
+    if ! grep -q "$configs_root $exports_root/configs" /etc/fstab; then
+        log_info "Adding bind mount for $configs_root"
+        echo "$configs_root $exports_root/configs none bind 0 0" | sudo tee -a /etc/fstab >/dev/null
+    fi
+
+    # Mount bind mounts if not already mounted
+    if ! mountpoint -q "$exports_root/media"; then
+        log_info "Mounting $exports_root/media"
+        sudo mount --bind "$data_root" "$exports_root/media"
+    fi
+
+    if ! mountpoint -q "$exports_root/configs"; then
+        log_info "Mounting $exports_root/configs"
+        sudo mount --bind "$configs_root" "$exports_root/configs"
+    fi
+
+    log_info "Copying NFS exports configuration from config/system-configs/exports"
+
+    # Use the tracked exports file if it exists
+    local exports_config="$SCRIPT_DIR/../config/system-configs/exports"
+    if [[ -f "$exports_config" ]]; then
+        sudo cp "$exports_config" /etc/exports
+    else
+        log_error "Exports config file not found: $exports_config"
         exit 1
     fi
-
-    log_info "Configuring NFS exports for $data_root"
-
-    # Check if export already exists
-    if grep -q "^$data_root " /etc/exports 2>/dev/null; then
-        log_info "NFS export already configured"
-        return 0
-    fi
-
-    # Add NFS export
-    local export_line="$data_root $lan_cidr(rw,sync,no_subtree_check,no_root_squash,fsid=0)"
-    log_info "Adding export: $export_line"
-
-    echo "" | sudo tee -a /etc/exports >/dev/null
-    echo "# K3s cluster storage" | sudo tee -a /etc/exports >/dev/null
-    echo "$export_line" | sudo tee -a /etc/exports >/dev/null
 
     # Apply exports
     log_info "Applying NFS exports"
     sudo exportfs -ra
 
-    # Verify export
+    # Verify exports
     log_info "Verifying NFS exports"
     sudo exportfs -v
 
-    log_success "NFS exports configured"
+    log_success "NFS exports configured with bind mounts"
 }
 
 configure_nfs_firewall() {
