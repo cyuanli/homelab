@@ -95,12 +95,13 @@ install_k3s() {
 
     if [[ "${NODE_ROLE}" == "server" ]]; then
         # Server-specific options
+        # Each flag and its value must be separate array elements
         local server_opts=(
-            "--write-kubeconfig-mode 644"
-            "--disable traefik"           # We'll deploy our own
-            "--disable servicelb"         # We'll use Traefik
-            "--disable local-storage"     # We'll deploy our own
-            "--node-name $(hostname)"
+            "--write-kubeconfig-mode" "644"
+            "--disable" "traefik"           # We'll deploy our own
+            "--disable" "servicelb"         # We'll use Traefik
+            "--disable" "local-storage"     # We'll deploy our own
+            "--node-name" "$(hostname)"
         )
 
         # Add cluster-wide kubelet memory eviction thresholds
@@ -135,6 +136,12 @@ install_k3s() {
             fi
         fi
 
+        # Add CPU manager policy if configured
+        if [[ -n "${KUBELET_CPU_MANAGER_POLICY:-}" ]]; then
+            log_info "Applying CPU manager policy: $KUBELET_CPU_MANAGER_POLICY"
+            server_opts+=("--kubelet-arg=cpu-manager-policy=$KUBELET_CPU_MANAGER_POLICY")
+        fi
+
         # Determine if this is first server or joining existing cluster
         if [[ -z "${CLUSTER_TOKEN:-}" ]]; then
             # First server - initialize new cluster
@@ -154,7 +161,7 @@ install_k3s() {
         if command_exists tailscale; then
             local tailscale_ip
             if tailscale_ip=$(tailscale ip -4 2>/dev/null); then
-                server_opts+=("--node-external-ip $tailscale_ip")
+                server_opts+=("--node-external-ip" "$tailscale_ip")
             fi
         fi
 
@@ -165,14 +172,16 @@ install_k3s() {
         fi
 
         # Append server subcommand and options
-        install_cmd="$install_cmd server ${server_opts[*]}"
+        # Use printf %q to properly quote arguments with special characters
+        install_cmd="$install_cmd server $(printf '%q ' "${server_opts[@]}")"
 
     else
         log_info "Installing K3s agent node"
 
         # Agent-specific options
+        # Each flag and its value must be separate array elements
         local agent_opts=(
-            "--node-name $(hostname)"
+            "--node-name" "$(hostname)"
         )
 
         # Add cluster-wide kubelet memory eviction thresholds
@@ -207,16 +216,23 @@ install_k3s() {
             fi
         fi
 
+        # Add CPU manager policy if configured
+        if [[ -n "${KUBELET_CPU_MANAGER_POLICY:-}" ]]; then
+            log_info "Applying CPU manager policy: $KUBELET_CPU_MANAGER_POLICY"
+            agent_opts+=("--kubelet-arg=cpu-manager-policy=$KUBELET_CPU_MANAGER_POLICY")
+        fi
+
         # Add Tailscale external IP if available
         if command_exists tailscale; then
             local tailscale_ip
             if tailscale_ip=$(tailscale ip -4 2>/dev/null); then
-                agent_opts+=("--node-external-ip $tailscale_ip")
+                agent_opts+=("--node-external-ip" "$tailscale_ip")
             fi
         fi
 
         # Agent requires server URL and token
-        install_cmd="$install_cmd agent --server \"$SERVER_URL\" ${agent_opts[*]}"
+        # Use printf %q to properly quote arguments with special characters
+        install_cmd="$install_cmd agent --server $(printf '%q' "$SERVER_URL") $(printf '%q ' "${agent_opts[@]}")"
     fi
 
     log_info "Running: $install_cmd"
