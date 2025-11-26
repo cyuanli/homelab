@@ -115,147 +115,16 @@ create_node_config() {
         return 1
     fi
 
-    # Create template file with placeholders
-    cat > "$template_file" << EOF
-# Homelab Configuration Template for $node_name
-# Copy to config.env.local and customize with your secrets
+    # Create template file from template (with placeholders)
+    export NODE_NAME="$node_name"
+    export NODE_ROLE="$node_role"
+    envsubst < "$HOMELAB_ROOT/config/templates/node-config.env.template" > "$template_file"
 
-# =======================
-# BASIC CONFIGURATION
-# =======================
-
-# Domain and networking
-DOMAIN="$DOMAIN"
-ACME_EMAIL="$ACME_EMAIL"
-
-# User configuration
-HOMELAB_USER="$HOMELAB_USER"
-HOMELAB_UID="$HOMELAB_UID"
-HOMELAB_GID="$HOMELAB_GID"
-
-# =======================
-# K3S CONFIGURATION
-# =======================
-
-# Node role and cluster info
-NODE_ROLE=$node_role
-CLUSTER_TOKEN=REPLACE_WITH_CLUSTER_TOKEN
-SERVER_URL=REPLACE_WITH_SERVER_URL
-
-# K3s version
-K3S_VERSION="$K3S_VERSION"
-KUBECTL_VERSION="$KUBECTL_VERSION"
-
-# =======================
-# TAILSCALE CONFIGURATION
-# =======================
-
-# Tailscale authentication key
-TAILSCALE_AUTHKEY=REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY
-
-# =======================
-# STORAGE CONFIGURATION
-# =======================
-
-# Storage configuration (inherited from main cluster)
-DATA_ROOT="$DATA_ROOT"
-K8S_STORAGE_ROOT="$K8S_STORAGE_ROOT"
-
-# =======================
-# SERVICE CONFIGURATION
-# =======================
-
-# Container user/group IDs
-PUID="$PUID"
-PGID="$PGID"
-TIMEZONE="$TIMEZONE"
-
-# Feature flags
-ENABLE_TRAEFIK_DASHBOARD="false"
-ENABLE_LOCATION_SERVICES="$ENABLE_LOCATION_SERVICES"
-ENABLE_DISK_MONITORING="$ENABLE_DISK_MONITORING"
-ENABLE_BACKUP_MONITORING="$ENABLE_BACKUP_MONITORING"
-
-# =======================
-# ADVANCED CONFIGURATION
-# =======================
-
-# UFW firewall configuration
-ENABLE_UFW="$ENABLE_UFW"
-ALLOW_SSH_FROM_LAN="$ALLOW_SSH_FROM_LAN"
-LAN_CIDR="$LAN_CIDR"
-EOF
-
-    # Create actual config file with real values
-    cat > "$config_file" << EOF
-# Homelab Configuration for $node_name
-# Based on main homelab configuration
-
-# =======================
-# BASIC CONFIGURATION
-# =======================
-
-# Domain and networking
-DOMAIN="$DOMAIN"
-ACME_EMAIL="$ACME_EMAIL"
-
-# User configuration
-HOMELAB_USER="$HOMELAB_USER"
-HOMELAB_UID="$HOMELAB_UID"
-HOMELAB_GID="$HOMELAB_GID"
-
-# =======================
-# K3S CONFIGURATION
-# =======================
-
-# Node role and cluster info
-NODE_ROLE=$node_role
-CLUSTER_TOKEN=$cluster_token
-SERVER_URL=$server_url
-
-# K3s version
-K3S_VERSION="$K3S_VERSION"
-KUBECTL_VERSION="$KUBECTL_VERSION"
-
-# =======================
-# TAILSCALE CONFIGURATION
-# =======================
-
-# Tailscale authentication key
-TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY"
-
-# =======================
-# STORAGE CONFIGURATION
-# =======================
-
-# Storage configuration (inherited from main cluster)
-DATA_ROOT="$DATA_ROOT"
-K8S_STORAGE_ROOT="$K8S_STORAGE_ROOT"
-
-# =======================
-# SERVICE CONFIGURATION
-# =======================
-
-# Container user/group IDs
-PUID="$PUID"
-PGID="$PGID"
-TIMEZONE="$TIMEZONE"
-
-# Feature flags
-ENABLE_TRAEFIK_DASHBOARD="false"
-ENABLE_LOCATION_SERVICES="$ENABLE_LOCATION_SERVICES"
-ENABLE_DISK_MONITORING="$ENABLE_DISK_MONITORING"
-ENABLE_BACKUP_MONITORING="$ENABLE_BACKUP_MONITORING"
-
-# =======================
-# ADVANCED CONFIGURATION
-# =======================
-
-# UFW firewall configuration
-ENABLE_UFW="$ENABLE_UFW"
-ALLOW_SSH_FROM_LAN="$ALLOW_SSH_FROM_LAN"
-LAN_CIDR="$LAN_CIDR"
-EOF
+    # Create actual config file by copying template and replacing placeholders
+    cp "$template_file" "$config_file"
+    sed -i "s|REPLACE_WITH_CLUSTER_TOKEN|$cluster_token|g" "$config_file"
+    sed -i "s|REPLACE_WITH_SERVER_URL|$server_url|g" "$config_file"
+    sed -i "s|REPLACE_WITH_YOUR_TAILSCALE_AUTHKEY|$TAILSCALE_AUTHKEY|g" "$config_file"
 
     log_success "Created template file: $template_file"
     log_success "Created config file: $config_file"

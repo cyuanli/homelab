@@ -48,14 +48,14 @@ ${BLUE}Examples:${NC}
   $0 monitor status               # Check monitoring status
 
 ${BLUE}Configuration:${NC}
-  Copy config/homelab.env to config/homelab.env.local and customize
+  Create node config: mkdir -p nodes/$(hostname) && cp config/templates/node-config.env.template nodes/$(hostname)/config.env.local
 
 EOF
 }
 
 validate_environment() {
     # Check if we're in the homelab directory
-    if [[ ! -f "$HOMELAB_ROOT/config/homelab.env" ]]; then
+    if [[ ! -d "$HOMELAB_ROOT/scripts" ]] || [[ ! -d "$HOMELAB_ROOT/cluster" ]]; then
         log_error "This script must be run from the homelab directory"
         log_error "Current directory: $(pwd)"
         log_error "Expected homelab root: $HOMELAB_ROOT"
@@ -331,15 +331,19 @@ show_config() {
 
     log_step "Current Configuration"
 
-    if [[ -f "$HOMELAB_ROOT/config/homelab.env.local" ]]; then
+    local hostname=$(hostname)
+    local node_config="$HOMELAB_ROOT/nodes/$hostname/config.env.local"
+
+    if [[ -f "$node_config" ]]; then
         echo ""
-        log_info "Configuration file: $HOMELAB_ROOT/config/homelab.env.local"
+        log_info "Configuration file: $node_config"
         echo ""
         # Show config with sensitive values masked
-        sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$HOMELAB_ROOT/config/homelab.env.local"
+        sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$node_config"
     else
-        log_warning "Configuration file not found"
-        log_info "Copy config/homelab.env to config/homelab.env.local and customize"
+        log_warning "Node configuration file not found: $node_config"
+        log_info "Create it with: mkdir -p nodes/$hostname && cp config/templates/node-config.env.template nodes/$hostname/config.env.local"
+        log_info "Then edit with your values"
     fi
 }
 
