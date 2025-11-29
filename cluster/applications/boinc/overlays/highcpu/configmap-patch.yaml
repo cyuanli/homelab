@@ -1,0 +1,32 @@
+# Strategic merge patch to override memory fractions for highcpu profile
+# Tuned to keep memory usage under the 4.5Gi target (node allocatable ~4.99Gi)
+# Since BOINC detects host memory (~7.47 GB), we calculate fractions to match our target:
+#   - Idle: 0.60 * 7.47 GB ≈ 4.5 GB (stays under 4.99Gi allocatable)
+#   - Busy: 0.55 * 7.47 GB ≈ 4.1 GB (conservative, leaves room)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boinc-config
+  namespace: boinc
+data:
+  cc_config.xml: |
+    <cc_config>
+      <log_flags>
+        <task>1</task>
+        <file_xfer>1</file_xfer>
+        <sched_ops>1</sched_ops>
+      </log_flags>
+      <options>
+        <allow_multiple_clients>1</allow_multiple_clients>
+        <start_delay>10</start_delay>
+        <!-- Use 75% of available CPUs -->
+        <max_ncpus_pct>75</max_ncpus_pct>
+        <!-- Memory fractions calculated to stay under node allocatable -->
+        <!-- BOINC detects ~7.47GB host memory, these fractions keep us under 4.5Gi -->
+        <ram_max_used_busy_frac>0.55</ram_max_used_busy_frac>
+        <ram_max_used_idle_frac>0.60</ram_max_used_idle_frac>
+        <!-- Network settings -->
+        <network_test_url>http://www.google.com/</network_test_url>
+        <dont_verify_images>1</dont_verify_images>
+      </options>
+    </cc_config>

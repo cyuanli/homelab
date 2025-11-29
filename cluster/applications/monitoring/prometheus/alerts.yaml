@@ -66,14 +66,23 @@ data:
           description: "Disk usage on {{ $labels.instance }} is {{ $value | humanize }}%. Immediate action required!"
 
       # Pod alerts
+      - alert: PodOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
+          description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} was killed due to out of memory. Consider increasing memory limits."
+
       - alert: PodCrashLooping
-        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0.1
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0.01
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
-          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been restarting frequently."
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been restarting frequently ({{ $value | humanize }} restarts/sec)."
 
       - alert: PodNotReady
         expr: kube_pod_status_phase{phase!~"Running|Succeeded"} > 0

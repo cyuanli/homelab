@@ -1,7 +1,7 @@
 # Tier 2: Low CPU (4 cores) + High Memory (16GB)
 # Resource limits for cyl-aspiree17
-# Burstable QoS: Low request for easy scheduling, high limit to use available resources
-# With low-priority-preemptible, BOINC yields to other workloads but uses all CPUs when idle
+# Burstable QoS: No CPU limits to allow proportional sharing via requests
+# With low-priority-preemptible, BOINC gets CPU proportional to requests (500m)
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -13,8 +13,7 @@ spec:
       - name: boinc-client
         resources:
           requests:
-            cpu: "1"       # Low request for easy scheduling
-            memory: 12Gi   # Match limit for memory
+            cpu: "500m"    # Equal weight to production workloads for fair sharing
+            memory: 2Gi    # Low request for scheduling, configmap controls actual usage
           limits:
-            cpu: "2"       # Can use all 2 allocatable CPUs when available (4 total - 2 reserved)
             memory: 12Gi   # 12GB out of 16GB
