@@ -30,7 +30,6 @@ ${BLUE}Deployment Commands:${NC}
 ${BLUE}Management Commands:${NC}
   status                 - Show cluster and service status
   nodes [action]         - Manage cluster nodes (add, remove, list, etc.)
-  backup [action]        - Backup and restore operations
   monitor [action]       - Monitoring operations
 
 ${BLUE}Utility Commands:${NC}
@@ -157,7 +156,6 @@ ${BLUE}Next steps:${NC}
 
 ${BLUE}Management:${NC}
   - Add nodes: ${CYAN}$0 nodes add [hostname]${NC}
-  - Backup configs: ${CYAN}$0 backup create${NC}
   - View logs: ${CYAN}$0 logs [service]${NC}
 
 EOF
@@ -189,82 +187,6 @@ run_monitor() {
         *)
             log_error "Unknown monitor action: $action"
             echo "Available actions: status, check"
-            exit 1
-            ;;
-    esac
-}
-
-run_backup() {
-    local action="${1:-list}"
-    shift || true
-
-    case "$action" in
-        "create")
-            # Simple backup using rsync
-            local backup_dir="/home/$HOMELAB_USER/backups/homelab-$(date +%Y%m%d_%H%M%S)"
-            log_info "Creating backup: $backup_dir"
-            mkdir -p "$backup_dir"
-
-            # Backup configurations
-            cp -r "$HOMELAB_ROOT/config" "$backup_dir/"
-            cp -r "$HOMELAB_ROOT/cluster" "$backup_dir/"
-
-            # Backup K3s kubeconfig
-            if [[ -f "/home/$HOMELAB_USER/.kube/config" ]]; then
-                mkdir -p "$backup_dir/kube"
-                cp "/home/$HOMELAB_USER/.kube/config" "$backup_dir/kube/"
-            fi
-
-            log_success "Backup created: $backup_dir"
-            ;;
-        "list")
-            log_info "Available backups:"
-            local backup_base="/home/$HOMELAB_USER/backups"
-            if [[ -d "$backup_base" ]]; then
-                find "$backup_base" -name "homelab-*" -type d | sort -r | head -10
-            else
-                echo "No backups found"
-            fi
-            ;;
-        "restore")
-            local backup_path="${1:-}"
-            if [[ -z "$backup_path" ]]; then
-                log_error "Backup path not specified"
-                echo "Usage: $0 backup restore [backup-path]"
-                exit 1
-            fi
-
-            if [[ ! -d "$backup_path" ]]; then
-                log_error "Backup directory not found: $backup_path"
-                exit 1
-            fi
-
-            log_info "Restoring from backup: $backup_path"
-
-            # Restore configurations
-            if [[ -d "$backup_path/config" ]]; then
-                cp -r "$backup_path/config"/* "$HOMELAB_ROOT/config/"
-                log_info "Restored configuration files"
-            fi
-
-            # Restore cluster manifests
-            if [[ -d "$backup_path/cluster" ]]; then
-                cp -r "$backup_path/cluster"/* "$HOMELAB_ROOT/cluster/"
-                log_info "Restored cluster manifests"
-            fi
-
-            # Restore kubeconfig
-            if [[ -f "$backup_path/kube/config" ]]; then
-                mkdir -p "/home/$HOMELAB_USER/.kube"
-                cp "$backup_path/kube/config" "/home/$HOMELAB_USER/.kube/"
-                log_info "Restored kubeconfig"
-            fi
-
-            log_success "Restore completed"
-            ;;
-        *)
-            log_error "Unknown backup action: $action"
-            echo "Available actions: create, list, restore"
             exit 1
             ;;
     esac
@@ -447,9 +369,6 @@ main() {
             ;;
         "monitor")
             run_monitor "$@"
-            ;;
-        "backup")
-            run_backup "$@"
             ;;
         "config")
             show_config
