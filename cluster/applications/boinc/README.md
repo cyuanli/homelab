@@ -107,3 +107,29 @@ BOINC is designed to use all idle CPU. This is expected behavior. Production wor
 Check node allocatable memory: `kubectl describe node <node-name> | grep Allocatable -A 5`
 
 BOINC requests 2Gi memory (with 6Gi or 12Gi limits) to allow scheduling on nodes with kubelet reservations.
+
+## Security Considerations
+
+### Running as Root (Current Configuration)
+
+**Current Status:** BOINC pods currently run as `root` (UID 0) for compatibility.
+
+**Security Recommendation:** Consider running BOINC as a non-root user for better security isolation.
+
+**Why This Matters:**
+- BOINC downloads and executes arbitrary scientific computing workloads from the internet
+- Running as root gives these workloads full container privileges
+- While containers provide some isolation, non-root is defense-in-depth
+
+**Migration Path (To Be Tested):**
+1. LXCFS files are world-readable (`/var/lib/lxcfs/proc/*`), so non-root access should work
+2. Test with: `securityContext: { runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000 }`
+3. Verify BOINC tasks execute successfully and can read container memory limits
+4. Check for any permission issues with `/var/lib/boinc` directory
+
+**Trade-offs:**
+- **Pro:** Better security isolation from potentially malicious BOINC tasks
+- **Con:** May require additional testing and troubleshooting if tasks need specific capabilities
+- **Con:** Some BOINC projects might have compatibility issues with non-root execution
+
+**Status:** Not implemented yet - requires testing to ensure BOINC tasks work correctly as non-root.

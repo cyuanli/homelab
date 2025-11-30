@@ -75,6 +75,49 @@ validate_prerequisites() {
     log_success "Prerequisites validated"
 }
 
+# Configure common kubelet arguments for both server and agent nodes
+configure_kubelet_args() {
+    local -n opts=$1  # nameref to the array to modify
+
+    # Add cluster-wide kubelet memory eviction thresholds
+    opts+=("--kubelet-arg=eviction-hard=memory.available<500Mi")
+    opts+=("--kubelet-arg=eviction-soft=memory.available<1Gi")
+    opts+=("--kubelet-arg=eviction-soft-grace-period=memory.available=1m30s")
+
+    # Add node-specific kubelet resource reservations if configured
+    if [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]]; then
+        local system_reserved=""
+        [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] && system_reserved+="cpu=$KUBELET_SYSTEM_RESERVED_CPU"
+        [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]] && {
+            [[ -n "$system_reserved" ]] && system_reserved+=","
+            system_reserved+="memory=$KUBELET_SYSTEM_RESERVED_MEMORY"
+        }
+        if [[ -n "$system_reserved" ]]; then
+            log_info "Applying system reservation: $system_reserved"
+            opts+=("--kubelet-arg=system-reserved=$system_reserved")
+        fi
+    fi
+
+    if [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]]; then
+        local kube_reserved=""
+        [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] && kube_reserved+="cpu=$KUBELET_KUBE_RESERVED_CPU"
+        [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]] && {
+            [[ -n "$kube_reserved" ]] && kube_reserved+=","
+            kube_reserved+="memory=$KUBELET_KUBE_RESERVED_MEMORY"
+        }
+        if [[ -n "$kube_reserved" ]]; then
+            log_info "Applying kube reservation: $kube_reserved"
+            opts+=("--kubelet-arg=kube-reserved=$kube_reserved")
+        fi
+    fi
+
+    # Add CPU manager policy if configured
+    if [[ -n "${KUBELET_CPU_MANAGER_POLICY:-}" ]]; then
+        log_info "Applying CPU manager policy: $KUBELET_CPU_MANAGER_POLICY"
+        opts+=("--kubelet-arg=cpu-manager-policy=$KUBELET_CPU_MANAGER_POLICY")
+    fi
+}
+
 install_k3s() {
     if check_k3s_running; then
         log_info "K3s is already running"
@@ -104,43 +147,8 @@ install_k3s() {
             "--node-name" "$(hostname)"
         )
 
-        # Add cluster-wide kubelet memory eviction thresholds
-        server_opts+=("--kubelet-arg=eviction-hard=memory.available<500Mi")
-        server_opts+=("--kubelet-arg=eviction-soft=memory.available<1Gi")
-        server_opts+=("--kubelet-arg=eviction-soft-grace-period=memory.available=1m30s")
-
-        # Add node-specific kubelet resource reservations if configured
-        if [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]]; then
-            local system_reserved=""
-            [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] && system_reserved+="cpu=$KUBELET_SYSTEM_RESERVED_CPU"
-            [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]] && {
-                [[ -n "$system_reserved" ]] && system_reserved+=","
-                system_reserved+="memory=$KUBELET_SYSTEM_RESERVED_MEMORY"
-            }
-            if [[ -n "$system_reserved" ]]; then
-                log_info "Applying system reservation: $system_reserved"
-                server_opts+=("--kubelet-arg=system-reserved=$system_reserved")
-            fi
-        fi
-
-        if [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]]; then
-            local kube_reserved=""
-            [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] && kube_reserved+="cpu=$KUBELET_KUBE_RESERVED_CPU"
-            [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]] && {
-                [[ -n "$kube_reserved" ]] && kube_reserved+=","
-                kube_reserved+="memory=$KUBELET_KUBE_RESERVED_MEMORY"
-            }
-            if [[ -n "$kube_reserved" ]]; then
-                log_info "Applying kube reservation: $kube_reserved"
-                server_opts+=("--kubelet-arg=kube-reserved=$kube_reserved")
-            fi
-        fi
-
-        # Add CPU manager policy if configured
-        if [[ -n "${KUBELET_CPU_MANAGER_POLICY:-}" ]]; then
-            log_info "Applying CPU manager policy: $KUBELET_CPU_MANAGER_POLICY"
-            server_opts+=("--kubelet-arg=cpu-manager-policy=$KUBELET_CPU_MANAGER_POLICY")
-        fi
+        # Configure kubelet arguments common to all nodes
+        configure_kubelet_args server_opts
 
         # Determine if this is first server or joining existing cluster
         if [[ -z "${CLUSTER_TOKEN:-}" ]]; then
@@ -184,43 +192,8 @@ install_k3s() {
             "--node-name" "$(hostname)"
         )
 
-        # Add cluster-wide kubelet memory eviction thresholds
-        agent_opts+=("--kubelet-arg=eviction-hard=memory.available<500Mi")
-        agent_opts+=("--kubelet-arg=eviction-soft=memory.available<1Gi")
-        agent_opts+=("--kubelet-arg=eviction-soft-grace-period=memory.available=1m30s")
-
-        # Add node-specific kubelet resource reservations if configured
-        if [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]]; then
-            local system_reserved=""
-            [[ -n "${KUBELET_SYSTEM_RESERVED_CPU:-}" ]] && system_reserved+="cpu=$KUBELET_SYSTEM_RESERVED_CPU"
-            [[ -n "${KUBELET_SYSTEM_RESERVED_MEMORY:-}" ]] && {
-                [[ -n "$system_reserved" ]] && system_reserved+=","
-                system_reserved+="memory=$KUBELET_SYSTEM_RESERVED_MEMORY"
-            }
-            if [[ -n "$system_reserved" ]]; then
-                log_info "Applying system reservation: $system_reserved"
-                agent_opts+=("--kubelet-arg=system-reserved=$system_reserved")
-            fi
-        fi
-
-        if [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] || [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]]; then
-            local kube_reserved=""
-            [[ -n "${KUBELET_KUBE_RESERVED_CPU:-}" ]] && kube_reserved+="cpu=$KUBELET_KUBE_RESERVED_CPU"
-            [[ -n "${KUBELET_KUBE_RESERVED_MEMORY:-}" ]] && {
-                [[ -n "$kube_reserved" ]] && kube_reserved+=","
-                kube_reserved+="memory=$KUBELET_KUBE_RESERVED_MEMORY"
-            }
-            if [[ -n "$kube_reserved" ]]; then
-                log_info "Applying kube reservation: $kube_reserved"
-                agent_opts+=("--kubelet-arg=kube-reserved=$kube_reserved")
-            fi
-        fi
-
-        # Add CPU manager policy if configured
-        if [[ -n "${KUBELET_CPU_MANAGER_POLICY:-}" ]]; then
-            log_info "Applying CPU manager policy: $KUBELET_CPU_MANAGER_POLICY"
-            agent_opts+=("--kubelet-arg=cpu-manager-policy=$KUBELET_CPU_MANAGER_POLICY")
-        fi
+        # Configure kubelet arguments common to all nodes
+        configure_kubelet_args agent_opts
 
         # Add Tailscale external IP if available
         if command_exists tailscale; then

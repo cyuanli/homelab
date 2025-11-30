@@ -245,21 +245,3 @@ generate_password() {
     local length="${1:-32}"
     openssl rand -base64 "$length" | tr -d "=+/" | cut -c1-"$length"
 }
-
-# URL encode function
-url_encode() {
-    local string="${1}"
-    local strlen=${#string}
-    local encoded=""
-    local pos c o
-
-    for (( pos=0 ; pos<strlen ; pos++ )); do
-        c=${string:$pos:1}
-        case "$c" in
-            [-_.~a-zA-Z0-9] ) o="${c}" ;;
-            * ) printf -v o '%%%02x' "'$c"
-        esac
-        encoded+="${o}"
-    done
-    echo "${encoded}"
-}

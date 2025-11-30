@@ -48,77 +48,30 @@ spec:
             sleep 2
           done
 
-          # Attach to Einstein@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "einsteinathome.org"; then
-            echo "Already attached to Einstein@home"
-          else
-            echo "Attaching to Einstein@home..."
-            /usr/bin/boinccmd --project_attach https://einsteinathome.org/ "$EINSTEIN_AUTH" 2>&1 || true
-            sleep 5
-          fi
+          # Define BOINC projects to attach (name|url|grep_pattern|auth_var)
+          declare -A projects=(
+            ["Einstein@home"]="https://einsteinathome.org/|einsteinathome.org|$EINSTEIN_AUTH"
+            ["World Community Grid"]="https://www.worldcommunitygrid.org/|worldcommunitygrid.org|$WCG_AUTH"
+            ["DENIS@home"]="https://denis.usj.es/denisathome/|denisathome|$DENIS_AUTH"
+            ["Milkyway@home"]="https://milkyway.cs.rpi.edu/milkyway/|milkyway|$MILKYWAY_AUTH"
+            ["SiDock@home"]="https://www.sidock.si/sidock/|sidock|$SIDOCK_AUTH"
+            ["Asteroids@home"]="https://asteroidsathome.net/boinc/|asteroidsathome|$ASTEROIDS_AUTH"
+            ["Yoyo@home"]="https://www.rechenkraft.net/yoyo/|yoyo|$YOYO_AUTH"
+            ["Climateprediction.net"]="https://www.climateprediction.net/|climateprediction|$CLIMATE_AUTH"
+          )
 
-          # Attach to World Community Grid if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "worldcommunitygrid.org"; then
-            echo "Already attached to World Community Grid"
-          else
-            echo "Attaching to World Community Grid..."
-            /usr/bin/boinccmd --project_attach https://www.worldcommunitygrid.org/ "$WCG_AUTH" 2>&1 || true
-            sleep 5
-          fi
+          # Attach to all configured projects
+          for project in "${!projects[@]}"; do
+            IFS='|' read -r url grep_pattern auth <<< "${projects[$project]}"
 
-          # Attach to DENIS@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "denisathome"; then
-            echo "Already attached to DENIS@home"
-          else
-            echo "Attaching to DENIS@home..."
-            /usr/bin/boinccmd --project_attach https://denis.usj.es/denisathome/ "$DENIS_AUTH" 2>&1 || true
-            sleep 5
-          fi
-
-          # Attach to Milkyway@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "milkyway"; then
-            echo "Already attached to Milkyway@home"
-          else
-            echo "Attaching to Milkyway@home..."
-            /usr/bin/boinccmd --project_attach https://milkyway.cs.rpi.edu/milkyway/ "$MILKYWAY_AUTH" 2>&1 || true
-            sleep 5
-          fi
-
-          # Attach to SiDock@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "sidock"; then
-            echo "Already attached to SiDock@home"
-          else
-            echo "Attaching to SiDock@home..."
-            /usr/bin/boinccmd --project_attach https://www.sidock.si/sidock/ "$SIDOCK_AUTH" 2>&1 || true
-            sleep 5
-          fi
-
-          # Attach to Asteroids@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "asteroidsathome"; then
-            echo "Already attached to Asteroids@home"
-          else
-            echo "Attaching to Asteroids@home..."
-            /usr/bin/boinccmd --project_attach https://asteroidsathome.net/boinc/ "$ASTEROIDS_AUTH" 2>&1 || true
-            sleep 5
-          fi
-
-          # Attach to Yoyo@home if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "yoyo"; then
-            echo "Already attached to Yoyo@home"
-          else
-            echo "Attaching to Yoyo@home..."
-            /usr/bin/boinccmd --project_attach https://www.rechenkraft.net/yoyo/ "$YOYO_AUTH" 2>&1 || true
-            sleep 5
-          fi
-
-          # Attach to Climateprediction.net if not already attached
-          if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "climateprediction"; then
-            echo "Already attached to Climateprediction.net"
-          else
-            echo "Attaching to Climateprediction.net..."
-            /usr/bin/boinccmd --project_attach https://www.climateprediction.net/ "$CLIMATE_AUTH" 2>&1 || true
-            sleep 5
-          fi
+            if /usr/bin/boinccmd --get_project_status 2>/dev/null | grep -q "$grep_pattern"; then
+              echo "Already attached to $project"
+            else
+              echo "Attaching to $project..."
+              /usr/bin/boinccmd --project_attach "$url" "$auth" 2>&1 || true
+              sleep 5
+            fi
+          done
 
           # Stop temporary BOINC instance
           kill $BOINC_PID 2>/dev/null || true
@@ -127,7 +80,10 @@ spec:
           echo "Setup complete"
         env:
         - name: BOINC_GUI_RPC_PASSWORD
-          value: "boinc123"
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: gui-rpc-password
         - name: EINSTEIN_AUTH
           valueFrom:
             secretKeyRef:
@@ -195,7 +151,10 @@ spec:
         # Environment variables
         env:
         - name: BOINC_GUI_RPC_PASSWORD
-          value: "boinc123"
+          valueFrom:
+            secretKeyRef:
+              name: boinc-credentials
+              key: gui-rpc-password
 
         # BOINC command line arguments
         command: ["/usr/bin/boinc"]
