@@ -177,6 +177,15 @@ spec:
         - name: boinc-config
           mountPath: /var/lib/boinc/global_prefs_override.xml
           subPath: global_prefs_override.xml
+        # LXCFS virtualized /proc files
+        - name: lxcfs-proc-meminfo
+          mountPath: /proc/meminfo
+        - name: lxcfs-proc-cpuinfo
+          mountPath: /proc/cpuinfo
+        - name: lxcfs-proc-stat
+          mountPath: /proc/stat
+        - name: lxcfs-proc-uptime
+          mountPath: /proc/uptime
 
       containers:
       - name: boinc-client
@@ -202,6 +211,15 @@ spec:
         - name: boinc-config
           mountPath: /var/lib/boinc/global_prefs_override.xml
           subPath: global_prefs_override.xml
+        # LXCFS virtualized /proc files
+        - name: lxcfs-proc-meminfo
+          mountPath: /proc/meminfo
+        - name: lxcfs-proc-cpuinfo
+          mountPath: /proc/cpuinfo
+        - name: lxcfs-proc-stat
+          mountPath: /proc/stat
+        - name: lxcfs-proc-uptime
+          mountPath: /proc/uptime
 
         # Health checks
         livenessProbe:
@@ -233,6 +251,23 @@ spec:
       - name: boinc-config
         configMap:
           name: boinc-config
+      # LXCFS virtualized /proc files from host
+      - name: lxcfs-proc-meminfo
+        hostPath:
+          path: /var/lib/lxcfs/proc/meminfo
+          type: File
+      - name: lxcfs-proc-cpuinfo
+        hostPath:
+          path: /var/lib/lxcfs/proc/cpuinfo
+          type: File
+      - name: lxcfs-proc-stat
+        hostPath:
+          path: /var/lib/lxcfs/proc/stat
+          type: File
+      - name: lxcfs-proc-uptime
+        hostPath:
+          path: /var/lib/lxcfs/proc/uptime
+          type: File
 
       # Security context
       securityContext:

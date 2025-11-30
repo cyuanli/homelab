@@ -99,6 +99,10 @@ install_container_runtime() {
     log_info "Enabling Docker service"
     ensure_service_enabled docker
 
+    log_info "Installing LXCFS for container resource visibility"
+    sudo apt install -y lxcfs
+    ensure_service_enabled lxcfs
+
     log_success "Docker installed successfully"
 }
 
