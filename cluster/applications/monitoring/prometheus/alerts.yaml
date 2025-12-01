@@ -67,13 +67,16 @@ data:
 
       # Pod alerts
       - alert: PodOOMKilled
-        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+        expr: |
+          kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          and
+          (time() - kube_pod_container_state_started) < 600
         for: 1m
         labels:
           severity: warning
         annotations:
           summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
-          description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} was killed due to out of memory. Consider increasing memory limits."
+          description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} was killed due to out of memory in the last 10 minutes. Consider increasing memory limits."
 
       - alert: PodCrashLooping
         expr: rate(kube_pod_container_status_restarts_total[15m]) > 0.01
@@ -83,6 +86,15 @@ data:
         annotations:
           summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
           description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been restarting frequently ({{ $value | humanize }} restarts/sec)."
+
+      - alert: PodFrequentRestarts
+        expr: increase(kube_pod_container_status_restarts_total[6h]) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} restarting frequently"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has restarted {{ $value }} times in the last 6 hours. May indicate memory leak or resource exhaustion."
 
       - alert: PodNotReady
         expr: kube_pod_status_phase{phase!~"Running|Succeeded"} > 0
