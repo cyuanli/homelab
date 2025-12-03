@@ -1,0 +1,60 @@
+---
+# Discord webhook relay service for Alertmanager
+# No official Helm chart available, so keeping as custom manifest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager-discord
+  namespace: monitoring
+  labels:
+    app: alertmanager-discord
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager-discord
+  template:
+    metadata:
+      labels:
+        app: alertmanager-discord
+    spec:
+      containers:
+      - name: alertmanager-discord
+        # No versioned releases available - using :latest with IfNotPresent policy
+        # Consider pinning to digest: docker pull benjojo/alertmanager-discord:latest && docker inspect --format='{{index .RepoDigests 0}}'
+        image: benjojo/alertmanager-discord:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: DISCORD_WEBHOOK
+          valueFrom:
+            secretKeyRef:
+              name: alertmanager-discord-webhook
+              key: webhook-url
+        ports:
+        - containerPort: 9094
+          name: http
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-discord
+  namespace: monitoring
+  labels:
+    app: alertmanager-discord
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9094
+    targetPort: 9094
+    protocol: TCP
+    name: http
+  selector:
+    app: alertmanager-discord

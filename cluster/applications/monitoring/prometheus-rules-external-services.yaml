@@ -1,0 +1,71 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: external-services-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: external_services
+    interval: 30s
+    rules:
+    # Service availability
+    - alert: ServiceDown
+      expr: probe_success{job="blackbox-http"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Service {{ $labels.instance }} is down"
+        description: "{{ $labels.instance }} has been unreachable for more than 2 minutes. HTTP probe failed."
+
+    - alert: ServiceDegraded
+      expr: probe_http_status_code{job="blackbox-http"} >= 500
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Service {{ $labels.instance }} returning errors"
+        description: "{{ $labels.instance }} is returning HTTP {{ $value }} for more than 2 minutes."
+
+    # Certificate expiration
+    - alert: SSLCertificateExpiringSoon
+      expr: (probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time()) / 86400 < 14
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "SSL certificate for {{ $labels.instance }} expires soon"
+        description: "Certificate for {{ $labels.instance }} expires in {{ $value | humanize }} days. Renewal should happen automatically."
+
+    - alert: SSLCertificateExpiringCritical
+      expr: (probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time()) / 86400 < 7
+      for: 1h
+      labels:
+        severity: critical
+      annotations:
+        summary: "SSL certificate for {{ $labels.instance }} expires in 7 days!"
+        description: "Certificate for {{ $labels.instance }} expires in {{ $value | humanize }} days. URGENT: Check Let's Encrypt renewal!"
+
+    - alert: SSLCertificateInvalid
+      expr: probe_ssl_earliest_cert_expiry{job="blackbox-http"} == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "SSL certificate invalid for {{ $labels.instance }}"
+        description: "{{ $labels.instance }} has an invalid SSL certificate or SSL handshake failed."
+
+    # Slow response time
+    - alert: ServiceSlowResponse
+      expr: probe_duration_seconds{job="blackbox-http"} > 5
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Slow response from {{ $labels.instance }}"
+        description: "{{ $labels.instance }} is responding slowly ({{ $value | humanize }}s). May indicate performance issues."

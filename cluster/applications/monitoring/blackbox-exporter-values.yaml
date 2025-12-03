@@ -1,0 +1,47 @@
+# Blackbox Exporter Helm values
+# Used for external HTTP endpoint monitoring
+
+config:
+  modules:
+    http_2xx:
+      prober: http
+      timeout: 10s
+      http:
+        valid_status_codes: [200, 401, 403]
+        follow_redirects: true
+        preferred_ip_protocol: "ip4"
+        fail_if_ssl: false
+        fail_if_not_ssl: true
+        tls_config:
+          insecure_skip_verify: false
+    http_2xx_no_auth:
+      prober: http
+      timeout: 10s
+      http:
+        valid_status_codes: [200]
+        follow_redirects: true
+        preferred_ip_protocol: "ip4"
+        fail_if_ssl: false
+        fail_if_not_ssl: true
+        tls_config:
+          insecure_skip_verify: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+serviceMonitor:
+  enabled: true
+  defaults:
+    labels:
+      release: kube-prometheus-stack
+
+# Service configuration
+service:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9115"

@@ -1,0 +1,98 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: system-monitoring-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: system_monitoring
+    interval: 30s
+    rules:
+    # Disk monitoring alerts
+    - alert: DiskMonitorFailed
+      expr: disk_monitor_status{type="overall"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Disk monitoring detected failure on {{ $labels.instance }}"
+        description: "Drive failure detected. Storage array may be locked down read-only."
+
+    - alert: DiskMonitorStale
+      expr: time() - disk_monitor_last_run_timestamp_seconds > 600
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Disk monitor hasn't run recently on {{ $labels.instance }}"
+        description: "Last run was {{ $value | humanizeDuration }} ago. Expected every 5 minutes."
+
+    - alert: DiskSmartFailure
+      expr: disk_smart_health == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "SMART health failure on {{ $labels.device }}"
+        description: "{{ $labels.type }} drive {{ $labels.device }} has failed SMART health checks on {{ $labels.instance }}."
+
+    - alert: DiskMountFailed
+      expr: disk_mount_accessible == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Mount point {{ $labels.mount }} not accessible"
+        description: "Mount point {{ $labels.mount }} is not accessible on {{ $labels.instance }}."
+
+    - alert: MergerFSDown
+      expr: disk_mergerfs_status == 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "MergerFS pool down on {{ $labels.instance }}"
+        description: "MergerFS mount {{ $labels.mount }} is not accessible on {{ $labels.instance }}."
+
+    # SnapRAID alerts
+    - alert: SnapRAIDFailed
+      expr: snapraid_last_run_status == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "SnapRAID sync failed on {{ $labels.instance }}"
+        description: "Last SnapRAID sync failed on {{ $labels.instance }}. Check /var/log/snapraid.log"
+
+    - alert: SnapRAIDStale
+      expr: time() - snapraid_last_run_timestamp_seconds > 172800
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "SnapRAID hasn't run in 2 days on {{ $labels.instance }}"
+        description: "Last SnapRAID sync was {{ $value | humanizeDuration }} ago. Expected daily."
+
+    # Borgmatic backup alerts
+    - alert: BorgmaticBackupFailed
+      expr: borgmatic_last_run_status == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Borgmatic backup failed on {{ $labels.instance }}"
+        description: "Last Borgmatic backup failed on {{ $labels.instance }}. Check logs with: journalctl -u borgmatic.service"
+
+    - alert: BorgmaticBackupStale
+      expr: time() - borgmatic_last_run_timestamp_seconds > 172800
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "No backup in 2 days on {{ $labels.instance }}"
+        description: "Last Borgmatic backup was {{ $value | humanizeDuration }} ago. Expected daily."
