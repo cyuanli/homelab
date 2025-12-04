@@ -77,7 +77,7 @@ prometheus:
             - https://alertmanager.cliff.li
             - https://drive.cliff.li
             - https://grafana.cliff.li
-            - https://immich.cliff.li
+            - https://photos.cliff.li
             - https://jellyfin.cliff.li
             - https://owntracks.cliff.li
             - https://prometheus.cliff.li

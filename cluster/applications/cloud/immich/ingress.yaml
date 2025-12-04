@@ -7,7 +7,6 @@ metadata:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
     traefik.ingress.kubernetes.io/redirect-entry-point: websecure
-    # Immich requires larger body size for photo uploads
     traefik.ingress.kubernetes.io/router.middlewares: cloud-immich-headers@kubernetescrd
   labels:
     app: immich
@@ -15,10 +14,10 @@ spec:
   ingressClassName: traefik
   tls:
   - hosts:
-    - immich.cliff.li
-    secretName: immich-tls
+    - photos.cliff.li
+    secretName: photos-tls
   rules:
-  - host: immich.cliff.li
+  - host: photos.cliff.li
     http:
       paths:
       - path: /

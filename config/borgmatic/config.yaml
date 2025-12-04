@@ -1,5 +1,6 @@
 source_directories:
   - /media/data/nextcloud/*/files
+  - /media/data/immich/library/library
 
 repositories:
   - path: ssh://cyl-optiplex9020/media/wd_elements/borg
