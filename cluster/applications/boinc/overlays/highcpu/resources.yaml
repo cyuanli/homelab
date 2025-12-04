@@ -16,4 +16,4 @@ spec:
             cpu: "500m"   # Equal weight to production workloads for fair sharing
             memory: 2Gi   # Low request for scheduling, configmap controls actual usage
           limits:
-            memory: 6Gi   # 6GB out of 8GB
+            memory: 4Gi   # 4GB safe limit for ~5GB allocatable nodes
