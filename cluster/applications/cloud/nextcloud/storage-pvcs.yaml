@@ -1,0 +1,15 @@
+---
+# Nextcloud user files PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-files
+  namespace: cloud
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-media
+  resources:
+    requests:
+      storage: 5Ti
+  volumeName: nextcloud-files

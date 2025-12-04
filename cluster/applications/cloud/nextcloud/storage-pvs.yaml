@@ -1,0 +1,22 @@
+---
+# Nextcloud user files storage
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nextcloud-files
+spec:
+  capacity:
+    storage: 5Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: nextcloud-files
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /nextcloud

@@ -631,15 +631,24 @@ sudo apt install -y nfs-kernel-server
 sudo systemctl enable --now nfs-kernel-server
 ```
 
-**Configure NFS Exports:**
+**Configure NFS Exports with Bind Mounts:**
+
+Our NFS setup uses `/exports` as the NFSv4 root with bind mounts for each service. This allows us to expose specific subdirectories with unique filesystem IDs.
+
 ```bash
 sudo nano /etc/exports
 ```
 
 Add the following (adjust the network range to match your LAN):
 ```bash
-# K3s cluster storage
-/media/data 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+# NFSv4 export root
+/exports 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+
+# Explicit subdirectory exports (bind mounts need explicit exports with fsid)
+/exports/media 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=1)
+/exports/configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
+/exports/immich 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=3)
+/exports/nextcloud 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=4)
 ```
 
 **Key export options explained:**
@@ -648,6 +657,40 @@ Add the following (adjust the network range to match your LAN):
 - `no_subtree_check` - Better performance, safe for single filesystem exports
 - `no_root_squash` - Preserve root permissions (needed for containers)
 - `fsid=0` - NFSv4 pseudo-root (allows relative paths in mounts)
+- `fsid=1,2,3...` - Unique filesystem IDs for each subdirectory export
+
+**Set up bind mounts:**
+
+Create the exports directory structure and bind mount your data:
+```bash
+# Create exports root
+sudo mkdir -p /exports
+
+# Create bind mount points
+sudo mkdir -p /exports/media /exports/configs /exports/immich /exports/nextcloud
+
+# Mount bind mounts
+sudo mount --bind /media/data /exports/media
+sudo mount --bind /media/data/k3s-configs /exports/configs
+sudo mount --bind /media/data/immich /exports/immich
+sudo mount --bind /media/data/nextcloud /exports/nextcloud
+```
+
+**Make bind mounts persistent:**
+
+Add to `/etc/fstab` so they survive reboots:
+```bash
+sudo nano /etc/fstab
+```
+
+Add these lines:
+```bash
+# NFS bind mounts for K3s cluster
+/media/data                /exports/media      none  bind  0  0
+/media/data/k3s-configs    /exports/configs    none  bind  0  0
+/media/data/immich         /exports/immich     none  bind  0  0
+/media/data/nextcloud      /exports/nextcloud  none  bind  0  0
+```
 
 **Apply the exports:**
 ```bash
@@ -746,21 +789,28 @@ sudo mkdir -p /media/data/k3s-configs/media-stack/{prowlarr-config,radarr-config
 
 ### NFSv4 Path Considerations
 
-**Important:** With `fsid=0` on the export, `/media/data` becomes the NFSv4 pseudo-root. All PV paths are relative to this root:
+**Important:** With `fsid=0` on `/exports`, it becomes the NFSv4 pseudo-root. All PV paths are relative to this root:
 
-- Export: `/media/data` with `fsid=0`
-- Physical path on server: `/media/data/media/movies`
-- Path in PV spec: `/media/movies` (relative)
+- Export root: `/exports` with `fsid=0`
+- Subdirectory export: `/exports/immich` with `fsid=3`
+- Physical path on server: `/media/data/immich/library` (via bind mount)
+- Path in PV spec: `/immich/library` (relative to /exports)
+
+**Why use bind mounts?**
+- **Isolation**: Each service gets its own export with unique fsid
+- **Flexibility**: Can remap physical paths without changing Kubernetes configs
+- **Organization**: Clean namespace under `/exports` for NFS clients
+- **Compatibility**: Works around NFSv4 crossing filesystem boundaries
 
 **Example PV configuration:**
 ```yaml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: media-movies
+  name: immich-library
 spec:
   capacity:
-    storage: 2Ti
+    storage: 5Ti
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
@@ -770,11 +820,93 @@ spec:
     - hard
   csi:
     driver: nfs.csi.k8s.io
-    volumeHandle: media-movies
+    volumeHandle: immich-library
     volumeAttributes:
       server: 192.168.1.94
-      share: /media/movies  # Relative to export root
+      share: /immich/library  # Relative to /exports root
 ```
+
+### Adding New Services to NFS
+
+When you need to add a new service (like we did with Nextcloud), follow these steps:
+
+**1. Create the data directory on the storage node:**
+```bash
+sudo mkdir -p /media/data/myservice
+sudo chown -R appropriate_user:appropriate_group /media/data/myservice
+```
+
+**2. Create bind mount point:**
+```bash
+sudo mkdir -p /exports/myservice
+```
+
+**3. Create the bind mount:**
+```bash
+sudo mount --bind /media/data/myservice /exports/myservice
+```
+
+**4. Make it persistent in `/etc/fstab`:**
+```bash
+echo "/media/data/myservice /exports/myservice none bind 0 0" | sudo tee -a /etc/fstab
+```
+
+**5. Add export to `/etc/exports`:**
+```bash
+sudo nano /etc/exports
+```
+Add a new line with the next available fsid:
+```bash
+/exports/myservice 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=5)
+```
+
+**6. Apply the new export:**
+```bash
+sudo exportfs -ra
+sudo exportfs -v  # Verify it appears
+```
+
+**7. Update the tracked exports file in your repo:**
+```bash
+# Copy to version control
+sudo cp /etc/exports config/system-configs/exports
+git add config/system-configs/exports
+```
+
+**8. Create Kubernetes PV and PVC:**
+Create `storage-pvs.yaml` and `storage-pvcs.yaml` for your service:
+```yaml
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: myservice-data
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: myservice-data
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /myservice  # Relative to /exports
+```
+
+**Example: Nextcloud Migration**
+
+When we migrated Nextcloud from hostPath to NFS, we:
+1. Created bind mount: `/media/data/nextcloud` → `/exports/nextcloud`
+2. Added export with `fsid=4`
+3. Created PV pointing to `/nextcloud` (shares the physical `/media/data/nextcloud` via bind mount)
+4. Changed deployment from `hostPath` to `persistentVolumeClaim`
+5. Removed node affinity constraint (pod can now run on any node)
 
 ### Troubleshooting
 

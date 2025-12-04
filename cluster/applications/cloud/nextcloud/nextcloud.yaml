@@ -90,23 +90,13 @@ spec:
           limits:
             cpu: 1000m
             memory: 1Gi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - cyl-homelab
       volumes:
       - name: nextcloud-data
         persistentVolumeClaim:
           claimName: nextcloud-data
       - name: nextcloud-files
-        hostPath:
-          path: /media/data/nextcloud
-          type: Directory
+        persistentVolumeClaim:
+          claimName: nextcloud-files
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
