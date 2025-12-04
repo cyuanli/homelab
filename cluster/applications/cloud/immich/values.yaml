@@ -35,6 +35,14 @@ server:
   image:
     repository: ghcr.io/immich-app/immich-server
     pullPolicy: IfNotPresent
+  controllers:
+    main:
+      containers:
+        main:
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
 
   ingress:
     main:
@@ -42,6 +50,14 @@ server:
 
 machine-learning:
   enabled: true
+  controllers:
+    main:
+      containers:
+        main:
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1536Mi
   persistence:
     cache:
       enabled: true
