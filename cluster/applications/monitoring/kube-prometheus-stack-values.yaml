@@ -202,7 +202,26 @@ grafana:
       memory: 1Gi
 
 # Node Exporter configuration
-nodeExporter: {}
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      # Attach node metadata to enable hostname labeling
+      attachMetadata:
+        node: true
+      # Relabel configs to use node name as instance
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          separator: ;
+          regex: ^(.*)$
+          targetLabel: instance
+          replacement: $1
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          separator: ;
+          regex: ^(.*)$
+          targetLabel: node
+          replacement: $1
+          action: replace
 
 # Kube-State-Metrics configuration
 kubeStateMetrics: {}
