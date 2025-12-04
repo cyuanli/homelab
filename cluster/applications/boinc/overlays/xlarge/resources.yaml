@@ -16,4 +16,4 @@ spec:
             cpu: "500m"    # Equal weight to production workloads for fair sharing
             memory: 2Gi    # Low request for scheduling, configmap controls actual usage
           limits:
-            memory: 12Gi   # 12GB out of 16GB
+            memory: 8Gi   # 8GB conservative limit with headroom for other workloads
