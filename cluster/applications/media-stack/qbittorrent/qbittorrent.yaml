@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
       - name: qbittorrent
-        image: lscr.io/linuxserver/qbittorrent:latest
+        # Pinned to ls428 - ls430+ has critical OOM issues during startup
+        image: lscr.io/linuxserver/qbittorrent@sha256:26a08cd60d81e632aba8947b2c64dfd5f870a5f4a837ec4abedf2e1d174df891
         env:
         - name: PUID
           value: "1000"
