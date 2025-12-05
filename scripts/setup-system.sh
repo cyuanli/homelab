@@ -166,6 +166,7 @@ configure_firewall() {
         sudo ufw allow from "$VPS_IP" to any port 80,443 proto tcp
         sudo ufw allow from "$VPS_IP" to any port 443 proto udp
         sudo ufw allow from "$VPS_IP" to any port 22 proto tcp
+        sudo ufw allow from "$VPS_IP" to any port 25565 proto tcp  # Minecraft
     fi
 
     # Allow K3s ports for cluster communication
@@ -181,9 +182,10 @@ configure_firewall() {
     log_info "Allowing monitoring ports"
     sudo ufw allow from "$lan_cidr" to any port 9100 proto tcp
 
-    # Allow HTTP/HTTPS for services
+    # Allow HTTP/HTTPS/Minecraft for services
     sudo ufw allow 80/tcp
     sudo ufw allow 443/tcp
+    sudo ufw allow 25565/tcp  # Minecraft
 
     # Enable firewall
     sudo ufw --force enable

@@ -1,0 +1,38 @@
+---
+# NFS PersistentVolume for Traefik ACME certificates
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: traefik-acme-nfs
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: traefik-acme-nfs
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/traefik/acme
+
+---
+# PersistentVolumeClaim for ACME certificates
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: traefik-acme-nfs
+  namespace: infrastructure
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-media
+  volumeName: traefik-acme-nfs
+  resources:
+    requests:
+      storage: 1Gi

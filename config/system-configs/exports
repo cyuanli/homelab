@@ -16,4 +16,5 @@
 /exports/configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
 /exports/immich 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=3)
 /exports/nextcloud 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=4)
+/exports/games 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=5)
 

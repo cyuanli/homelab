@@ -1,0 +1,63 @@
+# Minecraft Fabric Server - Helm Values
+# Chart: itzg/minecraft
+
+minecraftServer:
+  # Accept EULA
+  eula: true
+
+  # Server version and type
+  version: "LATEST"
+  type: "FABRIC"
+
+  # Server properties
+  difficulty: normal
+  maxPlayers: 20
+  motd: "Cliff's Magical World"
+  mode: survival
+  pvp: true
+  onlineMode: true
+
+  # Modrinth mods to install
+  modrinth:
+    projects:
+      - ferrite-core
+      - lithium
+
+  # World settings
+  levelSeed: ""
+  viewDistance: 10
+
+  # Server performance
+  memory: 4G
+
+  # Network service type
+  serviceType: LoadBalancer
+
+# Resource requests - no limits to allow bursting
+resources:
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+# Storage - Local SSD for performance
+persistence:
+  storageClass: local-path
+  dataDir:
+    enabled: true
+    Size: 50Gi
+
+# Pin to cyl-mitx node for consistent local storage
+nodeSelector:
+  kubernetes.io/hostname: cyl-mitx
+
+# Ensure pod stays on same node (required for local-path)
+tolerations: []
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - cyl-mitx

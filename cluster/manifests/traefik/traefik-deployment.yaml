@@ -1,12 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: traefik
   namespace: infrastructure
   labels:
     app: traefik
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: traefik
@@ -28,6 +27,9 @@ spec:
         - name: websecure
           containerPort: 443
           hostPort: 443
+        - name: minecraft
+          containerPort: 25565
+          hostPort: 25565
         - name: admin
           containerPort: 8080
           hostPort: 8080
@@ -62,7 +64,7 @@ spec:
           name: traefik-config
       - name: acme
         persistentVolumeClaim:
-          claimName: traefik-acme
+          claimName: traefik-acme-nfs
       nodeSelector:
         kubernetes.io/arch: amd64
         node-role.kubernetes.io/control-plane: "true"
@@ -72,4 +74,8 @@ spec:
         effect: NoSchedule
       - key: node-role.kubernetes.io/control-plane
         operator: Equal
+        effect: NoSchedule
+      - key: workload
+        operator: Equal
+        value: essential-only
         effect: NoSchedule

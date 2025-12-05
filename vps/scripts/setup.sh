@@ -91,11 +91,13 @@ UPSTREAM_HTTPS=""
 UPSTREAM_HTTP3=""
 UPSTREAM_HTTP=""
 UPSTREAM_SSH=""
+UPSTREAM_MINECRAFT=""
 
 for ip in "${PC_IPS[@]}"; do
     UPSTREAM_HTTPS+="    server $ip:443 max_fails=2 fail_timeout=5s;\n"
     UPSTREAM_HTTP3+="    server $ip:443 max_fails=2 fail_timeout=5s;\n"
     UPSTREAM_HTTP+="    server $ip:80 max_fails=2 fail_timeout=5s;\n"
+    UPSTREAM_MINECRAFT+="    server $ip:25565 max_fails=2 fail_timeout=5s;\n"
 done
 
 # SSH uses only the first backend (no load balancing needed)
@@ -122,6 +124,7 @@ sed -e "s|{{UPSTREAM_HTTPS}}|$UPSTREAM_HTTPS|g" \
     -e "s|{{UPSTREAM_HTTP3}}|$UPSTREAM_HTTP3|g" \
     -e "s|{{UPSTREAM_HTTP}}|$UPSTREAM_HTTP|g" \
     -e "s|{{UPSTREAM_SSH}}|$UPSTREAM_SSH|g" \
+    -e "s|{{UPSTREAM_MINECRAFT}}|$UPSTREAM_MINECRAFT|g" \
     "$TEMPLATE_FILE" > "$NGINX_CONF"
 
 # -----------------------------
@@ -137,6 +140,7 @@ PORTS=(
   [443]="tcp"
   [443_udp]="udp"
   [51422]="tcp"
+  [25565]="tcp"
 )
 
 # Apply rules

@@ -14,6 +14,9 @@ spec:
   - port: 443
     name: websecure
     targetPort: websecure
+  - port: 25565
+    name: minecraft
+    targetPort: minecraft
   - port: 8080
     name: admin
     targetPort: admin

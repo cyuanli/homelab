@@ -65,6 +65,7 @@ setup_nfs_server() {
 configure_nfs_exports() {
     local data_root="${DATA_ROOT:-/media/data}"
     local configs_root="${K3S_CONFIGS_ROOT:-/srv/k3s-configs}"
+    local games_root="${GAMES_ROOT:-/media/data/games}"
     local exports_root="/exports"
 
     # Check required directories exist
@@ -76,6 +77,12 @@ configure_nfs_exports() {
         fi
     done
 
+    # Create games directory if it doesn't exist
+    if [[ ! -d "$games_root" ]]; then
+        log_info "Creating games directory: $games_root"
+        sudo mkdir -p "$games_root"
+    fi
+
     log_info "Setting up NFSv4 bind mount structure"
 
     # Create exports root
@@ -85,7 +92,18 @@ configure_nfs_exports() {
     fi
 
     # Create bind mount points
-    sudo mkdir -p "$exports_root/media" "$exports_root/configs"
+    sudo mkdir -p "$exports_root/media" "$exports_root/configs" "$exports_root/games"
+
+    # Create required subdirectories for services
+    log_info "Creating service directories"
+    sudo mkdir -p "$configs_root/traefik/acme"
+    sudo mkdir -p "$games_root/minecraft/backups"
+
+    # Set proper permissions
+    sudo chown -R nobody:nogroup "$configs_root/traefik"
+    sudo chmod -R 755 "$configs_root/traefik"
+    sudo chown -R nobody:nogroup "$games_root"
+    sudo chmod -R 755 "$games_root"
 
     # Set up bind mounts
     log_info "Configuring bind mounts"
@@ -101,6 +119,11 @@ configure_nfs_exports() {
         echo "$configs_root $exports_root/configs none bind 0 0" | sudo tee -a /etc/fstab >/dev/null
     fi
 
+    if ! grep -q "$games_root $exports_root/games" /etc/fstab; then
+        log_info "Adding bind mount for $games_root"
+        echo "$games_root $exports_root/games none bind 0 0" | sudo tee -a /etc/fstab >/dev/null
+    fi
+
     # Mount bind mounts if not already mounted
     if ! mountpoint -q "$exports_root/media"; then
         log_info "Mounting $exports_root/media"
@@ -110,6 +133,11 @@ configure_nfs_exports() {
     if ! mountpoint -q "$exports_root/configs"; then
         log_info "Mounting $exports_root/configs"
         sudo mount --bind "$configs_root" "$exports_root/configs"
+    fi
+
+    if ! mountpoint -q "$exports_root/games"; then
+        log_info "Mounting $exports_root/games"
+        sudo mount --bind "$games_root" "$exports_root/games"
     fi
 
     log_info "Copying NFS exports configuration from config/system-configs/exports"

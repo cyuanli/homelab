@@ -1,0 +1,82 @@
+---
+# Kubernetes CronJob for backing up Minecraft world data
+# Runs daily at 1 AM UTC, keeps last 7 daily backups
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: minecraft-backup
+  namespace: games
+spec:
+  # Run daily at 1 AM
+  schedule: "0 1 * * *"
+
+  # Keep last 3 successful jobs for history
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: minecraft-backup
+        spec:
+          restartPolicy: OnFailure
+
+          # Run on cyl-mitx to access local-path storage
+          nodeSelector:
+            kubernetes.io/hostname: cyl-mitx
+
+          containers:
+          - name: backup
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Install rsync
+              apk add --no-cache rsync
+
+              # Create dated backup directory
+              BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
+              BACKUP_DIR="/backups/daily/$BACKUP_DATE"
+
+              echo "Starting backup to $BACKUP_DIR"
+              mkdir -p "$BACKUP_DIR"
+
+              # Sync world data to backup location
+              # --archive: preserve permissions, timestamps, etc.
+              # --delete: remove files in backup that no longer exist in source
+              rsync -av --delete /data/ "$BACKUP_DIR/"
+
+              echo "Backup completed: $BACKUP_DIR"
+
+              # Keep only last 7 daily backups
+              echo "Cleaning up old backups (keeping last 7)..."
+              cd /backups/daily
+              ls -1t | tail -n +8 | xargs -r rm -rf
+
+              echo "Backup rotation complete"
+              ls -lth /backups/daily/
+
+            volumeMounts:
+            - name: minecraft-data
+              mountPath: /data
+              readOnly: true
+            - name: minecraft-backups
+              mountPath: /backups
+
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+
+          volumes:
+          - name: minecraft-data
+            persistentVolumeClaim:
+              claimName: minecraft-minecraft-datadir
+          - name: minecraft-backups
+            persistentVolumeClaim:
+              claimName: minecraft-backups

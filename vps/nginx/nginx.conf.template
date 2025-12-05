@@ -31,6 +31,10 @@ stream {
 {{UPSTREAM_SSH}}
   }
 
+  upstream minecraft_backend {
+{{UPSTREAM_MINECRAFT}}
+  }
+
   # TCP 443 → Traefik (HTTPS)
   server {
     listen 443;
@@ -67,6 +71,15 @@ stream {
     proxy_pass ssh_backend;
     proxy_connect_timeout 5s;
     proxy_timeout 10m;
+  }
+
+  # Minecraft TCP passthrough
+  server {
+    listen 25565;
+    listen [::]:25565;
+    proxy_pass minecraft_backend;
+    proxy_connect_timeout 5s;
+    proxy_timeout 30m;
   }
 }
 

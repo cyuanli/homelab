@@ -15,17 +15,13 @@ data:
         proxyProtocol:
           trustedIPs:
             - "100.121.249.71/32"
-        http:
-          redirections:
-            entrypoint:
-              to: websecure
-              scheme: https
-              permanent: true
       websecure:
         address: ":443"
         proxyProtocol:
           trustedIPs:
             - "100.121.249.71/32"
+      minecraft:
+        address: ":25565"
       traefik:
         address: ":8080"
 
