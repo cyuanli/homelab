@@ -1,0 +1,47 @@
+---
+# PVC for Immich thumbnails
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-thumbs
+  namespace: cloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: immich-thumbs
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# PVC for Immich encoded videos
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-encoded-video
+  namespace: cloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: immich-encoded-video
+  resources:
+    requests:
+      storage: 30Gi
+
+---
+# PVC for Immich profile pictures
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-profile
+  namespace: cloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: immich-profile
+  resources:
+    requests:
+      storage: 1Gi

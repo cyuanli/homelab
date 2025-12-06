@@ -14,18 +14,3 @@ spec:
     requests:
       storage: 5Ti
 
----
-# Immich config
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: immich-config
-  namespace: cloud
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: nfs-media
-  volumeName: immich-config
-  resources:
-    requests:
-      storage: 10Gi

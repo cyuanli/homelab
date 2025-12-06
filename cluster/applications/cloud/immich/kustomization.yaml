@@ -9,6 +9,8 @@ resources:
   - redis.yaml
   - storage-pvs.yaml
   - storage-pvcs.yaml
+  - storage-cache-pvs.yaml
+  - storage-cache-pvcs.yaml
   - middleware.yaml
   - ingress.yaml
 

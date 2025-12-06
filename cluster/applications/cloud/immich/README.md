@@ -6,17 +6,28 @@ Immich is a high-performance self-hosted photo and video management solution, si
 
 - **Database**: PostgreSQL 16 with pgvecto-rs extension (for ML features)
 - **Cache**: Redis 7.2
-- **Storage**: NFS-backed persistent storage
-  - Library: `/media/data/immich/library` (exported via `/exports/immich`)
-  - Config: `/media/data/immich/config`
+- **Storage**: Split storage for optimal performance
+  - **Photo Library** (HDD): `/media/data/immich/library` - exported via NFS as `192.168.1.94:/immich/library`
+  - **Thumbnails** (SSD): `/srv/app-storage/immich/thumbs` - exported via NFS as `192.168.1.94:/configs/immich/thumbs`
+  - **Encoded Video** (SSD): `/srv/app-storage/immich/encoded-video` - exported via NFS as `192.168.1.94:/configs/immich/encoded-video`
+  - **Profile Pictures** (SSD): `/srv/app-storage/immich/profile` - exported via NFS as `192.168.1.94:/configs/immich/profile`
 - **Deployment**: Helm chart from official Immich repository
 
 ## Storage Setup
 
-The storage is set up with mergerFS support:
-- Local path: `/media/data/immich/`
-- NFS export: `/exports/immich` (bind mount)
-- NFS share accessible at: `192.168.1.94:/immich`
+Immich uses a **split storage architecture** for optimal performance:
+
+### HDD Storage (mergerFS pool - 6.8TB)
+- **Photo/Video Library**: Large media files, read-heavy workload
+- **User Uploads**: Infrequent writes
+- **Backups**: Periodic writes
+
+### SSD Storage (/srv/app-storage - 432GB)
+- **Thumbnails**: ~7GB, frequent generation during photo processing
+- **Encoded Videos**: ~15GB, frequent transcoding operations
+- **Profile Pictures**: Minimal size, occasional writes
+
+This configuration reduces HDD wear by moving ~22GB of high-frequency write operations to SSD while keeping the bulk photo library on cost-effective HDD storage
 
 ## Pre-Deployment Steps
 
@@ -39,14 +50,20 @@ Run the deployment script:
 
 ### Manual Deployment
 
-1. **Apply supporting resources**:
+1. **Apply all resources using Kustomize**:
    ```bash
-   kubectl apply -f cluster/applications/media-stack/immich/secrets.yaml
-   kubectl apply -f cluster/applications/media-stack/immich/storage-pvs.yaml
-   kubectl apply -f cluster/applications/media-stack/immich/storage-pvcs.yaml
-   kubectl apply -f cluster/applications/media-stack/immich/postgres.yaml
-   kubectl apply -f cluster/applications/media-stack/immich/redis.yaml
-   kubectl apply -f cluster/applications/media-stack/immich/middleware.yaml
+   kubectl apply -k cluster/applications/cloud/immich/
+   ```
+
+   Or manually:
+   ```bash
+   kubectl apply -f cluster/applications/cloud/immich/secrets.yaml
+   kubectl apply -f cluster/applications/cloud/immich/storage-pvs.yaml
+   kubectl apply -f cluster/applications/cloud/immich/storage-pvcs.yaml
+   kubectl apply -f cluster/applications/cloud/immich/storage-cache-pvs.yaml
+   kubectl apply -f cluster/applications/cloud/immich/storage-cache-pvcs.yaml
+   kubectl apply -f cluster/applications/cloud/immich/postgres.yaml
+   kubectl apply -f cluster/applications/cloud/immich/redis.yaml
    ```
 
 2. **Deploy Immich via Helm**:
@@ -55,14 +72,14 @@ Run the deployment script:
    helm repo update
 
    helm upgrade --install immich immich/immich \
-       --namespace media \
-       --values cluster/applications/media-stack/immich/values.yaml \
+       --namespace cloud \
+       --values cluster/applications/cloud/immich/values.yaml \
        --wait
    ```
 
 3. **Apply ingress**:
    ```bash
-   kubectl apply -f cluster/applications/media-stack/ingress.yaml
+   kubectl apply -f cluster/applications/cloud/immich/ingress.yaml
    ```
 
 ## Access
@@ -98,8 +115,8 @@ Machine learning is **disabled by default** to save resources. To enable:
 2. Upgrade the Helm release:
    ```bash
    helm upgrade immich immich/immich \
-       --namespace media \
-       --values cluster/applications/media-stack/immich/values.yaml
+       --namespace cloud \
+       --values cluster/applications/cloud/immich/values.yaml
    ```
 
 ## Monitoring
@@ -107,16 +124,16 @@ Machine learning is **disabled by default** to save resources. To enable:
 Check deployment status:
 ```bash
 # View all Immich pods
-kubectl get pods -n media -l app.kubernetes.io/name=immich
+kubectl get pods -n cloud -l app.kubernetes.io/instance=immich
 
 # View logs
-kubectl logs -n media -l app.kubernetes.io/name=immich-server -f
+kubectl logs -n cloud deploy/immich-server -f
 
 # Check PostgreSQL
-kubectl logs -n media -l app=immich-postgres
+kubectl logs -n cloud immich-postgres-0
 
 # Check Redis
-kubectl logs -n media -l app=immich-redis
+kubectl logs -n cloud deploy/immich-redis
 ```
 
 ## Maintenance
@@ -124,9 +141,12 @@ kubectl logs -n media -l app=immich-redis
 ### Backup
 
 Important data to backup:
-- PostgreSQL database: `immich-postgres-0` PVC
-- Photo library: `/media/data/immich/library`
-- Config: `/media/data/immich/config`
+- PostgreSQL database: `immich-postgres-0` PVC (local-path storage)
+- Photo library: `/media/data/immich/library` (HDD)
+- SSD cache (optional, can be regenerated):
+  - `/srv/app-storage/immich/thumbs`
+  - `/srv/app-storage/immich/encoded-video`
+  - `/srv/app-storage/immich/profile`
 
 ### Upgrade
 
@@ -134,39 +154,42 @@ Update to the latest Immich version:
 ```bash
 helm repo update
 helm upgrade immich immich/immich \
-    --namespace media \
-    --values cluster/applications/media-stack/immich/values.yaml
+    --namespace cloud \
+    --values cluster/applications/cloud/immich/values.yaml
 ```
 
 ## Troubleshooting
 
 ### Pod not starting
 ```bash
-kubectl describe pod -n media -l app.kubernetes.io/name=immich-server
-kubectl logs -n media -l app.kubernetes.io/name=immich-server
+kubectl describe pod -n cloud -l app.kubernetes.io/instance=immich
+kubectl logs -n cloud deploy/immich-server
 ```
 
 ### Database connection issues
 ```bash
 # Check PostgreSQL is running
-kubectl get pods -n media -l app=immich-postgres
+kubectl get pods -n cloud -l app=immich-postgres
 
 # Check PostgreSQL logs
-kubectl logs -n media immich-postgres-0
+kubectl logs -n cloud immich-postgres-0
 
 # Test database connectivity
-kubectl exec -n media immich-postgres-0 -- psql -U immich -d immich -c "SELECT version();"
+kubectl exec -n cloud immich-postgres-0 -- psql -U immich -d immich -c "SELECT version();"
 ```
 
 ### Storage issues
 ```bash
-# Check PVCs
-kubectl get pvc -n media | grep immich
+# Check PVCs (should show library + 3 cache PVCs)
+kubectl get pvc -n cloud | grep immich
 
 # Check PVs
 kubectl get pv | grep immich
 
-# Verify NFS mount on node
+# Verify mounts inside container
+kubectl exec -n cloud deploy/immich-server -- df -h | grep /data
+
+# Check NFS exports
 showmount -e 192.168.1.94
 ```
 

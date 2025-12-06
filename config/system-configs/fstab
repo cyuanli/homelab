@@ -18,5 +18,5 @@ UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodir
 
 # NFS export bind mounts (NFSv4 requires single root with fsid=0)
 /media/data /exports/media none bind 0 0
-/srv/k3s-configs /exports/configs none bind 0 0
+/srv/app-storage /exports/configs none bind 0 0
 /media/data/games /exports/games none bind 0 0

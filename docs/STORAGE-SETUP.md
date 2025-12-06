@@ -671,7 +671,7 @@ sudo mkdir -p /exports/media /exports/configs /exports/immich /exports/nextcloud
 
 # Mount bind mounts
 sudo mount --bind /media/data /exports/media
-sudo mount --bind /media/data/k3s-configs /exports/configs
+sudo mount --bind /srv/app-storage /exports/configs
 sudo mount --bind /media/data/immich /exports/immich
 sudo mount --bind /media/data/nextcloud /exports/nextcloud
 ```
@@ -687,7 +687,7 @@ Add these lines:
 ```bash
 # NFS bind mounts for K3s cluster
 /media/data                /exports/media      none  bind  0  0
-/media/data/k3s-configs    /exports/configs    none  bind  0  0
+/srv/app-storage           /exports/configs    none  bind  0  0
 /media/data/immich         /exports/immich     none  bind  0  0
 /media/data/nextcloud      /exports/nextcloud  none  bind  0  0
 ```
@@ -783,8 +783,9 @@ Ensure these directories exist on the storage node:
 ```bash
 sudo mkdir -p /media/data/media/{movies,tv,music}
 sudo mkdir -p /media/data/downloads
-sudo mkdir -p /media/data/k3s-configs/media-stack/{jellyfin-config,jellyfin-cache}
-sudo mkdir -p /media/data/k3s-configs/media-stack/{prowlarr-config,radarr-config,sonarr-config,qbittorrent-config}
+sudo mkdir -p /srv/app-storage/media-stack/{jellyfin-config,jellyfin-cache}
+sudo mkdir -p /srv/app-storage/media-stack/{prowlarr-config,radarr-config,sonarr-config,qbittorrent-config}
+sudo mkdir -p /srv/app-storage/immich/{thumbs,encoded-video,profile}
 ```
 
 ### NFSv4 Path Considerations

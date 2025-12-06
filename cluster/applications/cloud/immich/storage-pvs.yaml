@@ -21,25 +21,3 @@ spec:
       server: 192.168.1.94
       share: /immich/library
 
----
-# Immich config
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: immich-config
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
-  mountOptions:
-    - nfsvers=4.1
-    - hard
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: immich-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /immich/config

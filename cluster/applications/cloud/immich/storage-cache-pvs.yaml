@@ -1,0 +1,68 @@
+---
+# Immich thumbnails on SSD (/srv/app-storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-thumbs
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: immich-thumbs
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/immich/thumbs
+
+---
+# Immich encoded videos on SSD (/srv/app-storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-encoded-video
+spec:
+  capacity:
+    storage: 30Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: immich-encoded-video
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/immich/encoded-video
+
+---
+# Immich profile pictures on SSD (/srv/app-storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-profile
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: immich-profile
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/immich/profile

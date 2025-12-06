@@ -64,7 +64,7 @@ setup_nfs_server() {
 
 configure_nfs_exports() {
     local data_root="${DATA_ROOT:-/media/data}"
-    local configs_root="${K3S_CONFIGS_ROOT:-/srv/k3s-configs}"
+    local configs_root="${APP_STORAGE_ROOT:-/srv/app-storage}"
     local games_root="${GAMES_ROOT:-/media/data/games}"
     local exports_root="/exports"
 
@@ -227,7 +227,7 @@ ${BLUE}Next steps:${NC}
 
 1. If this is the storage node, ensure data directories exist:
    ${CYAN}sudo mkdir -p ${DATA_ROOT:-/media/data}/{media/{movies,tv,music},downloads}${NC}
-   ${CYAN}sudo mkdir -p ${DATA_ROOT:-/media/data}/k3s-configs/media-stack${NC}
+   ${CYAN}sudo mkdir -p /srv/app-storage/{media-stack,immich}${NC}
 
 2. Deploy NFS CSI driver to K3s cluster:
    ${CYAN}kubectl apply -f cluster/infrastructure/csi-driver-nfs/${NC}
