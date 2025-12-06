@@ -17,9 +17,8 @@ prometheus:
     ingressClassName: traefik
     annotations:
       traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-      traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
-      traefik.ingress.kubernetes.io/redirect-entry-point: websecure
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-prometheus-auth@kubernetescrd
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       - prometheus.cliff.li
     paths:
@@ -102,9 +101,8 @@ alertmanager:
     ingressClassName: traefik
     annotations:
       traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-      traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
-      traefik.ingress.kubernetes.io/redirect-entry-point: websecure
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-prometheus-auth@kubernetescrd
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       - alertmanager.cliff.li
     paths:
@@ -162,8 +160,7 @@ grafana:
     ingressClassName: traefik
     annotations:
       traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-      traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
-      traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       - grafana.cliff.li
     path: /

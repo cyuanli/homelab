@@ -1,0 +1,59 @@
+---
+# Let's Encrypt Staging Issuer (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app.kubernetes.io/component: certificate-management
+    app.kubernetes.io/part-of: homelab
+spec:
+  acme:
+    # Staging API for testing
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: cliff.li@cliff.li
+
+    # Store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+
+    # Use HTTP-01 challenge
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: traefik
+          # Set high priority so challenge ingress takes precedence over PathPrefix: / routes
+          ingressTemplate:
+            metadata:
+              annotations:
+                traefik.ingress.kubernetes.io/router.priority: "100"
+
+---
+# Let's Encrypt Production Issuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production
+  labels:
+    app.kubernetes.io/component: certificate-management
+    app.kubernetes.io/part-of: homelab
+spec:
+  acme:
+    # Production API
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: cliff.li@cliff.li
+
+    # Store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-production-account-key
+
+    # Use HTTP-01 challenge
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: traefik
+          # Set high priority so challenge ingress takes precedence over PathPrefix: / routes
+          ingressTemplate:
+            metadata:
+              annotations:
+                traefik.ingress.kubernetes.io/router.priority: "100"

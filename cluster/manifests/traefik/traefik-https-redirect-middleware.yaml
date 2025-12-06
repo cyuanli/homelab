@@ -1,0 +1,13 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: infrastructure
+  labels:
+    app.kubernetes.io/component: networking
+    app.kubernetes.io/part-of: homelab
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

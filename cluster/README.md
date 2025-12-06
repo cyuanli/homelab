@@ -127,7 +127,7 @@ kubectl create secret generic app-secret \
 The cluster uses local storage with the following directories:
 
 **K8s Persistent Storage** (`/opt/k3s-storage/`)
-- `traefik-acme/` - SSL certificates
+- `cert-manager/` - SSL certificate management
 - `nextcloud-data/` - Nextcloud application data
 - `nextcloud-files/` - User files
 - `postgres-data/` - Database storage
@@ -155,7 +155,7 @@ kubectl get storageclass
 
 ### Ingress
 
-Traefik handles ingress with automatic HTTPS via Let's Encrypt:
+Traefik handles ingress with automatic HTTPS via cert-manager and Let's Encrypt:
 
 ```yaml
 # Example ingress configuration
@@ -165,9 +165,10 @@ metadata:
   name: jellyfin
   namespace: media
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    cert-manager.io/cluster-issuer: letsencrypt-production
 spec:
+  ingressClassName: traefik
   rules:
   - host: jellyfin.your-domain.com
     http:
@@ -208,7 +209,7 @@ spec:
 
 - **VPS Proxy**: Nginx on VPS forwards traffic via Tailscale
 - **Direct Access**: Services accessible on cluster nodes (for internal use)
-- **SSL Termination**: Let's Encrypt certificates via Traefik
+- **SSL Termination**: Let's Encrypt certificates via cert-manager
 
 ## Security
 
@@ -337,11 +338,14 @@ kubectl exec -it -n utilities deployment/whoami -- curl http://jellyfin.media:80
 kubectl get certificates -A
 kubectl describe certificate <cert-name> -n <namespace>
 
-# Check Traefik logs
-kubectl logs -n kube-system deployment/traefik
+# Check cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager
+
+# Check ACME challenges
+kubectl get challenges -A
 
 # Force certificate renewal
-kubectl delete certificate <cert-name> -n <namespace>
+kubectl delete certificaterequest -n <namespace> <cert-request-name>
 ```
 
 ### Debug Commands

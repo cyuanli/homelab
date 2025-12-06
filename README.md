@@ -8,7 +8,8 @@ A complete homelab infrastructure combining K3s cluster for applications with VP
 - **K3s Cluster**: Lightweight Kubernetes with HA control plane (3 nodes with embedded etcd)
 - **VPS Proxy**: Nginx-based reverse proxy with load balancing across control planes
 - **Tailscale**: Zero-config VPN mesh network connecting all nodes
-- **Traefik**: K8s ingress controller with automatic SSL certificates
+- **Traefik**: K8s ingress controller with TLS termination
+- **cert-manager**: Automatic SSL certificate management via Let's Encrypt
 - **Storage**: Local persistent volumes with health monitoring
 
 ### Network Flow
@@ -284,7 +285,7 @@ Location tracking with MQTT broker
 ├── nextcloud-data/       # Nextcloud app data
 ├── nextcloud-files/      # User files
 ├── postgres-data/        # Database storage
-└── traefik-acme/         # SSL certificates
+└── cert-manager/         # SSL certificate management
 ```
 
 ### Storage Monitoring
@@ -305,7 +306,7 @@ The monitoring system:
 
 ### External Access
 - **VPS Proxy**: Nginx on VPS forwards traffic via Tailscale
-- **SSL Termination**: Let's Encrypt certificates via Traefik
+- **SSL Termination**: Let's Encrypt certificates via cert-manager
 - **Authentication**: HTTP Basic Auth for admin interfaces
 - **DNS**: A records for each service subdomain
 
@@ -359,11 +360,17 @@ curl -I http://<VPS_TAILSCALE_IP>
 # Check certificate status
 kubectl get certificates -A
 
-# View Traefik logs
-kubectl logs -n kube-system deployment/traefik
+# Check cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager
 
-# Force certificate refresh
-kubectl delete certificate -n <namespace> <cert-name>
+# View certificate details and errors
+kubectl describe certificate -n <namespace> <cert-name>
+
+# Check ACME challenges
+kubectl get challenges -A
+
+# Force certificate renewal
+kubectl delete certificaterequest -n <namespace> <cert-request-name>
 ```
 
 ### Recovery Procedures

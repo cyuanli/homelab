@@ -20,6 +20,8 @@ data:
         proxyProtocol:
           trustedIPs:
             - "100.121.249.71/32"
+        http:
+          tls: {}
       minecraft:
         address: ":25565"
       traefik:
@@ -31,13 +33,14 @@ data:
       kubernetesIngress: {}
       kubernetesCRD: {}
 
-    certificatesResolvers:
-      letsencrypt:
-        acme:
-          email: cliff.li@cliff.li
-          storage: /acme/acme.json
-          httpChallenge:
-            entryPoint: web
+    # cert-manager handles certificates now
+    # certificatesResolvers:
+    #   letsencrypt:
+    #     acme:
+    #       email: cliff.li@cliff.li
+    #       storage: /acme/acme.json
+    #       httpChallenge:
+    #         entryPoint: web
 
     # Enable access logs
     accessLog: {}

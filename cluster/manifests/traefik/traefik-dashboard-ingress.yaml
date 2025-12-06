@@ -12,8 +12,7 @@ spec:
     services:
     - name: traefik-dashboard
       port: 8080
-  tls:
-    certResolver: letsencrypt
+  tls: {}
 ---
 # Alternative: Kubernetes Ingress format
 apiVersion: networking.k8s.io/v1
@@ -23,7 +22,7 @@ metadata:
   namespace: infrastructure
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    cert-manager.io/cluster-issuer: letsencrypt-production
 spec:
   ingressClassName: traefik
   tls:
