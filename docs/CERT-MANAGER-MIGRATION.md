@@ -116,11 +116,43 @@ Updated ingress annotations for:
 - ✅ traefik.cliff.li
 - ✅ owntracks.cliff.li
 
-### Rate Limited (2/13)
-- ⏳ photos.cliff.li (jellyfin) - retry after Dec 6, 23:54 UTC
-- ⏳ jellyfin.cliff.li - retry after Dec 7, 00:20 UTC
+### Successfully Issued (13/13)
+- ✅ prometheus.cliff.li
+- ✅ grafana.cliff.li
+- ✅ alertmanager.cliff.li
+- ✅ whoami.cliff.li
+- ✅ prowlarr.cliff.li
+- ✅ sonarr.cliff.li
+- ✅ radarr.cliff.li
+- ✅ qbittorrent.cliff.li
+- ✅ drive.cliff.li (nextcloud)
+- ✅ traefik.cliff.li
+- ✅ owntracks.cliff.li
+- ✅ photos.cliff.li
+- ✅ jellyfin.cliff.li
 
-**Note**: These hit Let's Encrypt's 5 certificates/week limit due to previous renewal attempts with Traefik ACME.
+**Note**: All certificates were successfully issued after the initial rate-limiting period.
+
+## Post-Migration Configuration
+
+### HTTP to HTTPS Redirection
+The `traefik.ingress.kubernetes.io/redirect-entry-point: websecure` annotation was removed during the migration because it interfered with the HTTP-01 challenge. To re-enable HTTP to HTTPS redirection, use the `https-redirect` middleware.
+
+The `https-redirect` middleware is defined in `cluster/manifests/traefik/traefik-https-redirect-middleware.yaml`. To apply it to an ingress, add the following annotation:
+
+```yaml
+annotations:
+  traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd
+```
+
+If other middlewares are already present, add it as a comma-separated list:
+
+```yaml
+annotations:
+  traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd,other-middleware@kubernetescrd
+```
+
+This has been applied to the `immich` and `jellyfin` ingresses.
 
 ## Technical Details
 

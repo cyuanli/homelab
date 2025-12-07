@@ -165,6 +165,7 @@ metadata:
   name: jellyfin
   namespace: media
   annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     cert-manager.io/cluster-issuer: letsencrypt-production
 spec:
