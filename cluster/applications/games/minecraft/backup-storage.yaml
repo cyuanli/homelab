@@ -19,7 +19,7 @@ spec:
     volumeHandle: minecraft-backups
     volumeAttributes:
       server: 192.168.1.94
-      share: /games/minecraft/backups
+      share: /
 
 ---
 # PersistentVolumeClaim for backups

@@ -67,6 +67,7 @@ spec:
               readOnly: true
             - name: minecraft-backups
               mountPath: /backups
+              subPath: games/minecraft/backups
 
             resources:
               requests:
@@ -76,7 +77,7 @@ spec:
           volumes:
           - name: minecraft-data
             persistentVolumeClaim:
-              claimName: minecraft-minecraft-datadir
+              claimName: minecraft-datadir
           - name: minecraft-backups
             persistentVolumeClaim:
               claimName: minecraft-backups
