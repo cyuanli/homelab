@@ -25,7 +25,7 @@ prometheus:
       - /
     pathType: Prefix
     tls:
-      - secretName: prometheus-tls
+      - secretName: kube-prometheus-stack-prometheus-tls
         hosts:
           - prometheus.cliff.li
 
@@ -84,7 +84,7 @@ prometheus:
             - https://qbittorrent.cliff.li
             - https://radarr.cliff.li
             - https://sonarr.cliff.li
-            - https://traefik.cliff.li
+            - https://traefik.cliff.li/ping
             - https://whoami.cliff.li
         relabel_configs:
           - source_labels: [__address__]
@@ -166,7 +166,7 @@ grafana:
     path: /
     pathType: Prefix
     tls:
-      - secretName: grafana-tls
+      - secretName: kube-prometheus-stack-grafana-tls
         hosts:
           - grafana.cliff.li
 

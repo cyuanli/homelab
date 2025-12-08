@@ -16,4 +16,4 @@ spec:
             cpu: "10m"     # Minimal weight - BOINC becomes nearly invisible when other workloads run
             memory: 2Gi    # Low request for scheduling, configmap controls actual usage
           limits:
-            memory: 8Gi   # 8GB conservative limit with headroom for other workloads
+            memory: 4Gi   # 8GB conservative limit with headroom for other workloads

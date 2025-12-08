@@ -1,6 +1,8 @@
 # Immich Helm Chart Values
 # Using official chart from immich-app/immich-charts
 
+replicaCount: 2
+
 # Global environment variables for all components
 controllers:
   main:
@@ -50,17 +52,17 @@ server:
       enabled: true
       existingClaim: immich-thumbs
       globalMounts:
-        - path: /data/upload/thumbs
+        - path: /data/thumbs
     encoded-video:
       enabled: true
       existingClaim: immich-encoded-video
       globalMounts:
-        - path: /data/upload/encoded-video
+        - path: /data/encoded-video
     profile:
       enabled: true
       existingClaim: immich-profile
       globalMounts:
-        - path: /data/upload/profile
+        - path: /data/profile
 
   ingress:
     main:
