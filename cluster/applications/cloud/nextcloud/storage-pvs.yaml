@@ -19,4 +19,4 @@ spec:
     volumeHandle: nextcloud-files
     volumeAttributes:
       server: 192.168.1.94
-      share: /nextcloud
+      share: /media/nextcloud

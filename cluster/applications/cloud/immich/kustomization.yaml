@@ -12,6 +12,7 @@ resources:
   - storage-cache-pvs.yaml
   - storage-cache-pvcs.yaml
   - ingress.yaml
+  - middleware.yaml
 
 labels:
 - includeSelectors: true

@@ -46,24 +46,6 @@ server:
               cpu: 1000m
               memory: 1Gi
 
-  # Additional persistence for cache data on SSD
-  persistence:
-    thumbs:
-      enabled: true
-      existingClaim: immich-thumbs
-      globalMounts:
-        - path: /data/thumbs
-    encoded-video:
-      enabled: true
-      existingClaim: immich-encoded-video
-      globalMounts:
-        - path: /data/encoded-video
-    profile:
-      enabled: true
-      existingClaim: immich-profile
-      globalMounts:
-        - path: /data/profile
-
   ingress:
     main:
       enabled: false  # We'll create a separate Ingress resource

@@ -647,9 +647,9 @@ Add the following (adjust the network range to match your LAN):
 # Explicit subdirectory exports (bind mounts need explicit exports with fsid)
 /exports/media 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=1)
 /exports/configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
-/exports/immich 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=3)
-/exports/nextcloud 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=4)
 ```
+
+**Note:** We use a simplified structure where `/exports/media` contains all application data (immich, nextcloud, games, etc.) as subdirectories. This avoids redundant bind mounts and export entries.
 
 **Key export options explained:**
 - `rw` - Read-write access
@@ -667,13 +667,11 @@ Create the exports directory structure and bind mount your data:
 sudo mkdir -p /exports
 
 # Create bind mount points
-sudo mkdir -p /exports/media /exports/configs /exports/immich /exports/nextcloud
+sudo mkdir -p /exports/media /exports/configs
 
 # Mount bind mounts
 sudo mount --bind /media/data /exports/media
 sudo mount --bind /srv/app-storage /exports/configs
-sudo mount --bind /media/data/immich /exports/immich
-sudo mount --bind /media/data/nextcloud /exports/nextcloud
 ```
 
 **Make bind mounts persistent:**
@@ -688,8 +686,6 @@ Add these lines:
 # NFS bind mounts for K3s cluster
 /media/data                /exports/media      none  bind  0  0
 /srv/app-storage           /exports/configs    none  bind  0  0
-/media/data/immich         /exports/immich     none  bind  0  0
-/media/data/nextcloud      /exports/nextcloud  none  bind  0  0
 ```
 
 **Apply the exports:**
@@ -793,12 +789,12 @@ sudo mkdir -p /srv/app-storage/immich/{thumbs,encoded-video,profile}
 **Important:** With `fsid=0` on `/exports`, it becomes the NFSv4 pseudo-root. All PV paths are relative to this root:
 
 - Export root: `/exports` with `fsid=0`
-- Subdirectory export: `/exports/immich` with `fsid=3`
-- Physical path on server: `/media/data/immich/library` (via bind mount)
-- Path in PV spec: `/immich/library` (relative to /exports)
+- Subdirectory export: `/exports/media` with `fsid=1`
+- Physical path on server: `/media/data/immich/library` (via bind mount to /exports/media)
+- Path in PV spec: `/media/immich/library` (relative to /exports)
 
 **Why use bind mounts?**
-- **Isolation**: Each service gets its own export with unique fsid
+- **Simplicity**: Single `/exports/media` contains all application data as subdirectories
 - **Flexibility**: Can remap physical paths without changing Kubernetes configs
 - **Organization**: Clean namespace under `/exports` for NFS clients
 - **Compatibility**: Works around NFSv4 crossing filesystem boundaries
@@ -824,12 +820,12 @@ spec:
     volumeHandle: immich-library
     volumeAttributes:
       server: 192.168.1.94
-      share: /immich/library  # Relative to /exports root
+      share: /media/immich/library  # Relative to /exports root
 ```
 
 ### Adding New Services to NFS
 
-When you need to add a new service (like we did with Nextcloud), follow these steps:
+When you need to add a new service, follow these simplified steps:
 
 **1. Create the data directory on the storage node:**
 ```bash
@@ -837,44 +833,7 @@ sudo mkdir -p /media/data/myservice
 sudo chown -R appropriate_user:appropriate_group /media/data/myservice
 ```
 
-**2. Create bind mount point:**
-```bash
-sudo mkdir -p /exports/myservice
-```
-
-**3. Create the bind mount:**
-```bash
-sudo mount --bind /media/data/myservice /exports/myservice
-```
-
-**4. Make it persistent in `/etc/fstab`:**
-```bash
-echo "/media/data/myservice /exports/myservice none bind 0 0" | sudo tee -a /etc/fstab
-```
-
-**5. Add export to `/etc/exports`:**
-```bash
-sudo nano /etc/exports
-```
-Add a new line with the next available fsid:
-```bash
-/exports/myservice 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=5)
-```
-
-**6. Apply the new export:**
-```bash
-sudo exportfs -ra
-sudo exportfs -v  # Verify it appears
-```
-
-**7. Update the tracked exports file in your repo:**
-```bash
-# Copy to version control
-sudo cp /etc/exports config/system-configs/exports
-git add config/system-configs/exports
-```
-
-**8. Create Kubernetes PV and PVC:**
+**2. Create Kubernetes PV and PVC:**
 Create `storage-pvs.yaml` and `storage-pvcs.yaml` for your service:
 ```yaml
 ---
@@ -897,17 +856,19 @@ spec:
     volumeHandle: myservice-data
     volumeAttributes:
       server: 192.168.1.94
-      share: /myservice  # Relative to /exports
+      share: /media/myservice  # Relative to /exports, accesses /media/data/myservice
 ```
 
-**Example: Nextcloud Migration**
+**That's it!** No need to create additional bind mounts or export entries. The `/exports/media` bind mount already provides access to all subdirectories under `/media/data/`.
 
-When we migrated Nextcloud from hostPath to NFS, we:
-1. Created bind mount: `/media/data/nextcloud` → `/exports/nextcloud`
-2. Added export with `fsid=4`
-3. Created PV pointing to `/nextcloud` (shares the physical `/media/data/nextcloud` via bind mount)
-4. Changed deployment from `hostPath` to `persistentVolumeClaim`
-5. Removed node affinity constraint (pod can now run on any node)
+**Example: Nextcloud and Immich**
+
+All services use the same simplified structure:
+- Nextcloud: PV points to `/media/nextcloud` (physical: `/media/data/nextcloud`)
+- Immich: PV points to `/media/immich/library` (physical: `/media/data/immich/library`)
+- Games: PV would point to `/media/games` (physical: `/media/data/games`)
+
+All are accessible through the single `/exports/media` export with `fsid=1`.
 
 ### Troubleshooting
 

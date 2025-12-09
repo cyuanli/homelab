@@ -19,5 +19,5 @@ spec:
     volumeHandle: immich-library
     volumeAttributes:
       server: 192.168.1.94
-      share: /immich/library
+      share: /media/immich/library
 
