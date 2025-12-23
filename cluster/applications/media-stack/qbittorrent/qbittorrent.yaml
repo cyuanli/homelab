@@ -74,8 +74,8 @@ spec:
         persistentVolumeClaim:
           claimName: qbittorrent-config
       - name: incomplete-downloads
-        emptyDir:
-          sizeLimit: 50Gi
+        persistentVolumeClaim:
+          claimName: qbittorrent-incomplete
       - name: downloads
         persistentVolumeClaim:
           claimName: media-downloads

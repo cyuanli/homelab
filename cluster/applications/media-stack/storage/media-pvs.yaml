@@ -223,3 +223,26 @@ spec:
     volumeAttributes:
       server: 192.168.1.94
       share: /configs/media-stack/qbittorrent-config
+
+---
+# QBittorrent incomplete downloads
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: qbittorrent-incomplete
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: qbittorrent-incomplete
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/media-stack/qbittorrent-incomplete

@@ -153,3 +153,19 @@ spec:
   resources:
     requests:
       storage: 5Gi
+
+---
+# QBittorrent incomplete downloads
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-incomplete
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: qbittorrent-incomplete
+  resources:
+    requests:
+      storage: 50Gi

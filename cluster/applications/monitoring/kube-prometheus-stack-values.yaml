@@ -3,6 +3,8 @@
 
 # Disable K3s components that don't exist
 defaultRules:
+  disabled:
+    Watchdog: true
   rules:
     etcd: false
     kubeControllerManager: false
@@ -125,6 +127,9 @@ alertmanager:
       receiver: 'discord'
       routes:
       - match:
+          alertname: InfoInhibitor
+        receiver: 'null'
+      - match:
           severity: critical
         receiver: discord
         continue: true
@@ -134,6 +139,7 @@ alertmanager:
         continue: true
 
     receivers:
+    - name: 'null'
     - name: 'discord'
       webhook_configs:
       - url: 'http://alertmanager-discord:9094'
