@@ -42,11 +42,11 @@ prometheus:
     # Retention
     retention: 30d
 
-    # Storage
+    # Storage - using NFS storage class
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: local-path
+          storageClassName: nfs-media
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -176,10 +176,11 @@ grafana:
         hosts:
           - grafana.cliff.li
 
-  # Persistence
+  # Persistence - using existing NFS PVC
   persistence:
     enabled: true
-    storageClassName: local-path
+    storageClassName: nfs-media
+    existingClaim: grafana-data-nfs
     size: 10Gi
 
   # Security context

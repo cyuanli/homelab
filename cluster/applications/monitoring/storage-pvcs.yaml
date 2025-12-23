@@ -1,0 +1,31 @@
+---
+# Grafana NFS Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data-nfs
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: grafana-data-nfs
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Prometheus NFS Persistent Volume Claim (name must match StatefulSet volumeClaimTemplate pattern)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-media
+  volumeName: prometheus-data-nfs
+  resources:
+    requests:
+      storage: 20Gi

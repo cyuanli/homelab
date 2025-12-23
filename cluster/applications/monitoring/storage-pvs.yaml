@@ -1,0 +1,45 @@
+---
+# Grafana NFS Persistent Volume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grafana-data-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: grafana-data-nfs
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/monitoring/grafana-data
+
+---
+# Prometheus NFS Persistent Volume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-data-nfs
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: prometheus-data-nfs
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /configs/monitoring/prometheus-data
