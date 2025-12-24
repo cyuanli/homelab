@@ -12,8 +12,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: media-movies
@@ -34,8 +43,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: media-tv
@@ -56,8 +74,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: media-music
@@ -78,8 +105,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: media-downloads
@@ -101,8 +137,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: jellyfin-config
@@ -123,8 +168,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: jellyfin-cache
@@ -146,8 +200,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: prowlarr-config
@@ -169,8 +232,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: radarr-config
@@ -192,8 +264,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: sonarr-config
@@ -215,8 +296,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: qbittorrent-config
@@ -238,8 +328,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: qbittorrent-incomplete

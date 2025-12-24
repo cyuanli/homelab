@@ -1,0 +1,98 @@
+---
+# Optimized NFS StorageClass based on industry best practices
+# This is the RECOMMENDED configuration after cross-referencing with AWS, Azure, Red Hat, and NetApp
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-media-optimized
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.94  # cyl-homelab IP
+  share: /media/data
+mountOptions:
+  - vers=4.1            # NFSv4.1 protocol (modern syntax)
+  - hard                # Never give up on retries (prevents data corruption)
+  - timeo=300           # 30 seconds - balanced between AWS default (60s) and fast failover (15s)
+  - retrans=3           # 3 retries (one more than default for resilience)
+  - rsize=1048576       # 1MB read buffer
+  - wsize=1048576       # 1MB write buffer
+  - _netdev             # Wait for network before mounting
+  - noresvport          # Use new port on reconnection (better recovery)
+  - noatime             # Don't update access times (10-30% performance boost)
+  - actimeo=30          # Cache attributes for 30s (balanced freshness vs performance)
+  - lookupcache=positive # Only cache positive lookups (files that exist)
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+---
+# Conservative/Stable configuration - Use this for maximum reliability
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-media-stable
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.94
+  share: /media/data
+mountOptions:
+  - vers=4.1
+  - hard
+  - timeo=600           # 60 seconds - AWS/Azure standard (maximum stability)
+  - retrans=2           # Standard retry count
+  - rsize=1048576
+  - wsize=1048576
+  - _netdev
+  - noresvport
+  - noatime
+  - actimeo=60          # Longer cache for more stability
+  - lookupcache=positive
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+---
+# Performance configuration - Use for read-heavy, single-client workloads (Jellyfin, Plex)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-media-performance
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.94
+  share: /media/data
+mountOptions:
+  - vers=4.1
+  - hard
+  - timeo=300
+  - retrans=2
+  - rsize=1048576
+  - wsize=1048576
+  - _netdev
+  - noresvport
+  - noatime             # Performance: Don't track access times
+  - nocto               # Performance: Disable close-to-open consistency (single client only!)
+  - actimeo=600         # Performance: Longer attribute cache (10 minutes)
+  - lookupcache=positive
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+---
+# Fast Failover configuration - Current aggressive settings
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-media-fastfail
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.94
+  share: /media/data
+mountOptions:
+  - vers=4.1
+  - hard
+  - timeo=150           # 15 seconds - fastest failure detection
+  - retrans=3           # More retries to compensate for short timeout
+  - rsize=1048576
+  - wsize=1048576
+  - _netdev
+  - noresvport
+  - noatime
+  - actimeo=30
+  - lookupcache=positive
+reclaimPolicy: Retain
+volumeBindingMode: Immediate

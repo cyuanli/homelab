@@ -12,8 +12,17 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-media
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noresvport
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
   csi:
     driver: nfs.csi.k8s.io
     volumeHandle: nextcloud-files
