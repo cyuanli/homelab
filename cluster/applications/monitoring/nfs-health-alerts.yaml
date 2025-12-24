@@ -1,0 +1,205 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nfs-health-rules
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack-prometheus
+    release: kube-prometheus-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: nfs_health
+      interval: 30s
+      rules:
+        # Critical: NFS server is unreachable
+        - alert: NFSServerUnreachable
+          annotations:
+            description: |
+              NFS server {{ $labels.server }} has been unreachable for more than 2 minutes.
+              This will cause all pods using NFS storage to hang or fail.
+
+              Troubleshooting:
+              1. Check NFS server: `systemctl status nfs-server`
+              2. Check network: `ping {{ $labels.server }}`
+              3. Check firewall: `sudo ufw status`
+              4. Check NFS exports: `sudo exportfs -v`
+            summary: NFS server {{ $labels.server }} is unreachable
+            runbook_url: https://github.com/cyl-homelab/homelab/blob/main/docs/NFS_STALE_MOUNT_SOLUTION.md#nfs-server-unreachable
+          expr: nfs_server_reachable == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: storage
+            category: nfs
+
+        # Warning: Stale NFS mounts detected
+        - alert: NFSStaleMountsDetected
+          annotations:
+            description: |
+              Stale NFS mounts have been detected on one or more nodes.
+              The automatic recovery system should be attempting to fix this.
+
+              Check recovery status:
+              ```
+              kubectl logs -n kube-system -l app=nfs-health-monitor --tail=50
+              ./scripts/monitor-nfs-health.sh status
+              ```
+
+              If recovery is not working, manual intervention may be required.
+            summary: Stale NFS mounts detected - auto-recovery in progress
+            runbook_url: https://github.com/cyl-homelab/homelab/blob/main/docs/NFS_STALE_MOUNT_SOLUTION.md#stale-mounts-detected
+          expr: nfs_mounts_healthy == 0
+          for: 1m
+          labels:
+            severity: warning
+            component: storage
+            category: nfs
+
+        # Critical: Recovery failing repeatedly
+        - alert: NFSRecoveryFailing
+          annotations:
+            description: |
+              NFS automatic recovery has attempted {{ $value }} times in the last 10 minutes but has not succeeded.
+              Manual intervention is required.
+
+              Steps to resolve:
+              1. Check CSI driver status: `kubectl get pods -n kube-system -l app=csi-nfs-node`
+              2. Check NFS server logs: `sudo journalctl -u nfs-server --since "10 min ago"`
+              3. Try manual recovery: `./scripts/monitor-nfs-health.sh recover`
+              4. Check for network issues between cluster and NFS server
+              5. Verify NFS exports: `sudo exportfs -v`
+
+              If recovery continues to fail, consider restarting the NFS server:
+              `sudo systemctl restart nfs-server`
+            summary: NFS automatic recovery is failing - manual intervention required
+            runbook_url: https://github.com/cyl-homelab/homelab/blob/main/docs/NFS_STALE_MOUNT_SOLUTION.md#recovery-failing
+          expr: |
+            increase(nfs_recovery_attempts_total[10m]) > 3
+            and
+            increase(nfs_recovery_successes_total[10m]) == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: storage
+            category: nfs
+
+        # Warning: Frequent stale mount occurrences
+        - alert: NFSFrequentStaleMounts
+          annotations:
+            description: |
+              Stale NFS mounts have been detected {{ $value }} times in the last hour.
+              This indicates an underlying stability issue.
+
+              Possible causes:
+              - Network instability between cluster and NFS server
+              - NFS server resource exhaustion (CPU, memory, disk I/O)
+              - Timeout values too aggressive for network conditions
+              - NFS server being restarted frequently
+
+              Investigation steps:
+              1. Check NFS server resources: `top`, `df -h`, `iostat`
+              2. Check network stability: `ping -c 100 {{ $labels.server }}`
+              3. Review NFS server logs: `sudo journalctl -u nfs-server --since "1 hour ago"`
+              4. Consider increasing timeout values if network is unstable
+              5. Review NFS mount options: `cat docs/NFS_MOUNT_OPTIONS_GUIDE.md`
+            summary: Frequent stale NFS mounts detected ({{ $value }} in last hour)
+            runbook_url: https://github.com/cyl-homelab/homelab/blob/main/docs/NFS_STALE_MOUNT_SOLUTION.md#frequent-stale-mounts
+          expr: increase(nfs_stale_mounts_detected_total[1h]) > 5
+          for: 5m
+          labels:
+            severity: warning
+            component: storage
+            category: nfs
+
+        # Info: NFS health monitoring not running
+        - alert: NFSHealthMonitoringDown
+          annotations:
+            description: |
+              NFS health monitoring has not reported metrics for more than 10 minutes.
+              The automatic recovery system may not be functioning.
+
+              Check monitoring status:
+              ```
+              # Check cron job
+              crontab -l | grep nfs
+
+              # Check DaemonSet
+              kubectl get pods -n kube-system -l app=nfs-health-monitor
+              kubectl logs -n kube-system -l app=nfs-health-monitor --tail=20
+
+              # Check monitoring script
+              ./scripts/monitor-nfs-health.sh status
+              ```
+
+              To restart monitoring:
+              ```
+              # Restart DaemonSet
+              kubectl rollout restart daemonset/nfs-health-monitor -n kube-system
+              ```
+            summary: NFS health monitoring is not reporting
+            runbook_url: https://github.com/cyl-homelab/homelab/blob/main/docs/NFS_STALE_MOUNT_SOLUTION.md#monitoring-down
+          expr: |
+            (time() - nfs_monitor_last_run_timestamp_seconds) > 600
+            or
+            absent(nfs_monitor_last_run_timestamp_seconds)
+          for: 5m
+          labels:
+            severity: warning
+            component: monitoring
+            category: nfs
+
+        # Info: NFS recovery success
+        - alert: NFSRecoverySuccessful
+          annotations:
+            description: |
+              NFS automatic recovery has successfully fixed stale mounts.
+              System is back to healthy state.
+
+              Recovery details available in logs:
+              `kubectl logs -n kube-system -l app=nfs-health-monitor --tail=100`
+            summary: NFS mounts recovered successfully
+          expr: |
+            increase(nfs_recovery_successes_total[5m]) > 0
+            and
+            nfs_mounts_healthy == 1
+          for: 1m
+          labels:
+            severity: info
+            component: storage
+            category: nfs
+
+        # Warning: High number of NFS mounts
+        - alert: NFSHighMountCount
+          annotations:
+            description: |
+              There are currently {{ $value }} NFS mounts across the cluster.
+              This is unusually high and may indicate pod issues or mount leaks.
+
+              Check for:
+              - Stuck/terminated pods with lingering mounts
+              - Multiple mounts of the same volume
+              - CSI driver issues
+
+              Investigation:
+              ```
+              kubectl get pods -A | grep -v Running
+              kubectl get pv | grep nfs
+              ```
+            summary: Unusually high number of NFS mounts ({{ $value }})
+          expr: nfs_total_mounts > 50
+          for: 10m
+          labels:
+            severity: info
+            component: storage
+            category: nfs
+
+        # Recording rule: NFS health score
+        - record: nfs:health:score
+          expr: |
+            (
+              nfs_server_reachable * 40 +
+              nfs_mounts_healthy * 40 +
+              (1 - clamp_max(rate(nfs_stale_mounts_detected_total[5m]) * 100, 1)) * 20
+            ) / 100
