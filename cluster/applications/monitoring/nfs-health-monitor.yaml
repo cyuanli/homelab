@@ -36,20 +36,79 @@ spec:
               while true; do
                 echo "[$(date)] Running NFS health check..."
 
-                # Check for stale mounts
-                STALE_FOUND=0
+                # NFS server to check
+                NFS_SERVER="192.168.1.94"
+                METRICS_FILE="/metrics/nfs_health.prom"
+                TIMESTAMP=$(date +%s)
 
-                # Find all NFS CSI mounts
-                find /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -type d 2>/dev/null | while read -r mount_path; do
-                  if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
-                    echo "ERROR: Stale mount detected: $mount_path"
-                    STALE_FOUND=1
+                # Check NFS server connectivity (port 2049)
+                NFS_SERVER_OK=0
+                if timeout 5 bash -c "echo >/dev/tcp/$NFS_SERVER/2049" 2>/dev/null; then
+                  NFS_SERVER_OK=1
+                fi
+
+                # Check for stale mounts
+                STALE_MOUNTS=0
+                TOTAL_MOUNTS=0
+                MOUNTS_HEALTHY=1
+
+                # Find all NFS CSI mount points (not their contents)
+                for mount_path in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount; do
+                  if [ -d "$mount_path" ]; then
+                    TOTAL_MOUNTS=$((TOTAL_MOUNTS + 1))
+                    if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
+                      echo "ERROR: Stale mount detected: $mount_path"
+                      STALE_MOUNTS=$((STALE_MOUNTS + 1))
+                      MOUNTS_HEALTHY=0
+                    fi
                   fi
                 done
 
-                if [ $STALE_FOUND -eq 1 ]; then
-                  echo "WARNING: Stale NFS mounts detected on node $(hostname)"
+                # Calculate overall health status
+                HEALTH_STATUS=1
+                if [ $NFS_SERVER_OK -eq 0 ] || [ $MOUNTS_HEALTHY -eq 0 ]; then
+                  HEALTH_STATUS=0
+                  echo "WARNING: NFS health degraded on node $(hostname)"
                 fi
+
+                # Write metrics to textfile collector
+                {
+                  echo "# HELP nfs_health_status Overall NFS health status"
+                  echo "# TYPE nfs_health_status gauge"
+                  echo "nfs_health_status{type=\"overall\"} $HEALTH_STATUS"
+                  echo ""
+                  echo "# HELP nfs_server_reachable NFS server reachability"
+                  echo "# TYPE nfs_server_reachable gauge"
+                  echo "nfs_server_reachable{server=\"$NFS_SERVER\"} $NFS_SERVER_OK"
+                  echo ""
+                  echo "# HELP nfs_mounts_healthy NFS mounts health"
+                  echo "# TYPE nfs_mounts_healthy gauge"
+                  echo "nfs_mounts_healthy $MOUNTS_HEALTHY"
+                  echo ""
+                  echo "# HELP nfs_stale_mounts_detected_total Total stale mount detections"
+                  echo "# TYPE nfs_stale_mounts_detected_total counter"
+                  echo "nfs_stale_mounts_detected_total $STALE_MOUNTS"
+                  echo ""
+                  echo "# HELP nfs_total_mounts Total NFS mounts"
+                  echo "# TYPE nfs_total_mounts gauge"
+                  echo "nfs_total_mounts $TOTAL_MOUNTS"
+                  echo ""
+                  echo "# HELP nfs_monitor_last_run_timestamp_seconds Last health check timestamp"
+                  echo "# TYPE nfs_monitor_last_run_timestamp_seconds gauge"
+                  echo "nfs_monitor_last_run_timestamp_seconds $TIMESTAMP"
+                  echo ""
+                  echo "# HELP nfs_recovery_attempts_total Total recovery attempts"
+                  echo "# TYPE nfs_recovery_attempts_total counter"
+                  echo "nfs_recovery_attempts_total 0"
+                  echo ""
+                  echo "# HELP nfs_recovery_successes_total Total successful recoveries"
+                  echo "# TYPE nfs_recovery_successes_total counter"
+                  echo "nfs_recovery_successes_total 0"
+                } > "$METRICS_FILE.$$"
+
+                # Atomic move
+                mv "$METRICS_FILE.$$" "$METRICS_FILE" 2>/dev/null || true
+                echo "Metrics written to $METRICS_FILE"
 
                 # Sleep for 5 minutes
                 sleep 300
@@ -58,6 +117,8 @@ spec:
             - name: kubelet-dir
               mountPath: /host/var/lib/kubelet
               mountPropagation: HostToContainer
+            - name: textfile-collector
+              mountPath: /metrics
           resources:
             requests:
               cpu: 10m
@@ -72,6 +133,10 @@ spec:
           hostPath:
             path: /var/lib/kubelet
             type: Directory
+        - name: textfile-collector
+          hostPath:
+            path: /var/lib/node_exporter/textfile_collector
+            type: DirectoryOrCreate
 ---
 # ServiceMonitor for Prometheus integration (if using node-exporter textfile collector)
 apiVersion: v1
