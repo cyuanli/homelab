@@ -17,7 +17,6 @@ mountOptions:
   - rsize=1048576       # 1MB read buffer
   - wsize=1048576       # 1MB write buffer
   - _netdev             # Wait for network before mounting
-  - noresvport          # Use new port on reconnection (better recovery)
   - noatime             # Don't update access times (10-30% performance boost)
   - actimeo=30          # Cache attributes for 30s (balanced freshness vs performance)
   - lookupcache=positive # Only cache positive lookups (files that exist)
@@ -41,7 +40,6 @@ mountOptions:
   - rsize=1048576
   - wsize=1048576
   - _netdev
-  - noresvport
   - noatime
   - actimeo=60          # Longer cache for more stability
   - lookupcache=positive
@@ -65,7 +63,6 @@ mountOptions:
   - rsize=1048576
   - wsize=1048576
   - _netdev
-  - noresvport
   - noatime             # Performance: Don't track access times
   - nocto               # Performance: Disable close-to-open consistency (single client only!)
   - actimeo=600         # Performance: Longer attribute cache (10 minutes)
@@ -90,7 +87,6 @@ mountOptions:
   - rsize=1048576
   - wsize=1048576
   - _netdev
-  - noresvport
   - noatime
   - actimeo=30
   - lookupcache=positive

@@ -19,7 +19,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -50,7 +50,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -81,7 +81,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -112,7 +112,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -144,7 +144,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -175,7 +175,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -207,7 +207,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -239,7 +239,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -271,7 +271,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -303,7 +303,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
@@ -335,7 +335,7 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    - noresvport
+    
     - noatime
     - actimeo=30
     - lookupcache=positive
