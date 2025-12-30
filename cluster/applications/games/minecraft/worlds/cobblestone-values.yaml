@@ -30,8 +30,12 @@ minecraftServer:
   # Server performance
   memory: 4G
 
-  # Network service type
-  serviceType: LoadBalancer
+  # Network service type (ClusterIP for mc-router integration)
+  serviceType: ClusterIP
+
+# mc-router integration - route cobblestone.mc.cliff.li to this server
+serviceAnnotations:
+  mc-router.itzg.me/externalServerName: "cobblestone.mc.cliff.li"
 
 # Resource requests - no limits to allow bursting
 resources:

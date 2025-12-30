@@ -20,3 +20,6 @@ cluster/applications/**/secrets.yaml
 # Borgmatic passphrase files
 config/borgmatic/.borg-passphrase
 config/borgmatic/.borg-passphrase-env
+
+# Aider
+.aider*

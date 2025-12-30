@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mc-router
+  namespace: games
+  labels:
+    app: mc-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mc-router
+  template:
+    metadata:
+      labels:
+        app: mc-router
+    spec:
+      serviceAccountName: mc-router
+      containers:
+        - name: mc-router
+          image: itzg/mc-router:latest
+          args:
+            - --port=25565
+            - --api-binding=:8080
+            - --in-kube-cluster
+            - --connection-rate-limit=100
+          ports:
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+            - name: api
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /routes
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /routes
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

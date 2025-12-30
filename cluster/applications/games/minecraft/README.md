@@ -1,125 +1,377 @@
-# Minecraft Fabric Server
+# Minecraft Servers
 
-Kubernetes deployment of a Minecraft Java Edition server running Fabric mod loader.
+Kubernetes deployment of multiple Minecraft Java Edition servers with automatic domain-based routing.
+
+## Overview
+
+This directory contains all Minecraft-related infrastructure for the homelab:
+
+- **Multiple Minecraft Worlds**: Currently running Cobblestone and Sandstone servers
+- **mc-router**: Reverse proxy for domain-based routing to multiple servers
+- **Unified Backup System**: Single CronJob backing up all worlds to NFS
+- **Auto-Discovery**: New servers automatically discovered and routed
+
+## Directory Structure
+
+```
+minecraft/
+├── worlds/              # Individual world configurations
+│   ├── cobblestone-values.yaml
+│   └── sandstone-values.yaml
+├── mc-router/           # Routing infrastructure
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── rbac.yaml
+│   └── docs/           # mc-router documentation
+├── backup/              # Backup configuration
+│   ├── cronjob.yaml    # Daily backups for all worlds
+│   └── storage.yaml    # NFS backup storage
+└── README.md           # This file
+```
+
+## Active Servers
+
+| Server | Domain | MOTD | Type | Node |
+|--------|--------|------|------|------|
+| Cobblestone | cobblestone.mc.cliff.li | Cliff's Magical World | Fabric (Latest) | cyl-mitx |
+| Sandstone | sandstone.mc.cliff.li | Sandstone Adventures | Fabric (Latest) | cyl-mitx |
 
 ## Architecture
 
-- **Server Type**: Fabric (latest)
-- **Storage**: Local SSD on cyl-mitx (50Gi)
-- **Backups**: NFS storage with daily automated backups
-- **Resources**: 1000m CPU request, 2Gi memory request (no limits)
+### Connection Flow
 
-## Storage Strategy
-
-### Active Data
-- **Location**: Local SSD on `cyl-mitx` node
-- **Type**: `local-path` StorageClass
-- **Why**: Fast chunk loading/saving, prevents HDD wear
-
-### Backups
-- **Location**: NFS at `192.168.1.94:/games/minecraft/backups`
-- **Schedule**: Daily at 1 AM UTC
-- **Retention**: Last 7 daily backups
-- **Method**: Kubernetes CronJob with rsync
-
-## Deployment
-
-### 1. Add Helm Repository
-```bash
-helm repo add itzg https://itzg.github.io/minecraft-server-charts/
-helm repo update
+```
+Player Client
+    ↓
+minecraft.cliff.li:25565
+    ↓
+Internet → VPS (217.154.249.14)
+    ↓
+Nginx TCP Proxy
+    ↓
+Tailscale VPN
+    ↓
+Traefik (homelab)
+    ↓
+mc-router (domain-based routing)
+    ├─→ cobblestone.mc.cliff.li → Cobblestone Server
+    └─→ sandstone.mc.cliff.li → Sandstone Server
 ```
 
-### 2. Create Namespace
+### Components
+
+- **Helm Chart**: [itzg/minecraft](https://github.com/itzg/minecraft-server-charts)
+- **Routing**: mc-router with Kubernetes auto-discovery
+- **Storage**: Local SSD (local-path) on cyl-mitx node
+- **Backups**: NFS storage with daily automated backups
+- **Resources**: 1 CPU core, 2Gi memory per server (no limits)
+
+## Quick Start
+
+### Prerequisites
+
 ```bash
+# Add Helm repository
+helm repo add itzg https://itzg.github.io/minecraft-server-charts/
+helm repo update
+
+# Create namespace
 kubectl create namespace games
 ```
 
-### 3. Create NFS directory on storage server
-**Note**: If you ran `scripts/setup-nfs-storage.sh`, this directory was created automatically. Otherwise, create it manually on the NFS server (192.168.1.94):
+### Deploy Infrastructure
+
+1. **Deploy mc-router** (if not already deployed):
+   ```bash
+   kubectl apply -f mc-router/rbac.yaml
+   kubectl apply -f mc-router/deployment.yaml
+   kubectl apply -f mc-router/service.yaml
+   ```
+
+2. **Create backup storage**:
+   ```bash
+   kubectl apply -f backup/storage.yaml
+   ```
+
+3. **Deploy Minecraft servers**:
+   ```bash
+   # Cobblestone
+   helm install minecraft-cobblestone itzg/minecraft -n games \
+     -f worlds/cobblestone-values.yaml
+
+   # Sandstone
+   helm install minecraft-sandstone itzg/minecraft -n games \
+     -f worlds/sandstone-values.yaml
+   ```
+
+4. **Deploy backup CronJob**:
+   ```bash
+   kubectl apply -f backup/cronjob.yaml
+   ```
+
+### Verify Deployment
+
 ```bash
-sudo mkdir -p /media/data/games/minecraft/backups
-sudo chmod 755 /media/data/games/minecraft/backups
+# Check pods
+kubectl get pods -n games
+
+# Check mc-router discovered both servers
+kubectl port-forward -n games deployment/mc-router 8080:8080 &
+curl http://localhost:8080/routes | jq
 ```
 
-### 4. Apply Storage Resources
-```bash
-kubectl apply -f backup-storage.yaml
+Expected output:
+```json
+{
+  "cobblestone.mc.cliff.li": "10.43.x.x:25565",
+  "sandstone.mc.cliff.li": "10.43.y.y:25565"
+}
 ```
 
-### 5. Install Minecraft Server
-```bash
-helm install minecraft itzg/minecraft \
-  -n games \
-  -f values.yaml
-```
+## Adding New Servers
 
-### 6. Deploy Backup CronJob
-```bash
-kubectl apply -f backup-cronjob.yaml
-```
+**See**: `mc-router/docs/ADDING-SERVERS.md` for detailed instructions.
 
-## Access
+**Quick steps**:
 
-Get the LoadBalancer IP:
-```bash
-kubectl get svc -n games minecraft-minecraft
-```
+1. Create new values file in `worlds/`:
+   ```bash
+   cp worlds/cobblestone-values.yaml worlds/newworld-values.yaml
+   ```
 
-Connect in Minecraft client using: `<LOADBALANCER_IP>:25565`
+2. Update configuration:
+   ```yaml
+   serviceAnnotations:
+     mc-router.itzg.me/externalServerName: "newworld.mc.cliff.li"
+
+   minecraftServer:
+     motd: "My New World"
+     # ... other settings
+   ```
+
+3. Deploy:
+   ```bash
+   helm install minecraft-newworld itzg/minecraft -n games \
+     -f worlds/newworld-values.yaml
+   ```
+
+4. Add DNS record: `newworld.mc.cliff.li → VPS_IP`
+
+5. Update `backup/cronjob.yaml` to include new world
+
+mc-router automatically discovers and routes to the new server within seconds!
 
 ## Management
 
-### View Logs
+### View Server Logs
+
 ```bash
-kubectl logs -n games -l app=minecraft-minecraft -f
+# Cobblestone
+kubectl logs -n games -l app=minecraft-cobblestone -f
+
+# Sandstone
+kubectl logs -n games -l app=minecraft-sandstone -f
 ```
 
-### Console Commands
+### Access Server Console
+
 ```bash
-kubectl exec -n games -it deployment/minecraft-minecraft -- rcon-cli
+# Cobblestone
+kubectl exec -n games deployment/minecraft-cobblestone -it -- rcon-cli
+
+# Sandstone
+kubectl exec -n games deployment/minecraft-sandstone -it -- rcon-cli
 ```
 
-### Check Backups
+### Check Resource Usage
+
 ```bash
-kubectl exec -n games -it deployment/minecraft-minecraft -- ls -lh /backups/daily/
+kubectl top pods -n games | grep minecraft
 ```
 
 ### Manual Backup
-```bash
-kubectl create job -n games --from=cronjob/minecraft-backup minecraft-backup-manual
-```
-
-## Restore from Backup
-
-1. Stop the server:
-```bash
-kubectl scale deployment -n games minecraft-minecraft --replicas=0
-```
-
-2. Copy backup to active data (from cyl-mitx node):
-```bash
-# Find the PVC path
-kubectl get pv -o custom-columns=NAME:.metadata.name,PATH:.spec.local.path | grep minecraft
-
-# Copy backup
-rsync -av /path/to/nfs/backups/daily/<backup-date>/ /path/to/local-pvc/
-```
-
-3. Start the server:
-```bash
-kubectl scale deployment -n games minecraft-minecraft --replicas=1
-```
-
-## Upgrading
 
 ```bash
-helm upgrade minecraft itzg/minecraft -n games -f values.yaml
+kubectl create job -n games --from=cronjob/minecraft-backup minecraft-backup-manual-$(date +%s)
 ```
 
-## Adding Mods
+### Upgrade Server
 
-Mods go in the `mods/` directory. You can add them via:
-1. kubectl cp
-2. Volume mount to separate mod storage
-3. Init container that downloads mods
+```bash
+# Edit worlds configuration
+vim worlds/cobblestone-values.yaml
+
+# Apply changes
+helm upgrade minecraft-cobblestone itzg/minecraft -n games \
+  -f worlds/cobblestone-values.yaml
+```
+
+## Backup System
+
+- **Schedule**: Daily at 1 AM UTC
+- **Location**: NFS at `192.168.1.94:/games/minecraft/backups`
+- **Retention**: Last 7 daily backups per world
+- **Method**: rsync via Kubernetes CronJob
+
+**Backup structure**:
+```
+/backups/
+├── cobblestone/daily/
+│   ├── 20251231-010000/
+│   ├── 20251230-010000/
+│   └── ...
+└── sandstone/daily/
+    ├── 20251231-010000/
+    ├── 20251230-010000/
+    └── ...
+```
+
+### Restore from Backup
+
+1. **Scale server to 0**:
+   ```bash
+   kubectl scale deployment -n games minecraft-cobblestone --replicas=0
+   ```
+
+2. **Find PVC path** on cyl-mitx node:
+   ```bash
+   kubectl get pv -o custom-columns=NAME:.metadata.name,PATH:.spec.local.path | grep cobblestone
+   ```
+
+3. **Restore data** (from cyl-mitx node):
+   ```bash
+   rsync -av /path/to/nfs/backups/cobblestone/daily/<backup-date>/ /path/to/local-pvc/
+   ```
+
+4. **Scale server back up**:
+   ```bash
+   kubectl scale deployment -n games minecraft-cobblestone --replicas=1
+   ```
+
+## Monitoring
+
+### mc-router Routes
+
+```bash
+kubectl port-forward -n games deployment/mc-router 8080:8080
+curl http://localhost:8080/routes
+```
+
+### mc-router Logs
+
+```bash
+kubectl logs -n games deployment/mc-router -f
+```
+
+### Backup Status
+
+```bash
+# View CronJob schedule
+kubectl get cronjob -n games minecraft-backup
+
+# View recent backup jobs
+kubectl get jobs -n games | grep minecraft-backup
+
+# Check backup logs
+kubectl logs -n games job/minecraft-backup-<job-id>
+```
+
+## Troubleshooting
+
+### Server Not Responding
+
+1. **Check pod status**:
+   ```bash
+   kubectl get pods -n games | grep minecraft
+   ```
+
+2. **Check logs for errors**:
+   ```bash
+   kubectl logs -n games <pod-name> --tail=100
+   ```
+
+3. **Verify mc-router discovery**:
+   ```bash
+   kubectl port-forward -n games deployment/mc-router 8080:8080
+   curl http://localhost:8080/routes | grep <server-name>
+   ```
+
+### Connection Timeout
+
+1. **Test DNS resolution**:
+   ```bash
+   nslookup cobblestone.mc.cliff.li
+   ```
+
+2. **Check Traefik routes**:
+   ```bash
+   kubectl get ingressroutetcp -n games
+   ```
+
+3. **Verify mc-router is running**:
+   ```bash
+   kubectl get pods -n games -l app=mc-router
+   ```
+
+### Backup Failures
+
+1. **Check CronJob status**:
+   ```bash
+   kubectl get cronjob -n games minecraft-backup
+   ```
+
+2. **View failed job logs**:
+   ```bash
+   kubectl logs -n games job/minecraft-backup-<failed-job-id>
+   ```
+
+3. **Verify NFS mount**:
+   ```bash
+   kubectl exec -n games deployment/minecraft-cobblestone -- df -h /backups
+   ```
+
+## Performance Optimization
+
+### Recommended Mods
+
+Both servers include performance mods:
+- **Lithium**: Server-side optimization
+- **Ferrite Core**: Memory usage reduction
+
+### Resource Tuning
+
+Edit `worlds/<server>-values.yaml`:
+
+```yaml
+# Increase memory for more players
+minecraftServer:
+  memory: 6G  # Default: 4G
+
+# Adjust view distance
+minecraftServer:
+  viewDistance: 12  # Default: 10
+
+# Increase CPU allocation
+resources:
+  requests:
+    cpu: 2000m  # Default: 1000m
+    memory: 4Gi  # Default: 2Gi
+```
+
+Then upgrade:
+```bash
+helm upgrade minecraft-<servername> itzg/minecraft -n games \
+  -f worlds/<server>-values.yaml
+```
+
+## Documentation
+
+- **mc-router Setup**: `mc-router/docs/README.md`
+- **Adding Servers**: `mc-router/docs/ADDING-SERVERS.md`
+- **Implementation Details**: `mc-router/docs/MC-ROUTER-IMPLEMENTATION.md`
+
+## External Resources
+
+- [itzg/minecraft-server Chart](https://github.com/itzg/minecraft-server-charts)
+- [mc-router GitHub](https://github.com/itzg/mc-router)
+- [Minecraft Wiki](https://minecraft.wiki/)

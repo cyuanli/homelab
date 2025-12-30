@@ -1,0 +1,97 @@
+---
+# Kubernetes CronJob for backing up ALL Minecraft world data
+# Runs daily at 1 AM UTC, keeps last 7 daily backups per world
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: minecraft-backup
+  namespace: games
+spec:
+  # Run daily at 1 AM
+  schedule: "0 1 * * *"
+
+  # Keep last 3 successful jobs for history
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: minecraft-backup
+        spec:
+          restartPolicy: OnFailure
+
+          # Run on cyl-mitx to access local-path storage
+          nodeSelector:
+            kubernetes.io/hostname: cyl-mitx
+
+          containers:
+          - name: backup
+            image: alpine:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Install rsync
+              apk add --no-cache rsync
+
+              # Create dated backup timestamp
+              BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
+
+              echo "Starting Minecraft worlds backup: $BACKUP_DATE"
+
+              # Backup cobblestone world
+              echo "Backing up cobblestone world..."
+              mkdir -p "/backups/cobblestone/daily/$BACKUP_DATE"
+              rsync -av --delete /data/cobblestone/ "/backups/cobblestone/daily/$BACKUP_DATE/"
+              echo "Cobblestone backup completed"
+
+              # Backup sandstone world
+              echo "Backing up sandstone world..."
+              mkdir -p "/backups/sandstone/daily/$BACKUP_DATE"
+              rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
+              echo "Sandstone backup completed"
+
+              # Keep only last 7 daily backups for each world
+              echo "Cleaning up old cobblestone backups (keeping last 7)..."
+              cd /backups/cobblestone/daily && ls -1t | tail -n +8 | xargs -r rm -rf
+
+              echo "Cleaning up old sandstone backups (keeping last 7)..."
+              cd /backups/sandstone/daily && ls -1t | tail -n +8 | xargs -r rm -rf
+
+              echo "Backup rotation complete"
+              echo "Cobblestone backups:"
+              ls -lth /backups/cobblestone/daily/ | head -8
+              echo "Sandstone backups:"
+              ls -lth /backups/sandstone/daily/ | head -8
+
+            volumeMounts:
+            - name: cobblestone-data
+              mountPath: /data/cobblestone
+              readOnly: true
+            - name: sandstone-data
+              mountPath: /data/sandstone
+              readOnly: true
+            - name: minecraft-backups
+              mountPath: /backups
+              subPath: games/minecraft/backups
+
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+
+          volumes:
+          - name: cobblestone-data
+            persistentVolumeClaim:
+              claimName: minecraft-cobblestone-datadir
+          - name: sandstone-data
+            persistentVolumeClaim:
+              claimName: minecraft-sandstone-datadir
+          - name: minecraft-backups
+            persistentVolumeClaim:
+              claimName: minecraft-backups
