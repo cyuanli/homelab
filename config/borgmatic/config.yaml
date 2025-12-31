@@ -1,6 +1,8 @@
 source_directories:
   - /media/data/nextcloud/*/files
   - /media/data/immich/library/library
+  - /media/data/owntracks/rec
+  - /media/data/games
 
 repositories:
   - path: ssh://cyl-optiplex9020/media/wd_elements/borg
