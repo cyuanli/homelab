@@ -1,6 +1,7 @@
 ---
 # Kubernetes CronJob for backing up ALL Minecraft world data
-# Runs daily at 1 AM UTC, keeps last 7 daily backups per world
+# Runs daily at 1 AM UTC
+# Keeps last 7 daily backups, promotes old dailies to weekly (12 weeks retained)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -56,19 +57,99 @@ spec:
               rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
               echo "Sandstone backup completed"
 
-              # Keep only last 7 daily backups for each world
-              # Sort by directory name (YYYYMMDD-HHMMSS format) in reverse to get newest first
-              echo "Cleaning up old cobblestone backups (keeping last 7)..."
-              cd /backups/cobblestone/daily && ls -1 | sort -r | tail -n +8 | xargs -r rm -rf
+              # Function to promote daily backup to weekly if needed
+              promote_to_weekly() {
+                local world=$1
+                local backup_dir=$2
 
-              echo "Cleaning up old sandstone backups (keeping last 7)..."
-              cd /backups/sandstone/daily && ls -1 | sort -r | tail -n +8 | xargs -r rm -rf
+                # Get most recent weekly backup date (if any)
+                local latest_weekly=""
+                if [ -d "/backups/$world/weekly" ]; then
+                  latest_weekly=$(ls -1 /backups/$world/weekly 2>/dev/null | sort -r | head -1)
+                fi
+
+                # Extract just the date part (YYYYMMDD) from backup_dir
+                local backup_date=${backup_dir:0:8}
+
+                # If no weekly backup exists, promote this one
+                if [ -z "$latest_weekly" ]; then
+                  echo "  No weekly backups exist, promoting $backup_dir to weekly"
+                  mkdir -p "/backups/$world/weekly"
+                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
+                  return 0
+                fi
+
+                # Extract date from latest weekly backup
+                local weekly_date=${latest_weekly:0:8}
+
+                # Calculate days difference (simple subtraction works for YYYYMMDD format)
+                # Convert to epoch seconds for proper comparison
+                local backup_epoch=$(date -d "$backup_date" +%s 2>/dev/null || echo 0)
+                local weekly_epoch=$(date -d "$weekly_date" +%s 2>/dev/null || echo 0)
+                local days_diff=$(( (backup_epoch - weekly_epoch) / 86400 ))
+
+                # If backup is 7+ days newer than latest weekly, promote it
+                if [ $days_diff -ge 7 ]; then
+                  echo "  Backup $backup_dir is $days_diff days newer than latest weekly, promoting"
+                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
+                  return 0
+                fi
+
+                return 1
+              }
+
+              # Function to safely delete a backup directory (works with NFS)
+              safe_delete() {
+                local dir=$1
+                echo "  Deleting $dir..."
+                # Delete files first, then empty directories (works better with NFS)
+                find "$dir" -type f -delete
+                find "$dir" -type d -depth -delete
+              }
+
+              # Rotate cobblestone backups (keep last 7 daily, promote old to weekly)
+              echo "Rotating cobblestone backups..."
+              if [ -d /backups/cobblestone/daily ]; then
+                cd /backups/cobblestone/daily
+                # Get backups sorted by name (newest first), skip first 7
+                for backup in $(ls -1 | sort -r | tail -n +8); do
+                  if ! promote_to_weekly "cobblestone" "$backup"; then
+                    safe_delete "/backups/cobblestone/daily/$backup"
+                  fi
+                done
+              fi
+
+              # Rotate sandstone backups (keep last 7 daily, promote old to weekly)
+              echo "Rotating sandstone backups..."
+              if [ -d /backups/sandstone/daily ]; then
+                cd /backups/sandstone/daily
+                for backup in $(ls -1 | sort -r | tail -n +8); do
+                  if ! promote_to_weekly "sandstone" "$backup"; then
+                    safe_delete "/backups/sandstone/daily/$backup"
+                  fi
+                done
+              fi
+
+              # Keep only last 12 weekly backups per world (about 3 months)
+              echo "Cleaning old weekly backups (keeping last 12)..."
+              for world in cobblestone sandstone; do
+                if [ -d /backups/$world/weekly ]; then
+                  cd /backups/$world/weekly
+                  for backup in $(ls -1 | sort -r | tail -n +13); do
+                    safe_delete "/backups/$world/weekly/$backup"
+                  done
+                fi
+              done
 
               echo "Backup rotation complete"
-              echo "Cobblestone backups:"
-              ls -lth /backups/cobblestone/daily/ | head -8
-              echo "Sandstone backups:"
-              ls -lth /backups/sandstone/daily/ | head -8
+              echo "Cobblestone daily backups:"
+              ls -lth /backups/cobblestone/daily/ 2>/dev/null | head -8
+              echo "Cobblestone weekly backups:"
+              ls -lth /backups/cobblestone/weekly/ 2>/dev/null | head -5
+              echo "Sandstone daily backups:"
+              ls -lth /backups/sandstone/daily/ 2>/dev/null | head -8
+              echo "Sandstone weekly backups:"
+              ls -lth /backups/sandstone/weekly/ 2>/dev/null | head -5
 
             volumeMounts:
             - name: cobblestone-data
@@ -79,7 +160,7 @@ spec:
               readOnly: true
             - name: minecraft-backups
               mountPath: /backups
-              subPath: games/minecraft/backups
+              subPath: minecraft/backups
 
             resources:
               requests:
