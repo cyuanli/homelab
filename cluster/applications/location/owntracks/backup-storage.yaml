@@ -1,0 +1,38 @@
+---
+# NFS PersistentVolume for Owntracks backups on HDD
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: owntracks-backups
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: owntracks-backups
+    volumeAttributes:
+      server: 192.168.1.94
+      share: /media/owntracks
+
+---
+# PersistentVolumeClaim for Owntracks backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: owntracks-backups
+  namespace: location
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-media
+  volumeName: owntracks-backups
+  resources:
+    requests:
+      storage: 10Gi

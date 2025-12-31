@@ -67,7 +67,7 @@ spec:
       volumes:
       - name: owntracks-data
         hostPath:
-          path: /mnt/data1/owntracks
+          path: /srv/app-storage/owntracks
           type: DirectoryOrCreate
       - name: recorder-config
         persistentVolumeClaim:

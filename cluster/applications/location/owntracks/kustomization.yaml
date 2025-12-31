@@ -7,6 +7,8 @@ resources:
   - recorder.yaml
   - frontend.yaml
   - ingress.yaml
+  - backup-storage.yaml
+  - backup-cronjob.yaml
 
 namespace: location
 
