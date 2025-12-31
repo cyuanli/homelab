@@ -57,6 +57,12 @@ spec:
               rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
               echo "Sandstone backup completed"
 
+              # Backup apricorn world
+              echo "Backing up apricorn world..."
+              mkdir -p "/backups/apricorn/daily/$BACKUP_DATE"
+              rsync -av --delete /data/apricorn/ "/backups/apricorn/daily/$BACKUP_DATE/"
+              echo "Apricorn backup completed"
+
               # Function to promote daily backup to weekly if needed
               promote_to_weekly() {
                 local world=$1
@@ -130,9 +136,20 @@ spec:
                 done
               fi
 
+              # Rotate apricorn backups (keep last 7 daily, promote old to weekly)
+              echo "Rotating apricorn backups..."
+              if [ -d /backups/apricorn/daily ]; then
+                cd /backups/apricorn/daily
+                for backup in $(ls -1 | sort -r | tail -n +8); do
+                  if ! promote_to_weekly "apricorn" "$backup"; then
+                    safe_delete "/backups/apricorn/daily/$backup"
+                  fi
+                done
+              fi
+
               # Keep only last 12 weekly backups per world (about 3 months)
               echo "Cleaning old weekly backups (keeping last 12)..."
-              for world in cobblestone sandstone; do
+              for world in cobblestone sandstone apricorn; do
                 if [ -d /backups/$world/weekly ]; then
                   cd /backups/$world/weekly
                   for backup in $(ls -1 | sort -r | tail -n +13); do
@@ -150,6 +167,10 @@ spec:
               ls -lth /backups/sandstone/daily/ 2>/dev/null | head -8
               echo "Sandstone weekly backups:"
               ls -lth /backups/sandstone/weekly/ 2>/dev/null | head -5
+              echo "Apricorn daily backups:"
+              ls -lth /backups/apricorn/daily/ 2>/dev/null | head -8
+              echo "Apricorn weekly backups:"
+              ls -lth /backups/apricorn/weekly/ 2>/dev/null | head -5
 
             volumeMounts:
             - name: cobblestone-data
@@ -157,6 +178,9 @@ spec:
               readOnly: true
             - name: sandstone-data
               mountPath: /data/sandstone
+              readOnly: true
+            - name: apricorn-data
+              mountPath: /data/apricorn
               readOnly: true
             - name: minecraft-backups
               mountPath: /backups
@@ -174,6 +198,9 @@ spec:
           - name: sandstone-data
             persistentVolumeClaim:
               claimName: minecraft-sandstone-datadir
+          - name: apricorn-data
+            persistentVolumeClaim:
+              claimName: minecraft-apricorn-datadir
           - name: minecraft-backups
             persistentVolumeClaim:
               claimName: minecraft-backups

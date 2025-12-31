@@ -6,7 +6,7 @@ Kubernetes deployment of multiple Minecraft Java Edition servers with automatic 
 
 This directory contains all Minecraft-related infrastructure for the homelab:
 
-- **Multiple Minecraft Worlds**: Currently running Cobblestone and Sandstone servers
+- **Multiple Minecraft Worlds**: Currently running Cobblestone, Sandstone, and Apricorn servers
 - **mc-router**: Reverse proxy for domain-based routing to multiple servers
 - **Unified Backup System**: Single CronJob backing up all worlds to NFS
 - **Auto-Discovery**: New servers automatically discovered and routed
@@ -17,7 +17,8 @@ This directory contains all Minecraft-related infrastructure for the homelab:
 minecraft/
 ├── worlds/              # Individual world configurations
 │   ├── cobblestone-values.yaml
-│   └── sandstone-values.yaml
+│   ├── sandstone-values.yaml
+│   └── apricorn-values.yaml
 ├── mc-router/           # Routing infrastructure
 │   ├── deployment.yaml
 │   ├── service.yaml
@@ -34,7 +35,8 @@ minecraft/
 | Server | Domain | MOTD | Type | Node |
 |--------|--------|------|------|------|
 | Cobblestone | cobblestone.mc.cliff.li | Cliff's Magical World | Fabric (Latest) | cyl-mitx |
-| Sandstone | sandstone.mc.cliff.li | Sandstone Adventures | Fabric (Latest) | cyl-mitx |
+| Sandstone | sandstone.mc.cliff.li | it gets everywhere | Fabric (Latest) | cyl-mitx |
+| Apricorn | apricorn.mc.cliff.li | Cobblemon Adventures | Fabric (Latest) + Cobblemon | cyl-mitx |
 
 ## Architecture
 
@@ -55,7 +57,8 @@ Traefik (homelab)
     ↓
 mc-router (domain-based routing)
     ├─→ cobblestone.mc.cliff.li → Cobblestone Server
-    └─→ sandstone.mc.cliff.li → Sandstone Server
+    ├─→ sandstone.mc.cliff.li → Sandstone Server
+    └─→ apricorn.mc.cliff.li → Apricorn Server (Cobblemon)
 ```
 
 ### Components
@@ -102,6 +105,10 @@ kubectl create namespace games
    # Sandstone
    helm install minecraft-sandstone itzg/minecraft -n games \
      -f worlds/sandstone-values.yaml
+
+   # Apricorn (Cobblemon)
+   helm install minecraft-apricorn itzg/minecraft -n games \
+     -f worlds/apricorn-values.yaml
    ```
 
 4. **Deploy backup CronJob**:
@@ -124,7 +131,8 @@ Expected output:
 ```json
 {
   "cobblestone.mc.cliff.li": "10.43.x.x:25565",
-  "sandstone.mc.cliff.li": "10.43.y.y:25565"
+  "sandstone.mc.cliff.li": "10.43.y.y:25565",
+  "apricorn.mc.cliff.li": "10.43.z.z:25565"
 }
 ```
 
@@ -171,6 +179,9 @@ kubectl logs -n games -l app=minecraft-cobblestone -f
 
 # Sandstone
 kubectl logs -n games -l app=minecraft-sandstone -f
+
+# Apricorn
+kubectl logs -n games -l app=minecraft-apricorn -f
 ```
 
 ### Access Server Console
@@ -181,6 +192,9 @@ kubectl exec -n games deployment/minecraft-cobblestone -it -- rcon-cli
 
 # Sandstone
 kubectl exec -n games deployment/minecraft-sandstone -it -- rcon-cli
+
+# Apricorn
+kubectl exec -n games deployment/minecraft-apricorn -it -- rcon-cli
 ```
 
 ### Check Resource Usage
@@ -220,7 +234,11 @@ helm upgrade minecraft-cobblestone itzg/minecraft -n games \
 │   ├── 20251231-010000/
 │   ├── 20251230-010000/
 │   └── ...
-└── sandstone/daily/
+├── sandstone/daily/
+│   ├── 20251231-010000/
+│   ├── 20251230-010000/
+│   └── ...
+└── apricorn/daily/
     ├── 20251231-010000/
     ├── 20251230-010000/
     └── ...

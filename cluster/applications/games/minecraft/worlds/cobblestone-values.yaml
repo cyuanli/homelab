@@ -16,6 +16,7 @@ minecraftServer:
   mode: survival
   pvp: true
   onlineMode: true
+  spawnProtection: 0
 
   # Modrinth mods to install
   modrinth:
@@ -29,6 +30,11 @@ minecraftServer:
 
   # Server performance
   memory: 4G
+
+  # RCON for remote console access
+  rcon:
+    enabled: true
+    password: "cobblestone-rcon-2025"
 
   # Network service type (ClusterIP for mc-router integration)
   serviceType: ClusterIP

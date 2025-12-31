@@ -1,4 +1,4 @@
-# Minecraft Fabric Server - Helm Values
+# Minecraft Fabric Server with Cobblemon - Helm Values
 # Chart: itzg/minecraft
 
 minecraftServer:
@@ -6,13 +6,13 @@ minecraftServer:
   eula: true
 
   # Server version and type
-  version: "LATEST"
+  version: "1.21.1"
   type: "FABRIC"
 
   # Server properties
   difficulty: normal
   maxPlayers: 20
-  motd: "it gets everywhere"
+  motd: "i wanna be the very best"
   mode: survival
   pvp: true
   onlineMode: true
@@ -21,6 +21,8 @@ minecraftServer:
   # Modrinth mods to install
   modrinth:
     projects:
+      - fabric-api
+      - cobblemon
       - ferrite-core
       - lithium
 
@@ -34,14 +36,14 @@ minecraftServer:
   # RCON for remote console access
   rcon:
     enabled: true
-    password: "sandstone-rcon-2025"
+    password: "apricorn-rcon-2025"
 
   # Network service type (ClusterIP for mc-router integration)
   serviceType: ClusterIP
 
-# mc-router integration - route sandstone.mc.cliff.li to this server
+# mc-router integration - route apricorn.mc.cliff.li to this server
 serviceAnnotations:
-  mc-router.itzg.me/externalServerName: "sandstone.mc.cliff.li"
+  mc-router.itzg.me/externalServerName: "apricorn.mc.cliff.li"
 
 # Resource requests - no limits to allow bursting
 resources:
