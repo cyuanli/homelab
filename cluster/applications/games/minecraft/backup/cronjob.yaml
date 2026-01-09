@@ -45,23 +45,66 @@ spec:
 
               echo "Starting Minecraft worlds backup: $BACKUP_DATE"
 
+              # Function to check if world has changes compared to latest backup
+              has_changes() {
+                local source=$1
+                local world_name=$2
+
+                # Get the most recent backup by sorting directory names (YYYYMMDD-HHMMSS format)
+                # Sort in reverse order so newest is first
+                local latest_backup=$(ls -1 /backups/$world_name/daily 2>/dev/null | sort -r | head -1)
+
+                # If no backup exists, always create one
+                if [ -z "$latest_backup" ]; then
+                  echo "  No previous backup found, will create initial backup"
+                  return 0
+                fi
+
+                echo "  Comparing with latest backup: $latest_backup"
+
+                # Use rsync dry-run to check for changes
+                # -n = dry-run, -i = itemize changes, -a = archive mode
+                # Filter out directory-only changes (lines starting with '.d')
+                local changes=$(rsync -ani --delete "$source/" "/backups/$world_name/daily/$latest_backup/" 2>/dev/null | grep -v '^\.d' | head -1)
+
+                if [ -n "$changes" ]; then
+                  echo "  Changes detected since last backup"
+                  return 0
+                else
+                  echo "  No changes detected, skipping backup"
+                  return 1
+                fi
+              }
+
               # Backup cobblestone world
               echo "Backing up cobblestone world..."
-              mkdir -p "/backups/cobblestone/daily/$BACKUP_DATE"
-              rsync -av --delete /data/cobblestone/ "/backups/cobblestone/daily/$BACKUP_DATE/"
-              echo "Cobblestone backup completed"
+              if has_changes "/data/cobblestone" "cobblestone"; then
+                mkdir -p "/backups/cobblestone/daily/$BACKUP_DATE"
+                rsync -av --delete /data/cobblestone/ "/backups/cobblestone/daily/$BACKUP_DATE/"
+                echo "Cobblestone backup completed"
+              else
+                echo "Cobblestone backup skipped (no changes)"
+              fi
 
               # Backup sandstone world
               echo "Backing up sandstone world..."
-              mkdir -p "/backups/sandstone/daily/$BACKUP_DATE"
-              rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
-              echo "Sandstone backup completed"
+              if has_changes "/data/sandstone" "sandstone"; then
+                mkdir -p "/backups/sandstone/daily/$BACKUP_DATE"
+                rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
+                echo "Sandstone backup completed"
+              else
+                echo "Sandstone backup skipped (no changes)"
+              fi
 
               # Backup apricorn world
               echo "Backing up apricorn world..."
-              mkdir -p "/backups/apricorn/daily/$BACKUP_DATE"
-              rsync -av --delete /data/apricorn/ "/backups/apricorn/daily/$BACKUP_DATE/"
-              echo "Apricorn backup completed"
+              if has_changes "/data/apricorn" "apricorn"; then
+                mkdir -p "/backups/apricorn/daily/$BACKUP_DATE"
+                rsync -av --delete /data/apricorn/ "/backups/apricorn/daily/$BACKUP_DATE/"
+                echo "Apricorn backup completed"
+              else
+                echo "Apricorn backup skipped (no changes)"
+              fi
 
               # Function to promote daily backup to weekly if needed
               promote_to_weekly() {
@@ -107,10 +150,22 @@ spec:
               # Function to safely delete a backup directory (works with NFS)
               safe_delete() {
                 local dir=$1
+
+                # Validate the directory is in the expected backup location
+                if [[ ! "$dir" =~ ^/backups/(cobblestone|sandstone|apricorn)/(daily|weekly)/ ]]; then
+                  echo "  ERROR: Refusing to delete $dir - not in expected backup path"
+                  return 1
+                fi
+
+                # Validate the directory exists
+                if [[ ! -d "$dir" ]]; then
+                  echo "  WARNING: Directory $dir does not exist, skipping"
+                  return 0
+                fi
+
                 echo "  Deleting $dir..."
-                # Delete files first, then empty directories (works better with NFS)
-                find "$dir" -type f -delete
-                find "$dir" -type d -depth -delete
+                # Use rm -rf which works reliably with NFS
+                rm -rf "$dir"
               }
 
               # Rotate cobblestone backups (keep last 7 daily, promote old to weekly)

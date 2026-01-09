@@ -29,7 +29,7 @@ minecraftServer:
   viewDistance: 10
 
   # Server performance
-  memory: 4G
+  memory: 2G
 
   # RCON for remote console access
   rcon:
@@ -43,11 +43,13 @@ minecraftServer:
 serviceAnnotations:
   mc-router.itzg.me/externalServerName: "sandstone.mc.cliff.li"
 
-# Resource requests - no limits to allow bursting
+# Resource requests and limits
 resources:
   requests:
     cpu: 1000m
     memory: 2Gi
+  limits:
+    memory: 4Gi
 
 # Storage - Local SSD for performance
 persistence:

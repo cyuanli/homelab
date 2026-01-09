@@ -56,12 +56,12 @@ check_for_stale_mounts() {
 
     info "Scanning for stale NFS mounts in kubelet volumes..."
 
-    # Find all NFS CSI mounts
+    # Find all NFS CSI mounts (mount points only, not subdirectories)
     while IFS= read -r mount_path; do
         if [[ -n "$mount_path" ]]; then
             mount_paths+=("$mount_path")
         fi
-    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -type d 2>/dev/null || true)
+    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -maxdepth 0 -type d 2>/dev/null || true)
 
     if [[ ${#mount_paths[@]} -eq 0 ]]; then
         warn "No NFS CSI mounts found"
@@ -326,7 +326,7 @@ show_status() {
                 echo "✗ $mount_path (STALE)"
             fi
         fi
-    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -type d 2>/dev/null || true)
+    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -maxdepth 0 -type d 2>/dev/null || true)
 
     if [[ $mount_count -eq 0 ]]; then
         echo "No NFS CSI mounts found"
