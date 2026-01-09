@@ -7,8 +7,8 @@ metadata:
   name: owntracks-backup
   namespace: location
 spec:
-  # Run daily at 1 AM
-  schedule: "0 1 * * *"
+  # Run daily at 1 AM CET (midnight UTC)
+  schedule: "0 0 * * *"
 
   # Keep last 3 successful jobs for history
   successfulJobsHistoryLimit: 3
