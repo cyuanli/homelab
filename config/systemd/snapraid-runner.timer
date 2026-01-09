@@ -1,0 +1,10 @@
+[Unit]
+Description=Run SnapRAID sync/scrub daily
+Documentation=https://github.com/Chronial/snapraid-runner
+
+[Timer]
+OnCalendar=02:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

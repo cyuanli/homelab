@@ -606,19 +606,27 @@ kubectl set image deployment/jellyfin \
 
 ### Scheduled Tasks
 
-**Crontab Examples**
+This homelab uses **systemd timers** for all scheduled tasks. See `config/systemd/` for timer configurations.
+
+**Installed Timers:**
+- `snapraid-runner.timer` - Daily SnapRAID sync at 2:00 AM
+- `disk-monitor.timer` - Disk health monitoring every 5 minutes
+- `nfs-monitor.timer` - NFS mount monitoring every 5 minutes
+- `borgmatic.timer` - System backups daily at 3:00 AM
+
+**Managing Timers:**
 ```bash
-# Edit crontab
-crontab -e
+# View all active timers
+systemctl list-timers
 
-# Daily health check at 6 AM
-0 6 * * * /home/user/homelab/scripts/homelab.sh status > /var/log/homelab-status.log
+# Check timer status
+systemctl status snapraid-runner.timer
 
-# Weekly cleanup at 2 AM Sunday
-0 2 * * 0 docker system prune -f
+# View service logs
+journalctl -u disk-monitor.service -n 50
 
-# Monthly backup verification
-0 3 1 * * /home/user/homelab/scripts/backup-notify.sh verify
+# Manually trigger a service
+sudo systemctl start disk-monitor.service
 ```
 
 ### Monitoring Scripts

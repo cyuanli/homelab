@@ -62,19 +62,19 @@ This solution implements a **multi-layered defense** against stale NFS mounts:
 
 ### 3. Automated Monitoring
 
-**Option A: Cron Job (Storage Node)**
+**Option A: systemd Timer (Storage Node)**
 
 Install on the storage node (cyl-homelab):
 
 ```bash
-# Install the cron job
-sudo crontab -l > /tmp/current-cron
-cat config/system-configs/nfs-monitor.cron >> /tmp/current-cron
-sudo crontab /tmp/current-cron
-rm /tmp/current-cron
+# Install the systemd timer
+sudo cp /home/cyl/homelab/config/systemd/nfs-monitor.{timer,service} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nfs-monitor.timer
 
 # Verify
-sudo crontab -l
+systemctl list-timers nfs-monitor.timer
+systemctl status nfs-monitor.service
 ```
 
 This runs every 5 minutes and:
@@ -200,11 +200,12 @@ sudo tail -f /var/log/nfs-health-monitor.log
 
 Choose one approach:
 
-**A. Cron (recommended for storage node)**
+**A. systemd Timer (recommended for storage node)**
 ```bash
-sudo crontab -e
-# Add:
-*/5 * * * * /home/cyl/homelab/scripts/monitor-nfs-health.sh check >> /var/log/nfs-health-monitor.log 2>&1
+# Install timer and service files
+sudo cp /home/cyl/homelab/config/systemd/nfs-monitor.{timer,service} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nfs-monitor.timer
 ```
 
 **B. DaemonSet (recommended for multi-node cluster)**

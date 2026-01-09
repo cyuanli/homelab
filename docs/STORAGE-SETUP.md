@@ -299,14 +299,15 @@ percentage = 5
 older-than = 10
 ```
 
-### Add cron job:
+### Setup systemd timer:
 ```bash
-sudo crontab -e
-```
+# Install systemd timer files from homelab config
+sudo cp /home/cyl/homelab/config/systemd/snapraid-runner.{timer,service} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now snapraid-runner.timer
 
-Add this line for daily 2 AM sync:
-```bash
-0 2 * * * /usr/local/bin/snapraid-runner
+# Verify it's scheduled
+systemctl list-timers snapraid-runner.timer
 ```
 
 ### Create log file:
@@ -496,11 +497,14 @@ DISK_MONITOR_WEBHOOK="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_TOKE
 
 #### Setup Automated Monitoring:
 ```bash
-# Add to root crontab (monitoring needs root permissions)
-sudo crontab -e
+# Install systemd timer for disk monitoring (runs every 5 minutes)
+sudo cp /home/cyl/homelab/config/systemd/disk-monitor.{timer,service} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now disk-monitor.timer
 
-# Add this line for monitoring every 5 minutes:
-*/5 * * * * /home/cyl/homelab/home-pc/scripts/disk-monitor-cron.sh >/dev/null 2>&1
+# Verify it's running
+systemctl list-timers disk-monitor.timer
+journalctl -u disk-monitor.service -n 20
 ```
 
 ### How It Works

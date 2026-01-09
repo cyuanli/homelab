@@ -1,0 +1,11 @@
+[Unit]
+Description=Run disk health monitoring every 5 minutes
+Documentation=file:///home/cyl/homelab/scripts/monitor-storage.sh
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

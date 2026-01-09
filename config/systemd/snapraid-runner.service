@@ -1,0 +1,10 @@
+[Unit]
+Description=SnapRAID sync and scrub
+Documentation=https://github.com/Chronial/snapraid-runner
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/snapraid-runner -c /etc/snapraid-runner.conf
+ExecStartPost=/home/cyl/homelab/scripts/snapraid-notify.sh
+StandardOutput=journal
+StandardError=journal

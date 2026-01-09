@@ -1,0 +1,9 @@
+[Unit]
+Description=NFS health monitoring and recovery
+Documentation=file:///home/cyl/homelab/scripts/monitor-nfs-health.sh
+
+[Service]
+Type=oneshot
+ExecStart=/home/cyl/homelab/scripts/monitor-nfs-health.sh check
+StandardOutput=journal
+StandardError=journal
