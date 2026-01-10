@@ -151,21 +151,32 @@ spec:
               safe_delete() {
                 local dir=$1
 
-                # Validate the directory is in the expected backup location
-                if [[ ! "$dir" =~ ^/backups/(cobblestone|sandstone|apricorn)/(daily|weekly)/ ]]; then
-                  echo "  ERROR: Refusing to delete $dir - not in expected backup path"
-                  return 1
-                fi
+                # Validate the directory is in the expected backup location using case
+                case "$dir" in
+                  /backups/cobblestone/daily/*|/backups/cobblestone/weekly/*|\
+                  /backups/sandstone/daily/*|/backups/sandstone/weekly/*|\
+                  /backups/apricorn/daily/*|/backups/apricorn/weekly/*)
+                    # Path is valid
+                    ;;
+                  *)
+                    echo "  ERROR: Refusing to delete $dir - not in expected backup path"
+                    return 1
+                    ;;
+                esac
 
                 # Validate the directory exists
-                if [[ ! -d "$dir" ]]; then
+                if [ ! -d "$dir" ]; then
                   echo "  WARNING: Directory $dir does not exist, skipping"
                   return 0
                 fi
 
                 echo "  Deleting $dir..."
-                # Use rm -rf which works reliably with NFS
-                rm -rf "$dir"
+                # Use find with proper deletion order for NFS compatibility
+                # Delete files first, then directories from bottom-up
+                find "$dir" -depth -type f -delete 2>/dev/null || true
+                find "$dir" -depth -type d -exec rmdir {} \; 2>/dev/null || true
+                # Final cleanup with rm -rf in case anything remains
+                rm -rf "$dir" 2>/dev/null || true
               }
 
               # Rotate cobblestone backups (keep last 7 daily, promote old to weekly)

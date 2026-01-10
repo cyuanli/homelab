@@ -1,4 +1,40 @@
 ---
+# ServiceAccount for NFS health monitor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nfs-health-monitor
+  namespace: kube-system
+---
+# ClusterRole with permissions to delete pods and CSI driver pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-health-monitor
+rules:
+  # Read all pods to find affected ones
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Delete pods for recovery
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+---
+# Bind the ClusterRole to the ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nfs-health-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nfs-health-monitor
+subjects:
+  - kind: ServiceAccount
+    name: nfs-health-monitor
+    namespace: kube-system
+---
 # DaemonSet to run NFS health monitoring on all nodes
 apiVersion: apps/v1
 kind: DaemonSet
@@ -22,6 +58,7 @@ spec:
         - operator: "Exists"
       nodeSelector:
         kubernetes.io/os: linux
+      serviceAccountName: nfs-health-monitor
       containers:
         - name: nfs-monitor
           image: alpine:3.19
@@ -30,7 +67,16 @@ spec:
             - -c
             - |
               # Install required tools
-              apk add --no-cache bash coreutils findutils
+              apk add --no-cache bash coreutils findutils curl jq netcat-openbsd
+
+              # Install kubectl
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl
+              mv kubectl /usr/local/bin/
+
+              # Persistent counters across iterations
+              TOTAL_RECOVERY_ATTEMPTS=0
+              TOTAL_RECOVERY_SUCCESSES=0
 
               # Monitor loop - check every 5 minutes
               while true; do
@@ -43,7 +89,7 @@ spec:
 
                 # Check NFS server connectivity (port 2049)
                 NFS_SERVER_OK=0
-                if timeout 5 bash -c "echo >/dev/tcp/$NFS_SERVER/2049" 2>/dev/null; then
+                if timeout 5 nc -z "$NFS_SERVER" 2049 2>/dev/null; then
                   NFS_SERVER_OK=1
                 fi
 
@@ -51,6 +97,9 @@ spec:
                 STALE_MOUNTS=0
                 TOTAL_MOUNTS=0
                 MOUNTS_HEALTHY=1
+                # Store pod UIDs in a temp file instead of array
+                STALE_PODS_FILE="/tmp/stale-pods-$$"
+                rm -f "$STALE_PODS_FILE"
 
                 # Find all NFS CSI mount points (not their contents)
                 for mount_path in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount; do
@@ -60,6 +109,12 @@ spec:
                       echo "ERROR: Stale mount detected: $mount_path"
                       STALE_MOUNTS=$((STALE_MOUNTS + 1))
                       MOUNTS_HEALTHY=0
+
+                      # Extract pod UID from path and save to file
+                      POD_UID=$(echo "$mount_path" | sed -n 's|.*/pods/\([^/]*\)/.*|\1|p')
+                      if [ -n "$POD_UID" ]; then
+                        echo "$POD_UID" >> "$STALE_PODS_FILE"
+                      fi
                     fi
                   fi
                 done
@@ -69,6 +124,64 @@ spec:
                 if [ $NFS_SERVER_OK -eq 0 ] || [ $MOUNTS_HEALTHY -eq 0 ]; then
                   HEALTH_STATUS=0
                   echo "WARNING: NFS health degraded on node $(hostname)"
+
+                  # Attempt recovery if stale mounts detected
+                  if [ $MOUNTS_HEALTHY -eq 0 ]; then
+                    echo "INFO: Initiating automatic recovery..."
+                    TOTAL_RECOVERY_ATTEMPTS=$((TOTAL_RECOVERY_ATTEMPTS + 1))
+
+                    # Step 1: Delete CSI driver pod on this node to force remount
+                    NODE_NAME=$(hostname)
+                    echo "INFO: Restarting CSI driver pod on node $NODE_NAME..."
+                    if kubectl delete pod -n kube-system -l app=csi-nfs-node --field-selector spec.nodeName="$NODE_NAME" --grace-period=30 2>&1; then
+                      echo "INFO: CSI driver pod deleted, waiting for restart..."
+                      sleep 15
+
+                      # Step 2: Delete affected pods (read from file)
+                      if [ -f "$STALE_PODS_FILE" ]; then
+                        while read pod_uid; do
+                          echo "INFO: Looking for pod with UID $pod_uid..."
+                          POD_INFO=$(kubectl get pods -A -o json | jq -r ".items[] | select(.metadata.uid==\"$pod_uid\") | \"\(.metadata.namespace)/\(.metadata.name)\"" 2>/dev/null)
+                          if [ -n "$POD_INFO" ]; then
+                            NAMESPACE=$(echo "$POD_INFO" | cut -d/ -f1)
+                            POD_NAME=$(echo "$POD_INFO" | cut -d/ -f2)
+                            echo "INFO: Deleting affected pod $NAMESPACE/$POD_NAME..."
+                            if kubectl delete pod -n "$NAMESPACE" "$POD_NAME" --grace-period=30 2>&1; then
+                              echo "INFO: Pod $NAMESPACE/$POD_NAME deleted successfully"
+                            fi
+                          fi
+                        done < "$STALE_PODS_FILE"
+                      fi
+
+                      # Wait for recovery
+                      sleep 10
+
+                      # Re-check mounts
+                      RECOVERY_SUCCESS=1
+                      for mount_path in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount; do
+                        if [ -d "$mount_path" ]; then
+                          if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
+                            RECOVERY_SUCCESS=0
+                            break
+                          fi
+                        fi
+                      done
+
+                      if [ $RECOVERY_SUCCESS -eq 1 ]; then
+                        echo "INFO: Recovery successful - mounts are now healthy"
+                        TOTAL_RECOVERY_SUCCESSES=$((TOTAL_RECOVERY_SUCCESSES + 1))
+                        MOUNTS_HEALTHY=1
+                        HEALTH_STATUS=1
+                      else
+                        echo "ERROR: Recovery failed - stale mounts still present"
+                      fi
+                    else
+                      echo "ERROR: Failed to delete CSI driver pod"
+                    fi
+
+                    # Cleanup
+                    rm -f "$STALE_PODS_FILE"
+                  fi
                 fi
 
                 # Write metrics to textfile collector
@@ -99,11 +212,11 @@ spec:
                   echo ""
                   echo "# HELP nfs_recovery_attempts_total Total recovery attempts"
                   echo "# TYPE nfs_recovery_attempts_total counter"
-                  echo "nfs_recovery_attempts_total 0"
+                  echo "nfs_recovery_attempts_total $TOTAL_RECOVERY_ATTEMPTS"
                   echo ""
                   echo "# HELP nfs_recovery_successes_total Total successful recoveries"
                   echo "# TYPE nfs_recovery_successes_total counter"
-                  echo "nfs_recovery_successes_total 0"
+                  echo "nfs_recovery_successes_total $TOTAL_RECOVERY_SUCCESSES"
                 } > "$METRICS_FILE.$$"
 
                 # Atomic move
