@@ -78,7 +78,7 @@ spec:
               TOTAL_RECOVERY_ATTEMPTS=0
               TOTAL_RECOVERY_SUCCESSES=0
 
-              # Monitor loop - check every 5 minutes
+              # Monitor loop - check every minute
               while true; do
                 echo "[$(date)] Running NFS health check..."
 
@@ -101,19 +101,28 @@ spec:
                 STALE_PODS_FILE="/tmp/stale-pods-$$"
                 rm -f "$STALE_PODS_FILE"
 
-                # Find all NFS CSI mount points (not their contents)
-                for mount_path in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount; do
-                  if [ -d "$mount_path" ]; then
-                    TOTAL_MOUNTS=$((TOTAL_MOUNTS + 1))
-                    if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
-                      echo "ERROR: Stale mount detected: $mount_path"
-                      STALE_MOUNTS=$((STALE_MOUNTS + 1))
-                      MOUNTS_HEALTHY=0
+                # Find all NFS CSI mount points
+                # IMPORTANT: Don't glob the 'mount' directory directly - bash glob skips
+                # paths that return ESTALE (stale NFS file handle), causing silent failures.
+                # Instead, iterate through parent directories (which are local) and
+                # explicitly construct/check each mount path.
+                for csi_vol_dir in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*; do
+                  if [ -d "$csi_vol_dir" ]; then
+                    mount_path="$csi_vol_dir/mount"
+                    # Check if mount directory exists (local check on parent dir)
+                    if [ -e "$mount_path" ] || ls "$csi_vol_dir" 2>/dev/null | grep -q "^mount$"; then
+                      TOTAL_MOUNTS=$((TOTAL_MOUNTS + 1))
+                      # Now try to stat the mount - this will fail on stale NFS
+                      if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
+                        echo "ERROR: Stale mount detected: $mount_path"
+                        STALE_MOUNTS=$((STALE_MOUNTS + 1))
+                        MOUNTS_HEALTHY=0
 
-                      # Extract pod UID from path and save to file
-                      POD_UID=$(echo "$mount_path" | sed -n 's|.*/pods/\([^/]*\)/.*|\1|p')
-                      if [ -n "$POD_UID" ]; then
-                        echo "$POD_UID" >> "$STALE_PODS_FILE"
+                        # Extract pod UID from path and save to file
+                        POD_UID=$(echo "$mount_path" | sed -n 's|.*/pods/\([^/]*\)/.*|\1|p')
+                        if [ -n "$POD_UID" ]; then
+                          echo "$POD_UID" >> "$STALE_PODS_FILE"
+                        fi
                       fi
                     fi
                   fi
@@ -156,13 +165,16 @@ spec:
                       # Wait for recovery
                       sleep 10
 
-                      # Re-check mounts
+                      # Re-check mounts (using same non-glob approach)
                       RECOVERY_SUCCESS=1
-                      for mount_path in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount; do
-                        if [ -d "$mount_path" ]; then
-                          if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
-                            RECOVERY_SUCCESS=0
-                            break
+                      for csi_vol_dir in /host/var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*; do
+                        if [ -d "$csi_vol_dir" ]; then
+                          mount_path="$csi_vol_dir/mount"
+                          if [ -e "$mount_path" ] || ls "$csi_vol_dir" 2>/dev/null | grep -q "^mount$"; then
+                            if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
+                              RECOVERY_SUCCESS=0
+                              break
+                            fi
                           fi
                         fi
                       done
@@ -223,8 +235,8 @@ spec:
                 mv "$METRICS_FILE.$$" "$METRICS_FILE" 2>/dev/null || true
                 echo "Metrics written to $METRICS_FILE"
 
-                # Sleep for 5 minutes
-                sleep 300
+                # Sleep for 1 minute
+                sleep 60
               done
           volumeMounts:
             - name: kubelet-dir
@@ -237,7 +249,7 @@ spec:
               cpu: 10m
               memory: 32Mi
             limits:
-              cpu: 100m
+              cpu: 200m
               memory: 64Mi
           securityContext:
             privileged: true
@@ -273,13 +285,20 @@ data:
     fi
 
     # Check for stale mounts
+    # IMPORTANT: Don't use find or glob on the mount directory - they skip ESTALE paths.
+    # Instead, iterate through parent directories and explicitly check each mount.
     STALE_MOUNTS=0
     TOTAL_MOUNTS=0
 
-    find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -type d 2>/dev/null | while read -r mount_path; do
-      TOTAL_MOUNTS=$((TOTAL_MOUNTS + 1))
-      if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
-        STALE_MOUNTS=$((STALE_MOUNTS + 1))
+    for csi_vol_dir in /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*; do
+      if [ -d "$csi_vol_dir" ]; then
+        mount_path="$csi_vol_dir/mount"
+        if [ -e "$mount_path" ] || ls "$csi_vol_dir" 2>/dev/null | grep -q "^mount$"; then
+          TOTAL_MOUNTS=$((TOTAL_MOUNTS + 1))
+          if ! timeout 5 stat "$mount_path" >/dev/null 2>&1; then
+            STALE_MOUNTS=$((STALE_MOUNTS + 1))
+          fi
+        fi
       fi
     done
 
