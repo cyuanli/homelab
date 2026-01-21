@@ -207,6 +207,13 @@ grafana:
 
 # Node Exporter configuration
 prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
   prometheus:
     monitor:
       # Attach node metadata to enable hostname labeling
@@ -229,6 +236,16 @@ prometheus-node-exporter:
 
 # Kube-State-Metrics configuration
 kubeStateMetrics: {}
+
+# kube-state-metrics subchart configuration
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 
 # Prometheus Operator configuration
 prometheusOperator:

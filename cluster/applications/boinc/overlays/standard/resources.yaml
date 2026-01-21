@@ -1,7 +1,7 @@
 # Tier 4: Low CPU (4 cores) + Low Memory (8GB)
 # Resource limits for cyl-yoga213, cyl-inspiron14
 # Burstable QoS: No CPU limits to allow proportional sharing via requests
-# With low-priority-preemptible + 10m request, BOINC gets ~0.5-5% CPU when competing
+# With low-priority-preemptible + 0m request, BOINC only uses idle CPU
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -13,7 +13,7 @@ spec:
       - name: boinc-client
         resources:
           requests:
-            cpu: "10m"    # Minimal weight - BOINC becomes nearly invisible when other workloads run
+            cpu: "0m"     # Zero weight - BOINC only uses truly idle CPU, yields to all workloads with requests
             memory: 2Gi   # Low request for scheduling, configmap controls actual usage
           limits:
             memory: 4Gi   # 4GB safe limit for ~5GB allocatable nodes
