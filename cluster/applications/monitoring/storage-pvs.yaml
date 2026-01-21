@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -19,16 +19,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: grafana-data-nfs
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/monitoring/grafana-data
+  nfs:
+    server: 192.168.1.94
+    path: /configs/monitoring/grafana-data
 
 ---
 # Prometheus NFS Persistent Volume
@@ -42,7 +38,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -51,13 +47,9 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: prometheus-data-nfs
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/monitoring/prometheus-data
+  nfs:
+    server: 192.168.1.94
+    path: /configs/monitoring/prometheus-data

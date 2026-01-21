@@ -4,12 +4,12 @@
 
 | StorageClass | Use Case | Failover Time | Performance | Risk |
 |--------------|----------|---------------|-------------|------|
-| `nfs-media-optimized` | **General purpose (recommended)** | ~1-2 min | High | Low |
-| `nfs-media-stable` | Production, critical data | ~3-4 min | Good | Very Low |
-| `nfs-media-performance` | Read-heavy, single client (Jellyfin) | ~1-2 min | Highest | Low* |
-| `nfs-media-fastfail` | Fast failure detection needed | ~30-45 sec | High | Medium |
+| `nfs-direct-optimized` | **General purpose (recommended)** | ~1-2 min | High | Low |
+| `nfs-direct-stable` | Production, critical data | ~3-4 min | Good | Very Low |
+| `nfs-direct-performance` | Read-heavy, single client (Jellyfin) | ~1-2 min | Highest | Low* |
+| `nfs-direct-fastfail` | Fast failure detection needed | ~30-45 sec | High | Medium |
 
-*Only use `nfs-media-performance` for read-mostly workloads with a single client
+*Only use `nfs-direct-performance` for read-mostly workloads with a single client
 
 ---
 
@@ -17,7 +17,7 @@
 
 All configurations are available in: `cluster/infrastructure/storage/nfs-storageclass-optimized.yaml`
 
-### 1. nfs-media-optimized (RECOMMENDED)
+### 1. nfs-direct-optimized (RECOMMENDED)
 
 **Best for**: General purpose NFS storage
 
@@ -48,7 +48,7 @@ actimeo=30     # 30 second attribute cache
 
 ---
 
-### 2. nfs-media-stable
+### 2. nfs-direct-stable
 
 **Best for**: Maximum stability and data integrity
 
@@ -80,7 +80,7 @@ actimeo=60     # 60 second attribute cache
 
 ---
 
-### 3. nfs-media-performance
+### 3. nfs-direct-performance
 
 **Best for**: Read-heavy workloads with single client
 
@@ -112,7 +112,7 @@ actimeo=600    # 10 minute attribute cache
 
 ---
 
-### 4. nfs-media-fastfail
+### 4. nfs-direct-fastfail
 
 **Best for**: Environments requiring fast failure detection
 
@@ -149,7 +149,7 @@ actimeo=30     # 30 second attribute cache
 
 ### Current Setup
 
-Your current StorageClass (`nfs-media`) uses:
+Your current StorageClass (`nfs-direct`) uses:
 ```yaml
 timeo=150
 retrans=3
@@ -157,7 +157,7 @@ retrans=3
 actimeo=30
 ```
 
-This is equivalent to **nfs-media-fastfail** but without the `noatime` optimization.
+This is equivalent to **nfs-direct-fastfail** but without the `noatime` optimization.
 
 ### Recommended Migration Path
 
@@ -168,7 +168,7 @@ kubectl apply -f cluster/infrastructure/storage/nfs-storageclass-optimized.yaml
 
 **Step 2**: Choose your target StorageClass
 
-For most users, we recommend **nfs-media-optimized**:
+For most users, we recommend **nfs-direct-optimized**:
 - Better stability than current (30s timeout vs 15s)
 - Performance boost from `noatime`
 - Aligned with industry standards
@@ -178,13 +178,13 @@ For most users, we recommend **nfs-media-optimized**:
 **Option A**: Update existing PVs (edit each PV)
 ```bash
 # List all NFS PVs
-kubectl get pv | grep nfs-media
+kubectl get pv | grep nfs-direct
 
 # Edit each PV to change storageClassName
 kubectl edit pv <pv-name>
 
-# Change: storageClassName: nfs-media
-# To:     storageClassName: nfs-media-optimized
+# Change: storageClassName: nfs-direct
+# To:     storageClassName: nfs-direct-optimized
 ```
 
 **Option B**: Create new PVs with new StorageClass
@@ -206,17 +206,17 @@ kubectl rollout restart deployment -n media radarr
 
 **Step 5**: Update current StorageClass (optional)
 
-If you want to update the existing `nfs-media` StorageClass:
+If you want to update the existing `nfs-direct` StorageClass:
 ```bash
 # Backup current
-kubectl get storageclass nfs-media -o yaml > /tmp/nfs-media-backup.yaml
+kubectl get storageclass nfs-direct -o yaml > /tmp/nfs-direct-backup.yaml
 
 # Delete old
-kubectl delete storageclass nfs-media
+kubectl delete storageclass nfs-direct
 
 # Apply optimized as the default
 cp cluster/infrastructure/storage/nfs-storageclass-optimized.yaml /tmp/new-default.yaml
-# Edit /tmp/new-default.yaml and change name to 'nfs-media'
+# Edit /tmp/new-default.yaml and change name to 'nfs-direct'
 kubectl apply -f /tmp/new-default.yaml
 ```
 
@@ -241,46 +241,46 @@ Based on Microsoft Azure NetApp Files benchmarks:
 ## Workload Recommendations
 
 ### Media Stack (Jellyfin, Plex)
-**Recommended**: `nfs-media-performance`
+**Recommended**: `nfs-direct-performance`
 - Read-heavy workload
 - Single client per media file
 - Large files, sequential access
 - Maximum benefit from caching
 
 ### *arr Stack (Sonarr, Radarr, Prowlarr)
-**Recommended**: `nfs-media-optimized`
+**Recommended**: `nfs-direct-optimized`
 - Multiple writers (qBittorrent + *arr apps)
 - Need consistency between apps
 - Can't use `nocto`
 
 ### qBittorrent Downloads
-**Recommended**: `nfs-media-optimized` or `nfs-media-stable`
+**Recommended**: `nfs-direct-optimized` or `nfs-direct-stable`
 - Heavy write workload
 - Important data (don't want corruption)
 - Benefit from `noatime`
 
 ### Nextcloud Files
-**Recommended**: `nfs-media-stable`
+**Recommended**: `nfs-direct-stable`
 - Critical user data
 - Multiple clients
 - Needs maximum consistency
 - Prioritize stability over speed
 
 ### Immich Photos
-**Recommended**: `nfs-media-stable`
+**Recommended**: `nfs-direct-stable`
 - Critical user photos
 - Multiple users/clients
 - Needs data integrity
 - Accept slower failover for safety
 
 ### Monitoring (Prometheus, Grafana)
-**Recommended**: `nfs-media-optimized`
+**Recommended**: `nfs-direct-optimized`
 - Time-series data (write-heavy)
 - Can tolerate brief data loss
 - Faster recovery preferred
 
 ### Game Servers (Minecraft backups)
-**Recommended**: `nfs-media-optimized`
+**Recommended**: `nfs-direct-optimized`
 - Periodic writes
 - Read-heavy (restore backups)
 - Fast recovery helpful
@@ -361,9 +361,9 @@ mount | grep nfs
 
 ### Frequent disconnections with fastfail
 
-**Symptom**: Using `nfs-media-fastfail` but getting too many false alarms
+**Symptom**: Using `nfs-direct-fastfail` but getting too many false alarms
 
-**Solution**: Switch to `nfs-media-optimized` (30s timeout) or `nfs-media-stable` (60s timeout)
+**Solution**: Switch to `nfs-direct-optimized` (30s timeout) or `nfs-direct-stable` (60s timeout)
 
 ---
 

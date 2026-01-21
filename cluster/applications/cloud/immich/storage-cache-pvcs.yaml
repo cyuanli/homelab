@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: immich-thumbs
   resources:
     requests:
@@ -24,7 +24,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: immich-encoded-video
   resources:
     requests:
@@ -40,7 +40,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: immich-profile
   resources:
     requests:

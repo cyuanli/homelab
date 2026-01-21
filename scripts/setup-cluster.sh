@@ -365,20 +365,10 @@ deploy_infrastructure() {
         wait_for_condition "kubectl get storageclass local-storage >/dev/null 2>&1" 60
     fi
 
-    # Deploy NFS CSI driver if available
-    if [[ -d "$HOMELAB_ROOT/cluster/infrastructure/csi-driver-nfs" ]]; then
-        log_info "Deploying NFS CSI driver"
-        kubectl apply -f "$HOMELAB_ROOT/cluster/infrastructure/csi-driver-nfs/"
-
-        # Wait for CSI driver to be ready
-        log_info "Waiting for NFS CSI driver to be ready"
-        wait_for_deployment "csi-nfs-controller" "kube-system"
-
-        # Deploy NFS storage class if available
-        if [[ -f "$HOMELAB_ROOT/cluster/infrastructure/storage/nfs-storageclass.yaml" ]]; then
-            log_info "Deploying NFS storage class"
-            kubectl apply -f "$HOMELAB_ROOT/cluster/infrastructure/storage/nfs-storageclass.yaml"
-        fi
+    # Deploy NFS direct StorageClass (no CSI driver needed)
+    if [[ -f "$HOMELAB_ROOT/cluster/infrastructure/storage/nfs-direct-storageclass.yaml" ]]; then
+        log_info "Deploying NFS direct StorageClass"
+        kubectl apply -f "$HOMELAB_ROOT/cluster/infrastructure/storage/nfs-direct-storageclass.yaml"
     fi
 
     # Deploy Traefik

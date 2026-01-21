@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -22,9 +22,6 @@ spec:
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: nextcloud-files
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/nextcloud
+  nfs:
+    server: 192.168.1.94
+    path: /media/nextcloud

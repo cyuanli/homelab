@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -19,16 +19,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: traefik-acme-nfs
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/traefik/acme
+  nfs:
+    server: 192.168.1.94
+    path: /configs/traefik/acme
 
 ---
 # PersistentVolumeClaim for ACME certificates
@@ -40,7 +36,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: traefik-acme-nfs
   resources:
     requests:

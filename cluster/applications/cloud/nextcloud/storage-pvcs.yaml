@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   resources:
     requests:
       storage: 5Ti

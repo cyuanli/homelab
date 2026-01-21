@@ -352,7 +352,7 @@ affinity:
 **Configuration**:
 ```yaml
 persistence:
-  storageClass: nfs-media
+  storageClass: nfs-direct
   dataDir:
     enabled: true
     Size: 50Gi
@@ -376,7 +376,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   resources:
     requests:
       storage: 100Gi

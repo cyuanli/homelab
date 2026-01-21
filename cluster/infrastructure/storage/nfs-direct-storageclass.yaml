@@ -1,0 +1,11 @@
+---
+# NFS Direct StorageClass
+# Uses native Kubernetes NFS volumes (spec.nfs) instead of CSI driver
+# All PVs must be pre-provisioned (no-provisioner means no dynamic provisioning)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-direct
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: Immediate

@@ -10,16 +10,13 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - nfsvers=4.1
     - hard
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: owntracks-backups
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/owntracks
+  nfs:
+    server: 192.168.1.94
+    path: /media/owntracks
 
 ---
 # PersistentVolumeClaim for Owntracks backups
@@ -31,7 +28,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: owntracks-backups
   resources:
     requests:

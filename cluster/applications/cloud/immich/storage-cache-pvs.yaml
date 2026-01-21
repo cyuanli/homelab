@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -19,16 +19,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: immich-thumbs
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/immich/thumbs
+  nfs:
+    server: 192.168.1.94
+    path: /configs/immich/thumbs
 
 ---
 # Immich encoded videos on SSD (/srv/app-storage)
@@ -42,7 +38,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -51,16 +47,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: immich-encoded-video
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/immich/encoded-video
+  nfs:
+    server: 192.168.1.94
+    path: /configs/immich/encoded-video
 
 ---
 # Immich profile pictures on SSD (/srv/app-storage)
@@ -74,7 +66,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -83,13 +75,9 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: immich-profile
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/immich/profile
+  nfs:
+    server: 192.168.1.94
+    path: /configs/immich/profile

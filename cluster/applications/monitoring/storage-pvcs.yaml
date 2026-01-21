@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: grafana-data-nfs
   resources:
     requests:
@@ -24,7 +24,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: prometheus-data-nfs
   resources:
     requests:

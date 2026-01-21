@@ -46,7 +46,7 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: nfs-media
+          storageClassName: nfs-direct
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
@@ -179,7 +179,7 @@ grafana:
   # Persistence - using existing NFS PVC
   persistence:
     enabled: true
-    storageClassName: nfs-media
+    storageClassName: nfs-direct
     existingClaim: grafana-data-nfs
     size: 10Gi
 

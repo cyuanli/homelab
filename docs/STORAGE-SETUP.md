@@ -726,29 +726,20 @@ showmount -e 192.168.1.94  # Replace with your storage node IP
 # /media/data 192.168.1.0/24
 ```
 
-### Deploy NFS CSI Driver to K3s
+### Deploy NFS StorageClass to K3s
 
-The NFS CSI driver provides Kubernetes-native storage management using NFS as the backend.
+We use native Kubernetes NFS volumes (`spec.nfs`) instead of a CSI driver for simplicity and reliability.
 
 **Deploy infrastructure (automatically done by setup-cluster.sh):**
 ```bash
-# Deploy NFS CSI driver
-kubectl apply -f cluster/infrastructure/csi-driver-nfs/
-
-# Wait for controller to be ready
-kubectl wait --for=condition=Ready pod -l app=csi-nfs-controller -n kube-system --timeout=120s
-
-# Deploy NFS StorageClass
-kubectl apply -f cluster/infrastructure/storage/nfs-storageclass.yaml
+# Deploy NFS direct StorageClass
+kubectl apply -f cluster/infrastructure/storage/nfs-direct-storageclass.yaml
 ```
 
 **Verify deployment:**
 ```bash
-# Check CSI driver pods
-kubectl get pods -n kube-system | grep csi-nfs
-
 # Check StorageClass
-kubectl get storageclass nfs-media
+kubectl get storageclass nfs-direct
 ```
 
 ### Create Media Storage PersistentVolumes
@@ -815,16 +806,13 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: immich-library
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/immich/library  # Relative to /exports root
+  nfs:
+    server: 192.168.1.94
+    path: /media/immich/library  # Relative to /exports root
 ```
 
 ### Adding New Services to NFS
@@ -851,16 +839,13 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
-    - nfsvers=4.1
+    - vers=4.1
     - hard
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: myservice-data
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/myservice  # Relative to /exports, accesses /media/data/myservice
+  nfs:
+    server: 192.168.1.94
+    path: /media/myservice  # Relative to /exports, accesses /media/data/myservice
 ```
 
 **That's it!** No need to create additional bind mounts or export entries. The `/exports/media` bind mount already provides access to all subdirectories under `/media/data/`.

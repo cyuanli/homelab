@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: media-movies
   resources:
     requests:
@@ -23,7 +23,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: media-tv
   resources:
     requests:
@@ -38,7 +38,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: media-music
   resources:
     requests:
@@ -53,7 +53,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: media-downloads
   resources:
     requests:
@@ -69,7 +69,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: jellyfin-config
   resources:
     requests:
@@ -84,7 +84,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: jellyfin-cache
   resources:
     requests:
@@ -100,7 +100,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: prowlarr-config
   resources:
     requests:
@@ -116,7 +116,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: radarr-config
   resources:
     requests:
@@ -132,7 +132,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: sonarr-config
   resources:
     requests:
@@ -148,7 +148,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: qbittorrent-config
   resources:
     requests:
@@ -164,7 +164,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   volumeName: qbittorrent-incomplete
   resources:
     requests:

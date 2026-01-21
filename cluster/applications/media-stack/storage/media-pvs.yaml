@@ -10,7 +10,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -19,16 +19,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: media-movies
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/media/movies
+  nfs:
+    server: 192.168.1.94
+    path: /media/media/movies
 
 ---
 apiVersion: v1
@@ -41,7 +37,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -50,16 +46,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: media-tv
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/media/tv
+  nfs:
+    server: 192.168.1.94
+    path: /media/media/tv
 
 ---
 apiVersion: v1
@@ -72,7 +64,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -81,16 +73,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: media-music
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/media/music
+  nfs:
+    server: 192.168.1.94
+    path: /media/media/music
 
 ---
 apiVersion: v1
@@ -103,7 +91,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -112,16 +100,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: media-downloads
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /media/downloads
+  nfs:
+    server: 192.168.1.94
+    path: /media/downloads
 
 ---
 # Jellyfin config and cache
@@ -135,7 +119,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -144,16 +128,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: jellyfin-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/jellyfin-config
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/jellyfin-config
 
 ---
 apiVersion: v1
@@ -166,7 +146,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -175,16 +155,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: jellyfin-cache
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/jellyfin-cache
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/jellyfin-cache
 
 ---
 # Prowlarr config
@@ -198,7 +174,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -207,16 +183,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: prowlarr-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/prowlarr-config
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/prowlarr-config
 
 ---
 # Radarr config
@@ -230,7 +202,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -239,16 +211,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: radarr-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/radarr-config
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/radarr-config
 
 ---
 # Sonarr config
@@ -262,7 +230,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -271,16 +239,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: sonarr-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/sonarr-config
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/sonarr-config
 
 ---
 # QBittorrent config
@@ -294,7 +258,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -303,16 +267,12 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: qbittorrent-config
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/qbittorrent-config
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/qbittorrent-config
 
 ---
 # QBittorrent incomplete downloads
@@ -326,7 +286,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: nfs-media
+  storageClassName: nfs-direct
   mountOptions:
     - vers=4.1
     - hard
@@ -335,13 +295,9 @@ spec:
     - rsize=1048576
     - wsize=1048576
     - _netdev
-    
     - noatime
     - actimeo=30
     - lookupcache=positive
-  csi:
-    driver: nfs.csi.k8s.io
-    volumeHandle: qbittorrent-incomplete
-    volumeAttributes:
-      server: 192.168.1.94
-      share: /configs/media-stack/qbittorrent-incomplete
+  nfs:
+    server: 192.168.1.94
+    path: /configs/media-stack/qbittorrent-incomplete
