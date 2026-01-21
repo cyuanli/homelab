@@ -17,10 +17,23 @@ STATE_FILE="/var/lib/nfs-monitor/state"
 NFS_SERVER="${NFS_SERVER:-192.168.1.94}"
 TIMEOUT_SECONDS="${NFS_MOUNT_TIMEOUT:-5}"
 
+# Set KUBECONFIG for kubectl when running as root via sudo/systemd
+# Uses HOMELAB_USER from config if available, otherwise defaults to 'cyl'
+setup_kubeconfig() {
+    local user="${HOMELAB_USER:-cyl}"
+    local kubeconfig="/home/${user}/.kube/config"
+    if [[ -f "$kubeconfig" ]]; then
+        export KUBECONFIG="$kubeconfig"
+    fi
+}
+
 # Metrics
 STALE_MOUNTS_DETECTED=0
 RECOVERY_ATTEMPTS=0
 RECOVERY_SUCCESSES=0
+
+# Global array to track stale mount paths for recovery
+STALE_MOUNT_PATHS=()
 
 log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"
@@ -54,14 +67,18 @@ check_for_stale_mounts() {
     local stale_found=0
     local mount_paths=()
 
+    # Reset global stale mounts array
+    STALE_MOUNT_PATHS=()
+
     info "Scanning for stale NFS mounts in kubelet volumes..."
 
-    # Find all NFS CSI mounts (mount points only, not subdirectories)
+    # Use mount command to find NFS mounts - this reads /proc/mounts and doesn't
+    # require accessing the mount point (which would hang/fail on stale mounts)
     while IFS= read -r mount_path; do
         if [[ -n "$mount_path" ]]; then
             mount_paths+=("$mount_path")
         fi
-    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -maxdepth 0 -type d 2>/dev/null || true)
+    done < <(mount -t nfs,nfs4 | grep '/var/lib/kubelet/pods/.*/volumes/kubernetes.io~csi/' | awk '{print $3}')
 
     if [[ ${#mount_paths[@]} -eq 0 ]]; then
         warn "No NFS CSI mounts found"
@@ -71,11 +88,12 @@ check_for_stale_mounts() {
     info "Found ${#mount_paths[@]} NFS CSI mount points to check"
 
     for mount_path in "${mount_paths[@]}"; do
-        # Quick stat check with timeout
+        # Quick stat check with timeout - detects stale mounts and missing directories
         if ! timeout "$TIMEOUT_SECONDS" stat "$mount_path" >/dev/null 2>&1; then
             error "STALE MOUNT DETECTED: $mount_path"
             stale_found=$((stale_found + 1))
             STALE_MOUNTS_DETECTED=$((STALE_MOUNTS_DETECTED + 1))
+            STALE_MOUNT_PATHS+=("$mount_path")
         else
             info "Mount OK: $mount_path"
         fi
@@ -90,88 +108,103 @@ check_for_stale_mounts() {
     fi
 }
 
-# Restart CSI driver to force remount
-restart_csi_driver() {
-    info "Restarting NFS CSI driver pods to force remount..."
+# Lazy unmount stale mounts
+# This detaches the mount immediately, allowing the directory to be removed
+unmount_stale_mounts() {
+    if [[ ${#STALE_MOUNT_PATHS[@]} -eq 0 ]]; then
+        info "No stale mounts to unmount"
+        return 0
+    fi
+
+    info "Unmounting ${#STALE_MOUNT_PATHS[@]} stale NFS mounts..."
     RECOVERY_ATTEMPTS=$((RECOVERY_ATTEMPTS + 1))
 
-    if ! command -v kubectl >/dev/null 2>&1; then
-        error "kubectl not found, cannot restart CSI driver"
-        return 1
-    fi
+    local unmount_failed=0
+    for mount_path in "${STALE_MOUNT_PATHS[@]}"; do
+        info "Lazy unmounting: $mount_path"
+        if sudo umount -l "$mount_path" 2>&1 | tee -a "$LOG_FILE"; then
+            info "Successfully unmounted: $mount_path"
+        else
+            error "Failed to unmount: $mount_path"
+            unmount_failed=$((unmount_failed + 1))
+        fi
+    done
 
-    # Delete CSI node driver pods (they'll be recreated by DaemonSet)
-    info "Deleting CSI node driver pods..."
-    if kubectl delete pods -n kube-system -l app=csi-nfs-node --grace-period=30 2>&1 | tee -a "$LOG_FILE"; then
-        info "CSI node driver pods deleted"
-    else
-        error "Failed to delete CSI node driver pods"
-        return 1
-    fi
-
-    # Wait for pods to be recreated
-    info "Waiting for CSI driver pods to restart..."
-    sleep 10
-
-    if kubectl wait --for=condition=ready pods -n kube-system -l app=csi-nfs-node --timeout=120s 2>&1 | tee -a "$LOG_FILE"; then
-        info "CSI driver pods restarted successfully"
+    if [[ $unmount_failed -eq 0 ]]; then
         RECOVERY_SUCCESSES=$((RECOVERY_SUCCESSES + 1))
         return 0
     else
-        error "CSI driver pods failed to become ready"
         return 1
     fi
 }
 
-# Restart pods with stale mounts
+# Extract pod UID from mount path
+# Path format: /var/lib/kubelet/pods/<pod-uid>/volumes/kubernetes.io~csi/<volume>/mount
+get_pod_uid_from_mount() {
+    local mount_path="$1"
+    echo "$mount_path" | sed -n 's|/var/lib/kubelet/pods/\([^/]*\)/.*|\1|p'
+}
+
+# Restart only pods that have stale mounts
 restart_affected_pods() {
-    info "Looking for pods with potential stale NFS mounts..."
+    if [[ ${#STALE_MOUNT_PATHS[@]} -eq 0 ]]; then
+        info "No stale mounts, no pods to restart"
+        return 0
+    fi
 
     if ! command -v kubectl >/dev/null 2>&1; then
         error "kubectl not found"
         return 1
     fi
 
-    # Get all pods using NFS PVCs
-    local pods_to_restart=()
-
-    # Find pods in media and cloud namespaces (most likely to use NFS)
-    for ns in media cloud monitoring games; do
-        if kubectl get namespace "$ns" >/dev/null 2>&1; then
-            while IFS= read -r pod; do
-                if [[ -n "$pod" ]]; then
-                    # Check if pod has NFS volumes
-                    if kubectl get pod -n "$ns" "$pod" -o jsonpath='{.spec.volumes[*].persistentVolumeClaim}' 2>/dev/null | grep -q .; then
-                        info "Found pod with PVC in namespace $ns: $pod"
-                        pods_to_restart+=("$ns/$pod")
-                    fi
+    # Get unique pod UIDs from stale mount paths
+    local pod_uids=()
+    for mount_path in "${STALE_MOUNT_PATHS[@]}"; do
+        local uid
+        uid=$(get_pod_uid_from_mount "$mount_path")
+        if [[ -n "$uid" ]]; then
+            # Check if already in array
+            local found=false
+            for existing in "${pod_uids[@]:-}"; do
+                if [[ "$existing" == "$uid" ]]; then
+                    found=true
+                    break
                 fi
-            done < <(kubectl get pods -n "$ns" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n')
+            done
+            if [[ "$found" == "false" ]]; then
+                pod_uids+=("$uid")
+            fi
         fi
     done
 
-    if [[ ${#pods_to_restart[@]} -eq 0 ]]; then
-        warn "No pods found with NFS volumes"
-        return 0
+    if [[ ${#pod_uids[@]} -eq 0 ]]; then
+        warn "Could not extract pod UIDs from stale mount paths"
+        return 1
     fi
 
-    info "Found ${#pods_to_restart[@]} pods with NFS volumes"
+    info "Found ${#pod_uids[@]} pods with stale mounts"
 
-    # Restart each pod
-    for pod_ref in "${pods_to_restart[@]}"; do
-        local ns="${pod_ref%/*}"
-        local pod="${pod_ref#*/}"
+    # Find and delete pods by UID
+    for pod_uid in "${pod_uids[@]}"; do
+        info "Looking for pod with UID: $pod_uid"
 
-        info "Deleting pod $ns/$pod to force remount..."
-        if kubectl delete pod -n "$ns" "$pod" --grace-period=30 2>&1 | tee -a "$LOG_FILE"; then
-            info "Pod $ns/$pod deleted successfully"
+        # Search all namespaces for the pod
+        local pod_info
+        pod_info=$(kubectl get pods -A -o jsonpath="{range .items[?(@.metadata.uid=='$pod_uid')]}{.metadata.namespace}/{.metadata.name}{end}" 2>/dev/null)
+
+        if [[ -n "$pod_info" ]]; then
+            local ns="${pod_info%/*}"
+            local pod="${pod_info#*/}"
+            info "Deleting pod $ns/$pod (UID: $pod_uid) to force fresh mount..."
+            if kubectl delete pod -n "$ns" "$pod" --grace-period=10 --force 2>&1 | tee -a "$LOG_FILE"; then
+                info "Pod $ns/$pod deleted successfully"
+            else
+                warn "Failed to delete pod $ns/$pod"
+            fi
         else
-            warn "Failed to delete pod $ns/$pod"
+            info "Pod with UID $pod_uid not found (may have been deleted already)"
         fi
     done
-
-    info "Waiting for pods to restart..."
-    sleep 15
 
     return 0
 }
@@ -248,32 +281,27 @@ run_health_check() {
     if [[ "$needs_recovery" == "true" ]]; then
         warn "Initiating automatic recovery..."
 
-        # Try restarting CSI driver first
-        if restart_csi_driver; then
-            info "CSI driver restarted, waiting for remount..."
-            sleep 10
-
-            # Re-check mounts
-            if check_for_stale_mounts; then
-                info "Recovery successful - mounts are now healthy"
-                stale_mounts_ok=1
-                overall_status=1
-            else
-                warn "CSI restart didn't fix stale mounts, restarting affected pods..."
-                restart_affected_pods
-
-                # Final check
-                sleep 10
-                if check_for_stale_mounts; then
-                    info "Recovery successful after pod restart"
-                    stale_mounts_ok=1
-                    overall_status=1
-                else
-                    error "Recovery failed - manual intervention required"
-                fi
-            fi
+        # Step 1: Lazy unmount stale mounts
+        if unmount_stale_mounts; then
+            info "Stale mounts unmounted successfully"
         else
-            error "Failed to restart CSI driver"
+            warn "Some mounts failed to unmount"
+        fi
+
+        # Step 2: Restart only the affected pods (they'll get fresh mounts)
+        restart_affected_pods
+
+        # Wait for pods to restart
+        info "Waiting for pods to restart with fresh mounts..."
+        sleep 15
+
+        # Final check
+        if check_for_stale_mounts; then
+            info "Recovery successful - all mounts are now healthy"
+            stale_mounts_ok=1
+            overall_status=1
+        else
+            error "Recovery failed - manual intervention required"
         fi
     fi
 
@@ -326,7 +354,7 @@ show_status() {
                 echo "✗ $mount_path (STALE)"
             fi
         fi
-    done < <(find /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*/mount -maxdepth 0 -type d 2>/dev/null || true)
+    done < <(mount -t nfs,nfs4 | grep '/var/lib/kubelet/pods/.*/volumes/kubernetes.io~csi/' | awk '{print $3}')
 
     if [[ $mount_count -eq 0 ]]; then
         echo "No NFS CSI mounts found"
@@ -345,20 +373,30 @@ main() {
     case "${1:-check}" in
         check)
             load_config
+            setup_kubeconfig
             ensure_directories
             run_health_check
             ;;
         status)
             load_config
+            setup_kubeconfig
             show_status
             ;;
         recover)
             load_config
+            setup_kubeconfig
             ensure_directories
             info "Manual recovery initiated..."
-            restart_csi_driver
-            sleep 10
-            restart_affected_pods
+            # First detect stale mounts to populate STALE_MOUNT_PATHS
+            check_for_stale_mounts || true
+            if [[ ${#STALE_MOUNT_PATHS[@]} -gt 0 ]]; then
+                unmount_stale_mounts
+                restart_affected_pods
+                sleep 10
+                check_for_stale_mounts && info "Recovery successful" || error "Recovery incomplete"
+            else
+                info "No stale mounts detected"
+            fi
             ;;
         *)
             cat <<EOF
