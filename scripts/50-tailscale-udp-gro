@@ -1,0 +1,14 @@
+#!/bin/bash
+# NetworkManager dispatcher script to optimize UDP GRO forwarding for Tailscale
+# This script runs when network interfaces come up
+
+INTERFACE=$1
+ACTION=$2
+
+if [ "$ACTION" = "up" ]; then
+    # Enable UDP GRO forwarding if the interface supports it
+    if ethtool -k "$INTERFACE" 2>/dev/null | grep -q "rx-udp-gro-forwarding"; then
+        logger "Enabling UDP GRO forwarding on $INTERFACE for Tailscale"
+        ethtool -K "$INTERFACE" rx-udp-gro-forwarding on 2>&1 | logger
+    fi
+fi
