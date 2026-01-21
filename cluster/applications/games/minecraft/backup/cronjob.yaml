@@ -45,106 +45,36 @@ spec:
 
               echo "Starting Minecraft worlds backup: $BACKUP_DATE"
 
-              # Function to check if world has changes compared to latest backup
-              has_changes() {
-                local source=$1
-                local world_name=$2
+              # Function to check if world region data changed compared to previous backup
+              # Returns 0 (true) if changed or no previous backup, 1 (false) if unchanged
+              # Only checks world/region/ files (actual chunk data) to detect real changes
+              world_data_changed() {
+                local world_name=$1
+                local current_backup=$2
+                local previous_backup=$3
 
-                # Get the most recent backup by sorting directory names (YYYYMMDD-HHMMSS format)
-                # Sort in reverse order so newest is first
-                local latest_backup=$(ls -1 /backups/$world_name/daily 2>/dev/null | sort -r | head -1)
-
-                # If no backup exists, always create one
-                if [ -z "$latest_backup" ]; then
-                  echo "  No previous backup found, will create initial backup"
+                # If no previous backup, consider it "changed"
+                if [ -z "$previous_backup" ]; then
                   return 0
                 fi
 
-                echo "  Comparing with latest backup: $latest_backup"
+                local current_region="/backups/$world_name/daily/$current_backup/world/region"
+                local previous_region="/backups/$world_name/daily/$previous_backup/world/region"
 
-                # Use rsync dry-run to check for changes
-                # -n = dry-run, -i = itemize changes, -a = archive mode
-                # Filter out directory-only changes (lines starting with '.d')
-                local changes=$(rsync -ani --delete "$source/" "/backups/$world_name/daily/$latest_backup/" 2>/dev/null | grep -v '^\.d' | head -1)
+                # If region directories don't exist, compare full backup
+                if [ ! -d "$current_region" ] || [ ! -d "$previous_region" ]; then
+                  return 0
+                fi
+
+                # Use rsync dry-run to check for differences in region files
+                # These are the actual chunk data that changes when players modify the world
+                local changes=$(rsync -ani "$current_region/" "$previous_region/" 2>/dev/null | grep -v '^\.d' | head -1)
 
                 if [ -n "$changes" ]; then
-                  echo "  Changes detected since last backup"
-                  return 0
+                  return 0  # Changed
                 else
-                  echo "  No changes detected, skipping backup"
-                  return 1
+                  return 1  # Unchanged
                 fi
-              }
-
-              # Backup cobblestone world
-              echo "Backing up cobblestone world..."
-              if has_changes "/data/cobblestone" "cobblestone"; then
-                mkdir -p "/backups/cobblestone/daily/$BACKUP_DATE"
-                rsync -av --delete /data/cobblestone/ "/backups/cobblestone/daily/$BACKUP_DATE/"
-                echo "Cobblestone backup completed"
-              else
-                echo "Cobblestone backup skipped (no changes)"
-              fi
-
-              # Backup sandstone world
-              echo "Backing up sandstone world..."
-              if has_changes "/data/sandstone" "sandstone"; then
-                mkdir -p "/backups/sandstone/daily/$BACKUP_DATE"
-                rsync -av --delete /data/sandstone/ "/backups/sandstone/daily/$BACKUP_DATE/"
-                echo "Sandstone backup completed"
-              else
-                echo "Sandstone backup skipped (no changes)"
-              fi
-
-              # Backup apricorn world
-              echo "Backing up apricorn world..."
-              if has_changes "/data/apricorn" "apricorn"; then
-                mkdir -p "/backups/apricorn/daily/$BACKUP_DATE"
-                rsync -av --delete /data/apricorn/ "/backups/apricorn/daily/$BACKUP_DATE/"
-                echo "Apricorn backup completed"
-              else
-                echo "Apricorn backup skipped (no changes)"
-              fi
-
-              # Function to promote daily backup to weekly if needed
-              promote_to_weekly() {
-                local world=$1
-                local backup_dir=$2
-
-                # Get most recent weekly backup date (if any)
-                local latest_weekly=""
-                if [ -d "/backups/$world/weekly" ]; then
-                  latest_weekly=$(ls -1 /backups/$world/weekly 2>/dev/null | sort -r | head -1)
-                fi
-
-                # Extract just the date part (YYYYMMDD) from backup_dir
-                local backup_date=${backup_dir:0:8}
-
-                # If no weekly backup exists, promote this one
-                if [ -z "$latest_weekly" ]; then
-                  echo "  No weekly backups exist, promoting $backup_dir to weekly"
-                  mkdir -p "/backups/$world/weekly"
-                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
-                  return 0
-                fi
-
-                # Extract date from latest weekly backup
-                local weekly_date=${latest_weekly:0:8}
-
-                # Calculate days difference (simple subtraction works for YYYYMMDD format)
-                # Convert to epoch seconds for proper comparison
-                local backup_epoch=$(date -d "$backup_date" +%s 2>/dev/null || echo 0)
-                local weekly_epoch=$(date -d "$weekly_date" +%s 2>/dev/null || echo 0)
-                local days_diff=$(( (backup_epoch - weekly_epoch) / 86400 ))
-
-                # If backup is 7+ days newer than latest weekly, promote it
-                if [ $days_diff -ge 7 ]; then
-                  echo "  Backup $backup_dir is $days_diff days newer than latest weekly, promoting"
-                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
-                  return 0
-                fi
-
-                return 1
               }
 
               # Function to safely delete a backup directory (works with NFS)
@@ -177,6 +107,79 @@ spec:
                 find "$dir" -depth -type d -exec rmdir {} \; 2>/dev/null || true
                 # Final cleanup with rm -rf in case anything remains
                 rm -rf "$dir" 2>/dev/null || true
+              }
+
+              # Function to backup a world and deduplicate if unchanged
+              backup_world() {
+                local world_name=$1
+                local source_path=$2
+
+                echo "Backing up $world_name world..."
+
+                # Get previous backup before creating new one
+                local previous_backup=$(ls -1 /backups/$world_name/daily 2>/dev/null | sort -r | head -1)
+
+                # Always create the backup
+                mkdir -p "/backups/$world_name/daily/$BACKUP_DATE"
+                rsync -av --delete "$source_path/" "/backups/$world_name/daily/$BACKUP_DATE/"
+                echo "$world_name backup completed"
+
+                # Check if world data actually changed from previous backup
+                if [ -n "$previous_backup" ]; then
+                  if ! world_data_changed "$world_name" "$BACKUP_DATE" "$previous_backup"; then
+                    echo "  World data unchanged from $previous_backup, removing duplicate"
+                    safe_delete "/backups/$world_name/daily/$previous_backup"
+                  else
+                    echo "  World data changed, keeping both backups"
+                  fi
+                fi
+              }
+
+              backup_world "cobblestone" "/data/cobblestone"
+              backup_world "sandstone" "/data/sandstone"
+              backup_world "apricorn" "/data/apricorn"
+
+              # Function to promote daily backup to weekly if needed
+              promote_to_weekly() {
+                local world=$1
+                local backup_dir=$2
+
+                # Get most recent weekly backup date (if any)
+                local latest_weekly=""
+                if [ -d "/backups/$world/weekly" ]; then
+                  latest_weekly=$(ls -1 /backups/$world/weekly 2>/dev/null | sort -r | head -1)
+                fi
+
+                # Extract just the date part (YYYYMMDD) from backup_dir
+                local backup_date=${backup_dir:0:8}
+
+                # If no weekly backup exists, promote this one
+                if [ -z "$latest_weekly" ]; then
+                  echo "  No weekly backups exist, promoting $backup_dir to weekly"
+                  mkdir -p "/backups/$world/weekly"
+                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
+                  return 0
+                fi
+
+                # Extract date from latest weekly backup
+                local weekly_date=${latest_weekly:0:8}
+
+                # Calculate days difference
+                # Convert YYYYMMDD to YYYY-MM-DD for BusyBox date compatibility
+                local backup_fmt="${backup_date:0:4}-${backup_date:4:2}-${backup_date:6:2}"
+                local weekly_fmt="${weekly_date:0:4}-${weekly_date:4:2}-${weekly_date:6:2}"
+                local backup_epoch=$(date -d "$backup_fmt" +%s 2>/dev/null || echo 0)
+                local weekly_epoch=$(date -d "$weekly_fmt" +%s 2>/dev/null || echo 0)
+                local days_diff=$(( (backup_epoch - weekly_epoch) / 86400 ))
+
+                # If backup is 7+ days newer than latest weekly, promote it
+                if [ $days_diff -ge 7 ]; then
+                  echo "  Backup $backup_dir is $days_diff days newer than latest weekly, promoting"
+                  mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
+                  return 0
+                fi
+
+                return 1
               }
 
               # Rotate cobblestone backups (keep last 7 daily, promote old to weekly)
