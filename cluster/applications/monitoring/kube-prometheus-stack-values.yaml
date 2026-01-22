@@ -212,7 +212,7 @@ prometheus-node-exporter:
       cpu: 50m
       memory: 64Mi
     limits:
-      cpu: 200m
+      # No CPU limit - allow bursting during scrapes
       memory: 128Mi
   prometheus:
     monitor:
