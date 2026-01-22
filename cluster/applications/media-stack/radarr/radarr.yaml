@@ -31,10 +31,8 @@ spec:
         volumeMounts:
         - name: radarr-config
           mountPath: /config
-        - name: movies
-          mountPath: /movies
-        - name: downloads
-          mountPath: /downloads
+        - name: media-data
+          mountPath: /data
         livenessProbe:
           httpGet:
             path: /
@@ -62,12 +60,9 @@ spec:
       - name: radarr-config
         persistentVolumeClaim:
           claimName: radarr-config
-      - name: movies
+      - name: media-data
         persistentVolumeClaim:
-          claimName: media-movies
-      - name: downloads
-        persistentVolumeClaim:
-          claimName: media-downloads
+          claimName: media-data
 ---
 apiVersion: v1
 kind: Service

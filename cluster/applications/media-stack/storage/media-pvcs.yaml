@@ -1,5 +1,21 @@
 ---
-# Media directories - shared across services
+# Unified media directory - enables hardlinking between downloads and library
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-data
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-direct
+  volumeName: media-data
+  resources:
+    requests:
+      storage: 7Ti
+
+---
+# Media directories - shared across services (legacy, kept for Jellyfin)
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

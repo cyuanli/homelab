@@ -37,14 +37,18 @@ spec:
           mountPath: /config
         - name: jellyfin-cache
           mountPath: /cache
-        - name: movies
+        - name: media-data
           mountPath: /movies
-        - name: tv-shows
+          subPath: media/movies
+        - name: media-data
           mountPath: /tv
-        - name: music
+          subPath: media/tv
+        - name: media-data
           mountPath: /music
-        - name: downloads
+          subPath: media/music
+        - name: media-data
           mountPath: /downloads
+          subPath: downloads
           readOnly: true
         livenessProbe:
           httpGet:
@@ -76,18 +80,9 @@ spec:
       - name: jellyfin-cache
         persistentVolumeClaim:
           claimName: jellyfin-cache
-      - name: movies
+      - name: media-data
         persistentVolumeClaim:
-          claimName: media-movies
-      - name: tv-shows
-        persistentVolumeClaim:
-          claimName: media-tv
-      - name: music
-        persistentVolumeClaim:
-          claimName: media-music
-      - name: downloads
-        persistentVolumeClaim:
-          claimName: media-downloads
+          claimName: media-data
 ---
 apiVersion: v1
 kind: Service

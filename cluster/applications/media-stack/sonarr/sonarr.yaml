@@ -31,10 +31,8 @@ spec:
         volumeMounts:
         - name: sonarr-config
           mountPath: /config
-        - name: tv-shows
-          mountPath: /tv
-        - name: downloads
-          mountPath: /downloads
+        - name: media-data
+          mountPath: /data
         livenessProbe:
           httpGet:
             path: /
@@ -62,12 +60,9 @@ spec:
       - name: sonarr-config
         persistentVolumeClaim:
           claimName: sonarr-config
-      - name: tv-shows
+      - name: media-data
         persistentVolumeClaim:
-          claimName: media-tv
-      - name: downloads
-        persistentVolumeClaim:
-          claimName: media-downloads
+          claimName: media-data
 ---
 apiVersion: v1
 kind: Service
