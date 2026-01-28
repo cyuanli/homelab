@@ -1,0 +1,39 @@
+# Home Assistant Helm Chart Values
+# Using pajikos/home-assistant chart
+
+# Use Deployment with existing PVC
+# Recreate strategy needed because of lock file on shared storage
+controller:
+  type: Deployment
+  strategy: Recreate
+
+image:
+  repository: ghcr.io/home-assistant/home-assistant
+  pullPolicy: IfNotPresent
+
+# Persistence configuration - uses existing PVC
+persistence:
+  enabled: true
+  existingClaim: home-assistant-config
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8123
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+# Ingress is handled separately via ingress.yaml
+ingress:
+  enabled: false
+
+# Environment variables
+env:
+  - name: TZ
+    value: "Europe/Berlin"

@@ -1,0 +1,15 @@
+---
+# Home Assistant configuration storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: home-assistant-config
+  namespace: automation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-direct
+  volumeName: home-assistant-config
+  resources:
+    requests:
+      storage: 10Gi

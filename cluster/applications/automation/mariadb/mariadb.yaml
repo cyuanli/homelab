@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb-home-assistant
+  namespace: automation
+  labels:
+    app: mariadb-home-assistant
+    component: database
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mariadb-home-assistant
+  template:
+    metadata:
+      labels:
+        app: mariadb-home-assistant
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11
+          env:
+            - name: MARIADB_DATABASE
+              value: homeassistant
+            - name: MARIADB_USER
+              value: homeassistant
+            - name: MARIADB_HOST
+              value: "%"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-home-assistant-secrets
+                  key: mariadb-password
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-home-assistant-secrets
+                  key: mariadb-root-password
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - mariadb-admin ping -h localhost -u root -p${MARIADB_ROOT_PASSWORD}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - mariadb-admin ping -h localhost -u root -p${MARIADB_ROOT_PASSWORD}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: mariadb-data
+          persistentVolumeClaim:
+            claimName: mariadb-home-assistant-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-home-assistant
+  namespace: automation
+  labels:
+    app: mariadb-home-assistant
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+  selector:
+    app: mariadb-home-assistant

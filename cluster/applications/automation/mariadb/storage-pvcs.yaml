@@ -1,0 +1,15 @@
+---
+# MariaDB data storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-home-assistant-data
+  namespace: automation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-direct
+  volumeName: mariadb-home-assistant-data
+  resources:
+    requests:
+      storage: 10Gi

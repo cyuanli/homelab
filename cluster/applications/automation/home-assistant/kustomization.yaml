@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: automation
+
+resources:
+  - storage-pvs.yaml
+  - storage-pvcs.yaml
+  - ingress.yaml
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: homelab

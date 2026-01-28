@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: home-assistant
+  namespace: automation
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd
+    cert-manager.io/cluster-issuer: letsencrypt-production
+  labels:
+    app: home-assistant
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - ha.cliff.li
+    secretName: home-assistant-tls
+  rules:
+  - host: ha.cliff.li
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: home-assistant
+            port:
+              number: 8123
