@@ -94,11 +94,8 @@ These settings should be applied:
 - If you need to reset Nextcloud completely, these must be reapplied
 - Settings were migrated from old Docker setup's `custom-config.php`
 
-## Historical Context
+## Notes
 
-These settings were originally in the Docker deployment's `custom-config.php`:
-- **trusted_proxies**: Updated from Docker network ranges to k3s ranges
-- **maintenance_window_start**: Kept same value (3 AM)
-- **default_phone_region**: Changed from 'US' to 'CH' per requirements
-
-For more details, see: `MIGRATION-COMPARISON.md`
+- Settings persist in `/var/www/html/config/config.php` (Nextcloud app volume)
+- trusted_proxies use k3s pod/service network ranges (10.42.0.0/16, 10.43.0.0/16)
+- maintenance_window_start=1 aligns with backup schedule (1-5 AM window)
