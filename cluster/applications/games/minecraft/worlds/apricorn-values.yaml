@@ -22,6 +22,9 @@ minecraftServer:
   onlineMode: true
   spawnProtection: 0
 
+  # Whitelist - only allow specific players
+  whitelist: "prim_plum,sirolol,Schluedi"
+
   # Modrinth mods to install
   modrinth:
     projects:
