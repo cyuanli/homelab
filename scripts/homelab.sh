@@ -18,9 +18,7 @@ Usage: $0 [command] [options]
 ${BLUE}Setup Commands:${NC}
   setup-system           - Prepare fresh system for homelab
   setup-cluster          - Install and configure K3s cluster
-  setup-monitoring       - Configure monitoring systems
   setup-all              - Run complete setup from fresh system
-  setup-auth [service]   - Configure authentication for services
 
 ${BLUE}Deployment Commands:${NC}
   deploy [component]     - Deploy applications (infrastructure, cloud, media, etc.)
@@ -43,7 +41,6 @@ ${BLUE}Examples:${NC}
   $0 deploy media                 # Deploy media stack
   $0 status                       # Show status
   $0 nodes add worker1            # Add cluster node
-  $0 setup-auth owntracks         # Setup Owntracks authentication
   $0 monitor status               # Check monitoring status
 
 ${BLUE}Configuration:${NC}
@@ -75,10 +72,6 @@ run_setup_cluster() {
     "$SCRIPT_DIR/setup-cluster.sh" "$@"
 }
 
-run_setup_monitoring() {
-    log_step "Running monitoring setup"
-    "$SCRIPT_DIR/setup-monitoring.sh" "$@"
-}
 
 run_setup_all() {
     log_step "Running complete homelab setup"
@@ -114,7 +107,6 @@ run_setup_all() {
     run_setup_system
     run_setup_cluster
     "$SCRIPT_DIR/deploy-applications.sh" all deploy
-    run_setup_monitoring
 
     # Calculate duration
     local end_time=$(date +%s)
@@ -150,9 +142,8 @@ EOF
 
 ${BLUE}Next steps:${NC}
   1. Configure your services through their web interfaces
-  2. Set up authentication: ${CYAN}$0 setup-auth owntracks${NC}
-  3. Check status: ${CYAN}$0 status${NC}
-  4. Monitor storage: ${CYAN}$0 monitor status${NC}
+  2. Check status: ${CYAN}$0 status${NC}
+  3. Monitor storage: ${CYAN}$0 monitor status${NC}
 
 ${BLUE}Management:${NC}
   - Add nodes: ${CYAN}$0 nodes add [hostname]${NC}
@@ -165,9 +156,6 @@ run_deploy() {
     "$SCRIPT_DIR/deploy-applications.sh" "$@"
 }
 
-run_setup_auth() {
-    "$SCRIPT_DIR/setup-auth.sh" "$@"
-}
 
 run_nodes() {
     "$SCRIPT_DIR/manage-nodes.sh" "$@"
@@ -349,14 +337,8 @@ main() {
         "setup-cluster")
             run_setup_cluster "$@"
             ;;
-        "setup-monitoring")
-            run_setup_monitoring "$@"
-            ;;
         "setup-all")
             run_setup_all "$@"
-            ;;
-        "setup-auth")
-            run_setup_auth "$@"
             ;;
         "deploy"|"restart"|"delete")
             run_deploy "$command" "$@"

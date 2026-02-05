@@ -29,71 +29,13 @@ Internet → VPS (Nginx) → Tailscale Tunnel → K3s Cluster (Traefik) → Appl
 
 ## Quick Start
 
-### Prerequisites
-- Fresh Debian/Ubuntu machine for K3s cluster
-- VPS with public IP for external access (optional)
-- **Tailscale account** and auth key ([generate here](https://login.tailscale.com/admin/settings/keys))
-- Domain name with DNS pointing to VPS (if using VPS proxy)
+1. Clone the repository
+2. Create node config: `cp config/templates/node-config.env.template nodes/$(hostname)/config.env.local`
+3. Edit config with your domain, email, and Tailscale auth key
+4. Run: `./scripts/homelab.sh setup-all`
+5. Verify: `./scripts/homelab.sh status`
 
-### First Server Node Setup
-
-**Important:** This is for bootstrapping your FIRST server node. For adding additional nodes, see [Adding Nodes](#adding-nodes).
-
-1. **Clone the repository**
-   ```bash
-   git clone <this-repo>
-   cd homelab
-   ```
-
-2. **Create configuration for this node**
-   ```bash
-   # Create node-specific config directory
-   mkdir -p nodes/$(hostname)
-
-   # Copy template and edit with your values
-   cp config/templates/node-config.env.template nodes/$(hostname)/config.env.local
-   nano nodes/$(hostname)/config.env.local
-   ```
-
-3. **Edit the configuration**
-
-   Replace these placeholders in `nodes/$(hostname)/config.env.local`:
-   ```bash
-   DOMAIN="your-domain.com"                 # Your domain
-   ACME_EMAIL="you@your-domain.com"        # For Let's Encrypt
-   TAILSCALE_AUTHKEY="tskey-auth-..."      # From Tailscale admin
-
-   # Leave these as-is for first server:
-   NODE_ROLE=server
-   CLUSTER_TOKEN=REPLACE_WITH_CLUSTER_TOKEN  # Auto-generated on install
-   SERVER_URL=REPLACE_WITH_SERVER_URL        # Not needed for first server
-   ```
-
-4. **Run the automated setup**
-   ```bash
-   # This installs everything: system packages, K3s, applications
-   ./scripts/homelab.sh setup-all
-
-   # Or run steps individually:
-   ./scripts/homelab.sh setup-system    # Install packages, Docker, Tailscale
-   ./scripts/homelab.sh setup-cluster   # Install K3s
-   ./scripts/homelab.sh deploy          # Deploy applications
-   ```
-
-5. **Verify installation**
-   ```bash
-   ./scripts/homelab.sh status
-   # Should show: K3s running, all pods healthy
-   ```
-
-6. **Setup VPS proxy (optional)**
-   ```bash
-   # On VPS
-   cd vps/
-   cp config/vps.env config/vps.env.local
-   # Edit with your settings
-   sudo bash scripts/setup.sh
-   ```
+For detailed setup instructions, see [Installation Guide](docs/INSTALLATION.md).
 
 ## Repository Structure
 
@@ -121,42 +63,6 @@ homelab/
 ├── scripts/                   # Automation scripts
 └── vps/                       # VPS reverse proxy setup
 ```
-
-## Configuration
-
-### Node Configuration (`nodes/<hostname>/config.env.local`)
-
-Key configuration sections:
-
-**Domain & Network**
-```bash
-DOMAIN="your-domain.com"
-ACME_EMAIL="you@your-domain.com"
-VPS_IP="100.x.x.x"  # Tailscale IP of VPS
-```
-
-**Storage Paths**
-```bash
-DATA_ROOT="/media/data"           # Main data directory
-K8S_STORAGE_ROOT="/opt/k3s-storage"  # K8s persistent volumes
-```
-
-**Services**
-```bash
-NODE_ROLE="server"                # server or agent
-ENABLE_TRAEFIK_DASHBOARD="true"
-ENABLE_DISK_MONITORING="true"
-```
-
-**Monitoring**
-All monitoring alerts are centralized through Prometheus and Alertmanager. Discord webhook is configured in:
-```
-cluster/applications/monitoring/alertmanager/alertmanager.yaml
-```
-
-### Service Authentication (`config/service-configs/`)
-- `auth.conf`: HTTP Basic Auth credentials for admin interfaces
-- `monitoring.conf`: Storage drive configuration for disk health monitoring
 
 ## Script Usage
 

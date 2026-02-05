@@ -94,9 +94,6 @@ sudo systemctl restart k3s
 
 # Redeploy all applications
 ./scripts/homelab.sh deploy
-
-# Storage failure - stop workloads
-./scripts/monitor-storage.sh stop-workloads
 ```
 
 ## Collecting Debug Info

@@ -1,5 +1,25 @@
 # Development Guide
 
+## Cluster Directory Structure
+
+```
+cluster/
+├── manifests/              # Core infrastructure
+│   ├── traefik/           # Ingress controller
+│   ├── cert-manager/      # SSL certificate management
+│   └── storage/           # Storage configuration
+├── infrastructure/         # NFS storage, priority classes
+└── applications/           # Application deployments
+    ├── automation/        # Home Assistant, MariaDB
+    ├── boinc/             # BOINC distributed computing
+    ├── cloud/             # Nextcloud, Immich
+    ├── games/             # Minecraft servers
+    ├── location/          # OwnTracks
+    ├── media-stack/       # Jellyfin, Sonarr, Radarr, etc.
+    ├── monitoring/        # Prometheus, Grafana, Alertmanager
+    └── utilities/         # Whoami test service
+```
+
 ## Adding New Services
 
 1. **Create application directory**:
@@ -47,6 +67,22 @@
    kubectl apply -k cluster/applications/<category>/<service-name>/
    ```
 
+## Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `homelab.sh` | Main CLI orchestrator |
+| `setup-system.sh` | System preparation (packages, Docker, Tailscale) |
+| `setup-cluster.sh` | K3s cluster installation |
+| `setup-nfs-storage.sh` | NFS server/client configuration |
+| `deploy-applications.sh` | Application deployment to K3s |
+| `manage-nodes.sh` | Cluster node management |
+| `monitor-storage.sh` | SnapRAID disk health monitoring |
+| `backup-notify.sh` | Borgmatic notification hook |
+| `snapraid-notify.sh` | SnapRAID metrics export |
+| `utils/common.sh` | Shared utility functions |
+| `utils/metrics.sh` | Prometheus metrics helpers |
+
 ## Script Conventions
 
 Scripts use shared functions from `scripts/utils/common.sh`:
@@ -82,3 +118,14 @@ For services needing persistent storage on the NAS:
 3. Create matching PVC
 
 NFS server: `192.168.1.94`, export root: `/exports`
+
+## Common Commands
+
+```bash
+kubectl get pods -A                                    # All pods
+kubectl logs -n <ns> deployment/<svc> -f              # Service logs
+kubectl rollout restart deployment/<svc> -n <ns>      # Restart
+kubectl scale deployment/<svc> -n <ns> --replicas=0   # Stop
+kubectl get certificates -A                            # SSL certs
+kubectl get pvc -A                                     # Storage claims
+```

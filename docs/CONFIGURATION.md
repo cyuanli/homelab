@@ -50,7 +50,7 @@ HTTP Basic Auth for admin interfaces (Traefik dashboard, etc.):
 AUTH_USER="admin"
 AUTH_PASSWORD="your-password"
 ```
-Generate: `./scripts/homelab.sh setup-auth`
+Generate htpasswd: `htpasswd -nb admin yourpassword`
 
 ### monitoring.conf
 Storage health monitoring:
