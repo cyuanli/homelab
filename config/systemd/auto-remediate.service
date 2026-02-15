@@ -4,6 +4,7 @@ Documentation=file:///home/cyl/homelab/scripts/auto-remediate.sh
 
 [Service]
 Type=oneshot
+User=cyl
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/home/cyl/homelab/scripts/auto-remediate.sh
 StandardOutput=journal
