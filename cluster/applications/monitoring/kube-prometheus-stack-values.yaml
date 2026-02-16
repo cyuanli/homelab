@@ -52,6 +52,16 @@ prometheus:
             requests:
               storage: 20Gi
 
+    # Relax liveness probe for NFS-backed storage
+    # NFS I/O stalls during TSDB compaction can make Prometheus briefly unresponsive.
+    # Default (30s) is too aggressive; 90s gives compactions time to finish.
+    containers:
+      - name: prometheus
+        livenessProbe:
+          failureThreshold: 18
+          periodSeconds: 5
+          timeoutSeconds: 3
+
     # Resources
     resources:
       requests:
