@@ -30,9 +30,7 @@ kubectl apply -k cluster/applications/<category>/<service>/
 # Add new node
 ./scripts/manage-nodes.sh add <hostname> --role server  # or agent
 
-# On new node
-./scripts/homelab.sh setup-system
-./scripts/homelab.sh setup-cluster
+# Add to ansible/inventory.yml, then run Ansible playbooks including k3s.yml (see INSTALLATION.md)
 
 # Drain node for maintenance
 kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
@@ -82,11 +80,12 @@ Alerts via Prometheus/Alertmanager. See `cluster/applications/monitoring/`.
 
 ## Scheduled Tasks (Systemd Timers)
 
-| Timer | Schedule | Purpose |
-|-------|----------|---------|
-| `snapraid-runner` | Daily 2 AM | SnapRAID sync/scrub |
-| `disk-monitor` | Every 5 min | Disk health checks |
-| `borgmatic` | Daily 3 AM | Backups |
+| Timer | Schedule | Node Group | Purpose |
+|-------|----------|------------|---------|
+| `snapraid-runner` | Daily 2 AM | storage | SnapRAID sync/scrub |
+| `disk-monitor` | Every 5 min | storage | Disk health checks |
+| `auto-remediate` | Every 15 min | monitoring | Restart services on alerts |
+| `borgmatic` | Daily 3 AM | backup | Backups |
 
 ```bash
 systemctl list-timers                    # All timers
@@ -96,16 +95,14 @@ sudo systemctl start <service>.service  # Manual trigger
 
 ### Installing Timers
 
-```bash
-# Copy timer and service files
-sudo cp /home/cyl/homelab/config/systemd/*.timer /etc/systemd/system/
-sudo cp /home/cyl/homelab/config/systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
+Timers are deployed via Ansible:
 
-# Enable timers
-sudo systemctl enable --now snapraid-runner.timer
-sudo systemctl enable --now disk-monitor.timer
+```bash
+cd ansible
+ansible-playbook playbooks/systemd-timers.yml --ask-become-pass
 ```
+
+This deploys disk-monitor + snapraid-runner to storage nodes, and auto-remediate to monitoring nodes.
 
 ## Monitoring
 

@@ -1,0 +1,59 @@
+all:
+  vars:
+    ansible_user: cyl
+    ansible_python_interpreter: /usr/bin/python3
+    lan_cidr: 192.168.0.0/16
+    vps_ip: 100.121.249.71
+  children:
+    servers:
+      hosts:
+        cyl-homelab:
+          ansible_connection: local
+          cluster_token: ""
+          server_url: ""
+          kubelet_system_reserved_cpu: "1"
+          kubelet_system_reserved_memory: "2Gi"
+          kubelet_kube_reserved_cpu: "1"
+          kubelet_kube_reserved_memory: "500Mi"
+        cyl-mitx:
+          kubelet_system_reserved_cpu: "1"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "1"
+          kubelet_kube_reserved_memory: "500Mi"
+        cyl-optiplex9020:
+          kubelet_system_reserved_cpu: "500m"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "500m"
+          kubelet_kube_reserved_memory: "500Mi"
+    storage:
+      hosts:
+        cyl-homelab:
+    monitoring:
+      hosts:
+        cyl-optiplex9020:
+    backup:
+      hosts:
+        cyl-homelab:
+        cyl-optiplex9020:
+    agents:
+      hosts:
+        cyl-aspiree17:
+          kubelet_system_reserved_cpu: "1"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "1"
+          kubelet_kube_reserved_memory: "500Mi"
+        cyl-inspiron14:
+          kubelet_system_reserved_cpu: "500m"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "500m"
+          kubelet_kube_reserved_memory: "500Mi"
+        cyl-xps13:
+          kubelet_system_reserved_cpu: "500m"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "500m"
+          kubelet_kube_reserved_memory: "500Mi"
+        cyl-yoga213:
+          kubelet_system_reserved_cpu: "500m"
+          kubelet_system_reserved_memory: "1.5Gi"
+          kubelet_kube_reserved_cpu: "500m"
+          kubelet_kube_reserved_memory: "500Mi"

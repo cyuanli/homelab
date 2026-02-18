@@ -1,0 +1,13 @@
+homelab_user: cyl
+homelab_root: /opt/homelab
+k8s_storage_root: /opt/k3s-storage
+data_root: /media/data
+app_storage_root: /srv/app-storage
+exports_root: /exports
+
+k3s_version: v1.33.5+k3s1
+server_url: https://192.168.1.94:6443
+kubelet_cpu_manager_policy: none
+
+cluster_token: "{{ vault_cluster_token }}"
+discord_webhook_url: "{{ vault_discord_webhook_url }}"

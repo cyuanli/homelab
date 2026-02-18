@@ -1,0 +1,20 @@
+- name: Configure user permissions
+  hosts: all
+  become: true
+  tasks:
+    - name: Create sudoers file for homelab operations
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/homelab-{{ homelab_user }}"
+        content: |
+          # Homelab permissions for {{ homelab_user }}
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /usr/local/bin/k3s*
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/systemctl
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /usr/bin/apt
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/mkdir
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/chown
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/chmod
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/mount
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/umount
+          {{ homelab_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale
+        mode: "0440"
+        validate: visudo -cf %s

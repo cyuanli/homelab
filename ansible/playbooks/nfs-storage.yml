@@ -1,0 +1,73 @@
+- name: Configure NFS server
+  hosts: storage
+  become: true
+  vars:
+    games_root: "{{ data_root }}/games"
+  tasks:
+    - name: Ensure required source directories exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: dir_check
+      loop:
+        - "{{ data_root }}"
+        - "{{ app_storage_root }}"
+      failed_when: not dir_check.stat.exists
+
+    - name: Create games directory
+      ansible.builtin.file:
+        path: "{{ games_root }}/minecraft/backups"
+        state: directory
+        owner: nobody
+        group: nogroup
+        mode: "0755"
+
+    - name: Create service directories
+      ansible.builtin.file:
+        path: "{{ app_storage_root }}/traefik/acme"
+        state: directory
+        owner: nobody
+        group: nogroup
+        mode: "0755"
+
+    - name: Create export bind mount points
+      ansible.builtin.file:
+        path: "{{ exports_root }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - media
+        - configs
+        - games
+
+    - name: Add bind mounts to fstab
+      ansible.posix.mount:
+        path: "{{ item.path }}"
+        src: "{{ item.src }}"
+        fstype: none
+        opts: bind
+        state: mounted
+      loop:
+        - { src: "{{ data_root }}", path: "{{ exports_root }}/media" }
+        - { src: "{{ app_storage_root }}", path: "{{ exports_root }}/configs" }
+        - { src: "{{ games_root }}", path: "{{ exports_root }}/games" }
+
+    - name: Copy NFS exports configuration
+      ansible.builtin.copy:
+        src: ../../config/system-configs/exports
+        dest: /etc/exports
+        mode: "0644"
+        backup: true
+      notify: Apply NFS exports
+
+    - name: Enable NFS server
+      ansible.builtin.systemd:
+        name: nfs-kernel-server
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Apply NFS exports
+      ansible.builtin.command: exportfs -ra
+      changed_when: true

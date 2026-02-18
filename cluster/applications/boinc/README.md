@@ -28,7 +28,7 @@ BOINC runs as **DaemonSets** with **Kustomize overlays** per node tier:
 **Solution**: [LXCFS](https://github.com/lxc/lxcfs) (Linux Containers FileSystem) provides virtualized `/proc` files that respect cgroup limits.
 
 **Implementation**:
-1. LXCFS installed on all nodes: `apt install lxcfs` (via `scripts/setup-system.sh`)
+1. LXCFS installed on agent nodes (via `ansible/playbooks/docker.yml`)
 2. BOINC pods mount `/var/lib/lxcfs/proc/meminfo`, `/proc/cpuinfo`, `/proc/stat`, `/proc/uptime`
 3. BOINC automatically detects correct container memory limits and manages resources accordingly
 

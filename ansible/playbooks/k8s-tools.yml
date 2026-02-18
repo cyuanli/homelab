@@ -1,0 +1,46 @@
+- name: Install Kubernetes tools
+  hosts: servers
+  become: true
+  vars:
+    kubectl_version: v1.33.5
+  tasks:
+    - name: Check kubectl version
+      ansible.builtin.command: kubectl version --client -o json
+      register: kubectl_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install kubectl
+      when: kubectl_check.rc != 0 or kubectl_version not in kubectl_check.stdout
+      block:
+        - name: Download kubectl
+          ansible.builtin.get_url:
+            url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+            dest: /usr/local/bin/kubectl
+            mode: "0755"
+            owner: root
+            group: root
+
+    - name: Check if Helm is installed
+      ansible.builtin.command: which helm
+      register: helm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Helm
+      when: helm_check.rc != 0
+      block:
+        - name: Download Helm install script
+          ansible.builtin.get_url:
+            url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+            dest: /tmp/get-helm.sh
+            mode: "0755"
+
+        - name: Run Helm install script
+          ansible.builtin.command: /tmp/get-helm.sh
+          changed_when: true
+
+        - name: Remove install script
+          ansible.builtin.file:
+            path: /tmp/get-helm.sh
+            state: absent

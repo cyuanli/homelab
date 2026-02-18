@@ -1,0 +1,10 @@
+- name: Update and upgrade all packages
+  hosts: all
+  become: true
+  serial: 1
+  tasks:
+    - name: Update apt cache and upgrade all packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600

@@ -186,13 +186,9 @@ EOF
    # No editing needed - secrets copied from server
    \`\`\`
 
-4. **Run setup scripts:**
+4. **Run Ansible setup** (see docs/INSTALLATION.md):
    \`\`\`bash
-   # System setup
-   ./scripts/setup-system.sh
-
-   # Cluster join
-   ./scripts/setup-cluster.sh
+   cd ansible && ansible-playbook site.yml --ask-become-pass --limit $node_name
    \`\`\`
 
 5. **Verify node joined:**
@@ -237,9 +233,8 @@ ${BLUE}To add this node to the cluster:${NC}
 
 2. SSH to the new node and run:
    cd ~/homelab
-   # Configuration with secrets already ready at nodes/$node_name/config.env.local
-   ./scripts/setup-system.sh
-   ./scripts/setup-cluster.sh
+   # Add node to ansible/inventory.yml, then run Ansible setup (see docs/INSTALLATION.md)
+   cd ansible && ansible-playbook site.yml --ask-become-pass --limit $node_name
 
 3. Verify the node joined:
    ${CYAN}kubectl get nodes${NC}

@@ -15,11 +15,6 @@ Homelab Management Script
 
 Usage: $0 [command] [options]
 
-${BLUE}Setup Commands:${NC}
-  setup-system           - Prepare fresh system for homelab
-  setup-cluster          - Install and configure K3s cluster
-  setup-all              - Run complete setup from fresh system
-
 ${BLUE}Deployment Commands:${NC}
   deploy [component]     - Deploy applications (infrastructure, cloud, media, etc.)
   restart [component]    - Restart applications
@@ -37,7 +32,7 @@ ${BLUE}Utility Commands:${NC}
   help                   - Show this help message
 
 ${BLUE}Examples:${NC}
-  $0 setup-all                    # Complete homelab setup
+  $0 deploy                       # Deploy all apps (requires Ansible + K3s first)
   $0 deploy media                 # Deploy media stack
   $0 status                       # Show status
   $0 nodes add worker1            # Add cluster node
@@ -62,32 +57,17 @@ validate_environment() {
     load_config
 }
 
-run_setup_system() {
-    log_step "Running system setup"
-    "$SCRIPT_DIR/setup-system.sh" "$@"
-}
-
-run_setup_cluster() {
-    log_step "Running cluster setup"
-    "$SCRIPT_DIR/setup-cluster.sh" "$@"
-}
-
-
 run_setup_all() {
-    log_step "Running complete homelab setup"
+    log_step "Deploying all applications"
 
     # Validate prerequisites
     check_not_root
 
-    log_info "This will set up a complete homelab from a fresh system"
-    log_info "Components: System → K3s → Infrastructure → Applications → Monitoring"
+    log_info "This will deploy all applications (Ansible playbooks + K3s must be set up first)"
 
     if [[ "${1:-}" != "--yes" ]]; then
         echo ""
         log_warning "This process will:"
-        echo "  - Install system packages and dependencies"
-        echo "  - Configure firewall and user permissions"
-        echo "  - Install K3s cluster"
         echo "  - Deploy infrastructure (Traefik, storage)"
         echo "  - Deploy all applications (Cloud, Media, etc.)"
         echo "  - Configure monitoring systems"
@@ -103,9 +83,6 @@ run_setup_all() {
     # Record start time
     local start_time=$(date +%s)
 
-    # Run setup phases
-    run_setup_system
-    run_setup_cluster
     "$SCRIPT_DIR/deploy-applications.sh" all deploy
 
     # Calculate duration
@@ -331,12 +308,6 @@ main() {
     shift || true
 
     case "$command" in
-        "setup-system")
-            run_setup_system "$@"
-            ;;
-        "setup-cluster")
-            run_setup_cluster "$@"
-            ;;
         "setup-all")
             run_setup_all "$@"
             ;;

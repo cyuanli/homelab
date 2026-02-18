@@ -1,0 +1,134 @@
+- name: Configure UFW on all nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Install UFW
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+
+    - name: Set default deny incoming
+      community.general.ufw:
+        direction: incoming
+        default: deny
+
+    - name: Set default allow outgoing
+      community.general.ufw:
+        direction: outgoing
+        default: allow
+
+    - name: Allow SSH from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "22"
+        proto: tcp
+
+    - name: Allow kubelet from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "10250"
+        proto: tcp
+
+    - name: Allow Flannel VXLAN from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "8472"
+        proto: udp
+
+    - name: Allow node exporter from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "9100"
+        proto: tcp
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+
+- name: Configure UFW on servers
+  hosts: servers
+  become: true
+  tasks:
+    - name: Allow K3s API server from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "6443"
+        proto: tcp
+
+    - name: Allow etcd client from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "2379"
+        proto: tcp
+
+    - name: Allow etcd peer from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "2380"
+        proto: tcp
+
+    - name: Allow HTTP from VPS
+      community.general.ufw:
+        rule: allow
+        src: "{{ vps_ip }}"
+        port: "80"
+        proto: tcp
+
+    - name: Allow HTTPS from VPS (TCP)
+      community.general.ufw:
+        rule: allow
+        src: "{{ vps_ip }}"
+        port: "443"
+        proto: tcp
+
+    - name: Allow HTTPS from VPS (UDP)
+      community.general.ufw:
+        rule: allow
+        src: "{{ vps_ip }}"
+        port: "443"
+        proto: udp
+
+    - name: Allow SSH from VPS
+      community.general.ufw:
+        rule: allow
+        src: "{{ vps_ip }}"
+        port: "22"
+        proto: tcp
+
+    - name: Allow Minecraft from VPS
+      community.general.ufw:
+        rule: allow
+        src: "{{ vps_ip }}"
+        port: "25565"
+        proto: tcp
+
+- name: Configure UFW on storage node
+  hosts: storage
+  become: true
+  tasks:
+    - name: Allow NFS rpcbind from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "111"
+        proto: "{{ item }}"
+      loop:
+        - tcp
+        - udp
+
+    - name: Allow NFS server from LAN
+      community.general.ufw:
+        rule: allow
+        src: "{{ lan_cidr }}"
+        port: "2049"
+        proto: "{{ item }}"
+      loop:
+        - tcp
+        - udp

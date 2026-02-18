@@ -25,7 +25,6 @@ nano nodes/$(hostname)/config.env.local
 ```bash
 DOMAIN="your-domain.com"
 ACME_EMAIL="you@your-domain.com"
-TAILSCALE_AUTHKEY="tskey-auth-..."  # From Tailscale admin console
 
 HOMELAB_USER="your-username"
 HOMELAB_UID="1000"  # Run: id -u
@@ -39,17 +38,42 @@ NODE_ROLE="server"
 
 ### Run Setup
 
+Host-level configuration is managed with Ansible. Run playbooks from the `ansible/` directory:
+
 ```bash
-./scripts/homelab.sh setup-all
+cd ansible
+
+# System packages, firewall, directories, permissions, Tailscale
+ansible-playbook playbooks/update.yml --ask-become-pass
+ansible-playbook playbooks/packages.yml --ask-become-pass
+ansible-playbook playbooks/ufw.yml --ask-become-pass
+ansible-playbook playbooks/directories.yml --ask-become-pass
+ansible-playbook playbooks/user-permissions.yml --ask-become-pass
+ansible-playbook playbooks/tailscale.yml --ask-become-pass -e tailscale_authkey=tskey-auth-...
+
+# Docker/LXCFS, K8s tools, NFS, systemd timers
+ansible-playbook playbooks/docker.yml --ask-become-pass
+ansible-playbook playbooks/k8s-tools.yml --ask-become-pass
+ansible-playbook playbooks/nfs-storage.yml --ask-become-pass
+ansible-playbook playbooks/systemd-timers.yml --ask-become-pass
+
+# K3s cluster (requires vault password for cluster token)
+ansible-playbook playbooks/k3s.yml --ask-become-pass
 ```
 
-This installs:
-- System packages (curl, git, etc.)
-- UFW firewall
-- Tailscale VPN
-- K3s cluster
-- Core infrastructure (Traefik, cert-manager)
-- Applications
+Use `--limit <hostname>` to target a single node.
+
+### Bootstrap K8s Infrastructure (first server only)
+
+After K3s is running, apply the core K8s manifests:
+
+```bash
+kubectl apply -f cluster/manifests/namespaces/
+kubectl apply -f cluster/manifests/storage/
+kubectl apply -f cluster/infrastructure/storage/nfs-direct-storageclass.yaml
+kubectl apply -f cluster/manifests/traefik/
+kubectl apply -f cluster/manifests/cert-manager/
+```
 
 ### Verify
 
@@ -61,12 +85,14 @@ kubectl get pods -A
 ## Adding More Nodes
 
 ```bash
-# On first server, generate config for new node
+# 1. On first server, generate config for new node
 ./scripts/manage-nodes.sh add <new-hostname> --role server  # or agent
 
-# Copy repo to new node and run
-./scripts/homelab.sh setup-system
-./scripts/homelab.sh setup-cluster
+# 2. Add the node to ansible/inventory.yml in the appropriate groups
+
+# 3. Run Ansible playbooks against the new node
+cd ansible
+ansible-playbook site.yml --ask-become-pass --limit <new-hostname> -e tailscale_authkey=tskey-auth-...
 ```
 
 For HA: use 3 or 5 server nodes (odd number for etcd quorum).
@@ -105,5 +131,5 @@ sudo chown -R $USER:$USER /media/data
 ```bash
 # Clean reinstall
 sudo /usr/local/bin/k3s-uninstall.sh
-./scripts/homelab.sh setup-all
+cd ansible && ansible-playbook playbooks/k3s.yml --ask-become-pass --ask-vault-pass --limit $(hostname)
 ```

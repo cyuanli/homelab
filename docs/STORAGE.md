@@ -503,19 +503,17 @@ sudo snapraid fix -d d1  # Replace d1 with failed drive name
 
 ### Automatic Setup (Recommended)
 
-If you're using the bootstrap setup script, disk monitoring is configured automatically:
+Disk monitoring is configured via Ansible:
 
 ```bash
-# Run the main setup script - it will detect SnapRAID and configure monitoring
-./scripts/homelab.sh setup-system
+cd ansible
+ansible-playbook playbooks/packages.yml --ask-become-pass --limit cyl-homelab
+ansible-playbook playbooks/systemd-timers.yml --ask-become-pass --limit cyl-homelab
 ```
 
-The setup script will:
-- Detect SnapRAID configuration automatically
+This will:
 - Install required monitoring tools
-- Create Discord webhook configuration template
-- Set up automated health checks every 5 minutes
-- Test the monitoring system
+- Set up automated health checks every 5 minutes via systemd timer
 
 ### Manual Setup
 
@@ -655,14 +653,15 @@ With NFS CSI driver, pods can run on any node while accessing centralized storag
 
 ### Automatic Setup (Recommended)
 
-The setup script handles NFS server and client installation automatically:
+NFS is configured via Ansible:
 
 ```bash
-# Run on the storage node (e.g., cyl-homelab)
-./scripts/setup-nfs-storage.sh
+cd ansible
+ansible-playbook playbooks/packages.yml --ask-become-pass --limit cyl-homelab
+ansible-playbook playbooks/nfs-storage.yml --ask-become-pass --limit cyl-homelab
 ```
 
-This script will:
+This will:
 - Install NFS kernel server (on storage nodes only)
 - Configure NFS exports with proper security settings
 - Set up firewall rules for NFS traffic
@@ -776,7 +775,7 @@ showmount -e 192.168.1.94  # Replace with your storage node IP
 
 We use native Kubernetes NFS volumes (`spec.nfs`) instead of a CSI driver for simplicity and reliability.
 
-**Deploy infrastructure (automatically done by setup-cluster.sh):**
+**Deploy infrastructure (part of post-install bootstrapping, see INSTALLATION.md):**
 ```bash
 # Deploy NFS direct StorageClass
 kubectl apply -f cluster/infrastructure/storage/nfs-direct-storageclass.yaml

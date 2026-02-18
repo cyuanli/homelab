@@ -1,0 +1,49 @@
+- name: Install common packages on all nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Install base utilities
+      ansible.builtin.apt:
+        name:
+          - curl
+          - git
+          - vim
+          - htop
+          - unzip
+          - jq
+          - nfs-common
+        state: present
+
+- name: Install server packages
+  hosts: servers
+  become: true
+  tasks:
+    - name: Install server tools
+      ansible.builtin.apt:
+        name:
+          - smartmontools
+          - sysstat
+          - net-tools
+          - dnsutils
+          - gettext-base
+        state: present
+
+- name: Install backup packages
+  hosts: backup
+  become: true
+  tasks:
+    - name: Install borgmatic
+      ansible.builtin.apt:
+        name:
+          - borgmatic
+        state: present
+
+- name: Install storage node packages
+  hosts: storage
+  become: true
+  tasks:
+    - name: Install NFS server
+      ansible.builtin.apt:
+        name:
+          - nfs-kernel-server
+        state: present

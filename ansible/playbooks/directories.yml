@@ -1,0 +1,71 @@
+- name: Create common directory structure
+  hosts: all
+  become: true
+  tasks:
+    - name: Create base directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ homelab_user }}"
+        group: "{{ homelab_user }}"
+        mode: "0755"
+      loop:
+        - "{{ homelab_root }}"
+        - "{{ k8s_storage_root }}"
+        - "{{ k8s_storage_root }}/traefik-acme"
+        - "{{ k8s_storage_root }}/nextcloud-data"
+        - "{{ k8s_storage_root }}/nextcloud-files"
+        - "{{ k8s_storage_root }}/postgres-data"
+        - "{{ k8s_storage_root }}/redis-data"
+
+    - name: Create user directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ homelab_user }}"
+        group: "{{ homelab_user }}"
+        mode: "0755"
+      loop:
+        - "/home/{{ homelab_user }}/backups"
+        - "/home/{{ homelab_user }}/Downloads/incomplete"
+
+- name: Create storage node directories
+  hosts: storage
+  become: true
+  tasks:
+    - name: Create media directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ homelab_user }}"
+        group: "{{ homelab_user }}"
+        mode: "0755"
+      loop:
+        - "{{ data_root }}/media/movies"
+        - "{{ data_root }}/media/tv"
+        - "{{ data_root }}/media/music"
+        - "{{ data_root }}/downloads"
+
+    - name: Create NFS export directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ exports_root }}"
+        - "{{ exports_root }}/media"
+        - "{{ exports_root }}/configs"
+        - "{{ exports_root }}/games"
+
+    - name: Create service directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0755"
+      loop:
+        - { path: "{{ app_storage_root }}/traefik/acme", owner: nobody, group: nogroup }
+        - { path: "{{ data_root }}/games/minecraft/backups", owner: nobody, group: nogroup }

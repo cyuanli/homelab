@@ -1,0 +1,62 @@
+- name: Deploy auto-remediate timer
+  hosts: monitoring
+  become: true
+  tasks:
+    - name: Copy auto-remediate units
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/systemd/system/
+        mode: "0644"
+      loop:
+        - ../../config/systemd/auto-remediate.service
+        - ../../config/systemd/auto-remediate.timer
+      notify: Reload systemd
+
+    - name: Enable auto-remediate timer
+      ansible.builtin.systemd:
+        name: auto-remediate.timer
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+- name: Deploy storage timers
+  hosts: storage
+  become: true
+  tasks:
+    - name: Copy disk-monitor units
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/systemd/system/
+        mode: "0644"
+      loop:
+        - ../../config/systemd/disk-monitor.service
+        - ../../config/systemd/disk-monitor.timer
+      notify: Reload systemd
+
+    - name: Copy snapraid-runner units
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/systemd/system/
+        mode: "0644"
+      loop:
+        - ../../config/systemd/snapraid-runner.service
+        - ../../config/systemd/snapraid-runner.timer
+      notify: Reload systemd
+
+    - name: Enable storage timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - disk-monitor.timer
+        - snapraid-runner.timer
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

@@ -1,0 +1,11 @@
+- import_playbook: playbooks/update.yml
+- import_playbook: playbooks/packages.yml
+- import_playbook: playbooks/ufw.yml
+- import_playbook: playbooks/directories.yml
+- import_playbook: playbooks/user-permissions.yml
+- import_playbook: playbooks/tailscale.yml
+- import_playbook: playbooks/docker.yml
+- import_playbook: playbooks/k8s-tools.yml
+- import_playbook: playbooks/nfs-storage.yml
+- import_playbook: playbooks/systemd-timers.yml
+- import_playbook: playbooks/k3s.yml

@@ -32,8 +32,9 @@ Internet → VPS (Nginx) → Tailscale Tunnel → K3s Cluster (Traefik) → Appl
 1. Clone the repository
 2. Create node config: `cp config/templates/node-config.env.template nodes/$(hostname)/config.env.local`
 3. Edit config with your domain, email, and Tailscale auth key
-4. Run: `./scripts/homelab.sh setup-all`
-5. Verify: `./scripts/homelab.sh status`
+4. Run Ansible playbooks for system setup and K3s install (see [Installation Guide](docs/INSTALLATION.md))
+5. Deploy apps: `./scripts/homelab.sh deploy`
+6. Verify: `./scripts/homelab.sh status`
 
 For detailed setup instructions, see [Installation Guide](docs/INSTALLATION.md).
 
@@ -58,6 +59,7 @@ homelab/
 │   ├── service-configs/      # Auth, monitoring configs
 │   ├── systemd/              # Timer/service units
 │   └── templates/            # Node config templates
+├── ansible/                   # Ansible playbooks for host setup
 ├── docs/                      # Documentation
 ├── nodes/                     # Per-node configs (gitignored secrets)
 ├── scripts/                   # Automation scripts
@@ -67,9 +69,14 @@ homelab/
 ## Script Usage
 
 ```bash
-./scripts/homelab.sh setup-all     # Complete setup (system + cluster + apps)
-./scripts/homelab.sh setup-system  # System packages, Tailscale, firewall
-./scripts/homelab.sh setup-cluster # K3s installation
+# Ansible playbooks (system setup, K3s install, etc.)
+cd ansible
+ansible-playbook playbooks/update.yml --ask-become-pass
+ansible-playbook playbooks/packages.yml --ask-become-pass
+ansible-playbook playbooks/k3s.yml --ask-become-pass
+# See docs/INSTALLATION.md for full list
+
+# Shell scripts (app deployment + management)
 ./scripts/homelab.sh deploy        # Deploy all applications
 ./scripts/homelab.sh deploy media  # Deploy specific stack
 ./scripts/homelab.sh status        # Cluster health check
@@ -82,9 +89,7 @@ homelab/
 ./scripts/manage-nodes.sh add <hostname> --role server  # Control plane
 ./scripts/manage-nodes.sh add <hostname>                # Worker node
 
-# On new node:
-./scripts/homelab.sh setup-system
-./scripts/homelab.sh setup-cluster
+# Add node to ansible/inventory.yml, then run Ansible playbooks (see docs/INSTALLATION.md)
 ```
 
 Use 3 or 5 control planes for HA (odd number for etcd quorum).

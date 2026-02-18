@@ -69,12 +69,13 @@ cluster/
 
 ## Scripts Reference
 
+Host-level setup (packages, firewall, K3s, NFS, systemd timers) is managed by Ansible playbooks in `ansible/`. See [Installation Guide](INSTALLATION.md) for details.
+
+Shell scripts in `scripts/` handle app deployment and day-to-day management:
+
 | Script | Purpose |
 |--------|---------|
 | `homelab.sh` | Main CLI orchestrator |
-| `setup-system.sh` | System preparation (packages, Docker, Tailscale) |
-| `setup-cluster.sh` | K3s cluster installation |
-| `setup-nfs-storage.sh` | NFS server/client configuration |
 | `deploy-applications.sh` | Application deployment to K3s |
 | `manage-nodes.sh` | Cluster node management |
 | `monitor-storage.sh` | SnapRAID disk health monitoring |

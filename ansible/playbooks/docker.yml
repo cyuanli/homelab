@@ -1,0 +1,54 @@
+- name: Install Docker on storage nodes
+  hosts: storage
+  become: true
+  tasks:
+    - name: Check if Docker is installed
+      ansible.builtin.command: which docker
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker
+      when: docker_check.rc != 0
+      block:
+        - name: Download Docker install script
+          ansible.builtin.get_url:
+            url: https://get.docker.com
+            dest: /tmp/get-docker.sh
+            mode: "0755"
+
+        - name: Run Docker install script
+          ansible.builtin.command: /tmp/get-docker.sh
+          changed_when: true
+
+        - name: Remove install script
+          ansible.builtin.file:
+            path: /tmp/get-docker.sh
+            state: absent
+
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ homelab_user }}"
+        groups: docker
+        append: true
+
+    - name: Enable Docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+- name: Install LXCFS on agent nodes
+  hosts: agents
+  become: true
+  tasks:
+    - name: Install LXCFS
+      ansible.builtin.apt:
+        name: lxcfs
+        state: present
+
+    - name: Enable LXCFS service
+      ansible.builtin.systemd:
+        name: lxcfs
+        enabled: true
+        state: started

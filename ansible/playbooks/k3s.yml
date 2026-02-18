@@ -1,0 +1,128 @@
+- name: Install K3s servers
+  hosts: servers
+  become: true
+  serial: 1
+  tasks:
+    - name: Check if K3s is running
+      ansible.builtin.command: systemctl is-active k3s
+      register: k3s_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install K3s server
+      when: k3s_check.rc != 0
+      block:
+        - name: Get Tailscale IP
+          ansible.builtin.command: tailscale ip -4
+          register: tailscale_ip
+          changed_when: false
+          failed_when: false
+
+        - name: Build K3s server install command
+          ansible.builtin.set_fact:
+            k3s_install_args: >-
+              server
+              --write-kubeconfig-mode 644
+              --disable traefik
+              --disable servicelb
+              --disable local-storage
+              --node-name {{ inventory_hostname }}
+              --kubelet-arg=eviction-hard=memory.available<500Mi
+              --kubelet-arg=eviction-soft=memory.available<1Gi
+              --kubelet-arg=eviction-soft-grace-period=memory.available=1m30s
+              --kubelet-arg=system-reserved=cpu={{ kubelet_system_reserved_cpu }},memory={{ kubelet_system_reserved_memory }}
+              --kubelet-arg=kube-reserved=cpu={{ kubelet_kube_reserved_cpu }},memory={{ kubelet_kube_reserved_memory }}
+              --kubelet-arg=cpu-manager-policy={{ kubelet_cpu_manager_policy }}
+              {% if cluster_token | default('') == '' %}--cluster-init{% else %}--server {{ server_url }}{% endif %}
+              {% if tailscale_ip.rc == 0 %}--node-external-ip {{ tailscale_ip.stdout | trim }}{% endif %}
+
+        - name: Run K3s installer
+          ansible.builtin.shell: >-
+            curl -sfL https://get.k3s.io |
+            INSTALL_K3S_VERSION="{{ k3s_version }}"
+            {% if cluster_token | default('') != '' %}K3S_TOKEN="{{ cluster_token }}"{% endif %}
+            sh -s - {{ k3s_install_args }}
+          changed_when: true
+          no_log: true
+
+        - name: Wait for K3s to be active
+          ansible.builtin.systemd:
+            name: k3s
+            state: started
+          retries: 30
+          delay: 4
+
+    - name: Configure kubectl access
+      block:
+        - name: Create .kube directory
+          ansible.builtin.file:
+            path: "/home/{{ homelab_user }}/.kube"
+            state: directory
+            owner: "{{ homelab_user }}"
+            group: "{{ homelab_user }}"
+            mode: "0755"
+
+        - name: Copy kubeconfig
+          ansible.builtin.copy:
+            src: /etc/rancher/k3s/k3s.yaml
+            dest: "/home/{{ homelab_user }}/.kube/config"
+            remote_src: true
+            owner: "{{ homelab_user }}"
+            group: "{{ homelab_user }}"
+            mode: "0600"
+
+        - name: Add KUBECONFIG to bashrc
+          ansible.builtin.lineinfile:
+            path: "/home/{{ homelab_user }}/.bashrc"
+            line: "export KUBECONFIG=/home/{{ homelab_user }}/.kube/config"
+            regexp: ^export KUBECONFIG=
+            state: present
+
+- name: Install K3s agents
+  hosts: agents
+  become: true
+  tasks:
+    - name: Check if K3s agent is running
+      ansible.builtin.command: systemctl is-active k3s-agent
+      register: k3s_agent_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install K3s agent
+      when: k3s_agent_check.rc != 0
+      block:
+        - name: Get Tailscale IP
+          ansible.builtin.command: tailscale ip -4
+          register: tailscale_ip
+          changed_when: false
+          failed_when: false
+
+        - name: Build K3s agent install command
+          ansible.builtin.set_fact:
+            k3s_install_args: >-
+              agent
+              --server {{ server_url }}
+              --node-name {{ inventory_hostname }}
+              --kubelet-arg=eviction-hard=memory.available<500Mi
+              --kubelet-arg=eviction-soft=memory.available<1Gi
+              --kubelet-arg=eviction-soft-grace-period=memory.available=1m30s
+              --kubelet-arg=system-reserved=cpu={{ kubelet_system_reserved_cpu }},memory={{ kubelet_system_reserved_memory }}
+              --kubelet-arg=kube-reserved=cpu={{ kubelet_kube_reserved_cpu }},memory={{ kubelet_kube_reserved_memory }}
+              --kubelet-arg=cpu-manager-policy={{ kubelet_cpu_manager_policy }}
+              {% if tailscale_ip.rc == 0 %}--node-external-ip {{ tailscale_ip.stdout | trim }}{% endif %}
+
+        - name: Run K3s installer
+          ansible.builtin.shell: >-
+            curl -sfL https://get.k3s.io |
+            INSTALL_K3S_VERSION="{{ k3s_version }}"
+            K3S_TOKEN="{{ cluster_token }}"
+            sh -s - {{ k3s_install_args }}
+          changed_when: true
+          no_log: true
+
+        - name: Wait for K3s agent to be active
+          ansible.builtin.systemd:
+            name: k3s-agent
+            state: started
+          retries: 30
+          delay: 4
