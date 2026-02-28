@@ -1,0 +1,87 @@
+---
+# PV for Syncthing data (git repo + synced files)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: syncthing-data
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-direct
+  mountOptions:
+    - vers=4.1
+    - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
+  nfs:
+    server: 192.168.1.94
+    path: /configs/syncthing/data
+
+---
+# PVC for Syncthing data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: syncthing-data
+  namespace: utilities
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-direct
+  volumeName: syncthing-data
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# PV for Syncthing config (identity, peer/folder config)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: syncthing-config
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-direct
+  mountOptions:
+    - vers=4.1
+    - hard
+    - timeo=300
+    - retrans=3
+    - rsize=1048576
+    - wsize=1048576
+    - _netdev
+    - noatime
+    - actimeo=30
+    - lookupcache=positive
+  nfs:
+    server: 192.168.1.94
+    path: /configs/syncthing/config
+
+---
+# PVC for Syncthing config
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: syncthing-config
+  namespace: utilities
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-direct
+  volumeName: syncthing-config
+  resources:
+    requests:
+      storage: 1Gi

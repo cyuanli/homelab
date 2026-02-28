@@ -1,0 +1,147 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: syncthing
+  namespace: utilities
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: syncthing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: syncthing
+    spec:
+      initContainers:
+        - name: git-init
+          image: alpine/git
+          envFrom:
+            - secretRef:
+                name: syncthing-git
+          command:
+            - sh
+            - -c
+            - |
+              git config --global --add safe.directory /data
+              if [ ! -d /data/.git ]; then
+                echo "No git repo found, cloning..."
+                git clone "$GIT_REMOTE_URL" /tmp/repo
+                mv /tmp/repo/.git /data/.git
+                cd /data && git checkout -- .
+                echo "Clone complete."
+              else
+                echo "Git repo already exists, skipping clone."
+              fi
+          volumeMounts:
+            - name: syncthing-data
+              mountPath: /data
+      containers:
+        - name: syncthing
+          image: syncthing/syncthing
+          ports:
+            - name: web-ui
+              containerPort: 8384
+              protocol: TCP
+            - name: sync-tcp
+              containerPort: 22000
+              protocol: TCP
+            - name: sync-udp
+              containerPort: 21027
+              protocol: UDP
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+          volumeMounts:
+            - name: syncthing-data
+              mountPath: /data
+            - name: syncthing-config
+              mountPath: /var/syncthing/config
+          livenessProbe:
+            httpGet:
+              path: /rest/noauth/health
+              port: web-ui
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /rest/noauth/health
+              port: web-ui
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+        - name: git-sidecar
+          image: alpine/git
+          envFrom:
+            - secretRef:
+                name: syncthing-git
+          command:
+            - sh
+            - -c
+            - |
+              cd /data
+              git config --global --add safe.directory /data
+              git config user.name "syncthing-backup"
+              git config user.email "syncthing@homelab.local"
+              git remote set-url origin "$GIT_REMOTE_URL"
+              echo "Git sidecar started. Committing every hour."
+              while true; do
+                sleep 3600
+                git add -A
+                if ! git diff --cached --quiet; then
+                  git commit -m "auto-backup: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+                  git push || echo "Push failed, will retry next cycle."
+                else
+                  echo "No changes to commit."
+                fi
+              done
+          volumeMounts:
+            - name: syncthing-data
+              mountPath: /data
+
+      volumes:
+        - name: syncthing-data
+          persistentVolumeClaim:
+            claimName: syncthing-data
+        - name: syncthing-config
+          persistentVolumeClaim:
+            claimName: syncthing-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: syncthing
+  namespace: utilities
+spec:
+  selector:
+    app.kubernetes.io/name: syncthing
+  ports:
+    - name: web-ui
+      port: 8384
+      targetPort: web-ui
+      protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: syncthing-sync
+  namespace: utilities
+spec:
+  selector:
+    app.kubernetes.io/name: syncthing
+  ports:
+    - name: sync-tcp
+      port: 22000
+      targetPort: sync-tcp
+      protocol: TCP
+    - name: sync-udp
+      port: 21027
+      targetPort: sync-udp
+      protocol: UDP
