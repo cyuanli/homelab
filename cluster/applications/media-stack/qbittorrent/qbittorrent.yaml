@@ -56,22 +56,22 @@ spec:
             port: http
           initialDelaySeconds: 180
           periodSeconds: 30
-          timeoutSeconds: 15
-          failureThreshold: 6
+          timeoutSeconds: 30
+          failureThreshold: 10
         readinessProbe:
           httpGet:
             path: /
             port: http
           initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 10
-          failureThreshold: 6
+          timeoutSeconds: 15
+          failureThreshold: 10
         resources:
           requests:
-            cpu: 200m
+            cpu: 500m
             memory: 512Mi
           limits:
-            cpu: 1000m
+            cpu: 2000m
             memory: 2Gi
       volumes:
       - name: qbittorrent-config
