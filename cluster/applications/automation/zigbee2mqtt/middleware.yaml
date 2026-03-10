@@ -1,0 +1,8 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: zigbee2mqtt-auth
+  namespace: automation
+spec:
+  basicAuth:
+    secret: zigbee2mqtt-auth

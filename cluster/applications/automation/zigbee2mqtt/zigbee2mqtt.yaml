@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zigbee2mqtt
+  namespace: automation
+  labels:
+    app: zigbee2mqtt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zigbee2mqtt
+  template:
+    metadata:
+      labels:
+        app: zigbee2mqtt
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: cyl-optiplex9020
+      tolerations:
+        - key: workload
+          value: essential-only
+          effect: NoSchedule
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command: ['sh', '-c', 'if [ ! -f /app/data/configuration.yaml ]; then cp /config/configuration.yaml /app/data/configuration.yaml; fi']
+          volumeMounts:
+            - name: zigbee2mqtt-data
+              mountPath: /app/data
+            - name: zigbee2mqtt-config
+              mountPath: /config
+      containers:
+        - name: zigbee2mqtt
+          image: koenkk/zigbee2mqtt:2.9.1
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: TZ
+              value: "Europe/Berlin"
+          volumeMounts:
+            - name: zigbee2mqtt-data
+              mountPath: /app/data
+            - name: zigbee-device
+              mountPath: /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_c42fe52d18f9ef11aeec6f135c2a50c9-if00-port0
+          securityContext:
+            privileged: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: zigbee2mqtt-data
+          persistentVolumeClaim:
+            claimName: zigbee2mqtt-data
+        - name: zigbee2mqtt-config
+          configMap:
+            name: zigbee2mqtt-config
+        - name: zigbee-device
+          hostPath:
+            path: /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_c42fe52d18f9ef11aeec6f135c2a50c9-if00-port0
+            type: CharDevice
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zigbee2mqtt-config
+  namespace: automation
+data:
+  configuration.yaml: |
+    homeassistant: true
+    permit_join: false
+    mqtt:
+      base_topic: zigbee2mqtt
+      server: mqtt://mosquitto.automation.svc.cluster.local:1883
+    serial:
+      port: /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_c42fe52d18f9ef11aeec6f135c2a50c9-if00-port0
+      adapter: zstack
+    frontend:
+      port: 8080
+    advanced:
+      log_level: info
+      network_key: GENERATE
+      pan_id: GENERATE
+      channel: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zigbee2mqtt
+  namespace: automation
+  labels:
+    app: zigbee2mqtt
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: zigbee2mqtt

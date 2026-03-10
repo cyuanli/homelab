@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zigbee2mqtt
+  namespace: automation
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd,automation-zigbee2mqtt-auth@kubernetescrd
+    cert-manager.io/cluster-issuer: letsencrypt-production
+  labels:
+    app: zigbee2mqtt
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - z2m.cliff.li
+    secretName: zigbee2mqtt-tls
+  rules:
+  - host: z2m.cliff.li
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: zigbee2mqtt
+            port:
+              number: 8080
