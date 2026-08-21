@@ -59,6 +59,54 @@ spec:
         summary: "MergerFS pool down on {{ $labels.instance }}"
         description: "MergerFS mount {{ $labels.mount }} is not accessible on {{ $labels.instance }}."
 
+    # NFS export-layer alerts (server-side; emitted by monitor-storage.sh).
+    # Covers the failure class that cascaded the cluster on 2026-08-21: a pool
+    # ENOTCONN, a stale/missing /exports bind, nfsd down, or a dropped export.
+    - alert: NFSExportDegraded
+      expr: nfs_export_status{type="overall"} == 0
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "NFS export layer degraded on {{ $labels.instance }}"
+        description: "monitor-storage.sh reports the NFS export layer is degraded on {{ $labels.instance }}. See the NFSServerDown / NFSExportBindStale / NFSExportMissing alerts for the specific cause. Not a drive failure - workloads are NOT locked down."
+
+    - alert: NFSServerDown
+      expr: nfs_server_active == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "NFS server not running on {{ $labels.instance }}"
+        description: "{{ $labels.unit }} is not active on {{ $labels.instance }} - all cluster NFS mounts will go stale. Start it with: sudo systemctl start nfs-server.service"
+
+    - alert: NFSExportBindStale
+      expr: nfs_export_bind_accessible == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "NFS export bind {{ $labels.mount }} stale/missing"
+        description: "Export bind {{ $labels.mount }} is not mounted or not readable on {{ $labels.instance }} (stale bind or ENOTCONN pool). Clients will get stale file handles. Check the mergerfs pool and rebind, then run: sudo exportfs -ra"
+
+    - alert: NFSExportMissing
+      expr: nfs_export_fsid_present == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "NFS export fsid={{ $labels.fsid }} missing from nfsd table"
+        description: "nfsd is not exporting fsid={{ $labels.fsid }} on {{ $labels.instance }} - clients cannot mount it even though the bind may look fine locally. Refresh with: sudo exportfs -ra"
+
+    - alert: NFSExportCheckStale
+      expr: time() - nfs_export_last_run_timestamp_seconds > 600
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "NFS export health check hasn't run recently on {{ $labels.instance }}"
+        description: "Last NFS export check was {{ $value | humanizeDuration }} ago. Expected every 5 minutes (disk-monitor.timer)."
+
     # SnapRAID alerts
     - alert: SnapRAIDFailed
       expr: snapraid_last_run_status == 0

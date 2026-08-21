@@ -14,8 +14,15 @@ UUID=f3671b3e-6a45-4904-aec5-e5cfa774b64c /mnt/data3 ext4 defaults,noatime,nodir
 UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodiratime 0 2
 
 # MergerFS unified pool
-/mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true 0 0
+#   noforget + inodecalc=path-hash keep NFS file handles valid across a mergerfs
+#   remount/restart (prevents the cluster-wide "stale file handle" cascade).
+#   Requires mergerfs >= 2.41 for the improved inode stability. See docs/STORAGE.md.
+# NOTE: For crash auto-restart, this line is superseded by mergerfs-media.service
+#   (config/systemd/). If that service is enabled, comment this line out to avoid
+#   a double mount.
+/mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true,noforget,inodecalc=path-hash 0 0
 
 # NFS export bind mounts (NFSv4 requires single root with fsid=0)
 /media/data /exports/media none bind 0 0
 /srv/app-storage /exports/configs none bind 0 0
+/media/data/games /exports/games none bind 0 0

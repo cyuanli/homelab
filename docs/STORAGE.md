@@ -36,10 +36,14 @@ sudo snapraid scrub        # Check integrity
 
 ### Monitoring
 
-Disk health monitored via systemd timer (every 5 min). Alerts via Prometheus/Alertmanager.
+Disk health **and** the server-side NFS export layer are monitored via systemd
+timer (every 5 min). Alerts via Prometheus/Alertmanager. See **Storage
+durability → Layer 4** for the NFS export checks.
 
 ```bash
 cat /var/lib/node_exporter/textfile_collector/disk_monitor.prom
+cat /var/lib/node_exporter/textfile_collector/nfs_export.prom
+./scripts/monitor-storage.sh status      # includes "=== NFS Export Layer ==="
 journalctl -u disk-monitor.service -n 20
 ```
 
@@ -188,8 +192,9 @@ UUID=your-data1-uuid /mnt/data1 ext4 defaults,noatime,nodiratime 0 2
 UUID=your-data2-uuid /mnt/data2 ext4 defaults,noatime,nodiratime 0 2
 UUID=your-data3-uuid /mnt/data3 ext4 defaults,noatime,nodiratime 0 2
 
-# MergerFS unified pool
-/mnt/data1:/mnt/data2:/mnt/data3 /media/data mergerfs defaults,noatime,direct_io,minfreespace=50G,category.create=epmfs,moveonenospc=true 0 0
+# MergerFS unified pool (4 data disks; noforget + inodecalc=path-hash keep NFS
+# file handles valid across a remount — see "Storage durability" below)
+/mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true,noforget,inodecalc=path-hash 0 0
 ```
 
 ### Test the configuration:
@@ -893,7 +898,15 @@ spec:
     path: /media/myservice  # Relative to /exports, accesses /media/data/myservice
 ```
 
-**That's it!** No need to create additional bind mounts or export entries. The `/exports/media` bind mount already provides access to all subdirectories under `/media/data/`.
+> ⚠️ **NFSv4 pseudo-root path gotcha.** The `path:` is resolved **relative to the
+> `fsid=0` pseudo-root (`/exports`)**, so it must be `/media/<x>` (→ physical
+> `/exports/media/<x>` = `/media/data/<x>`). Do **not** write `/exports/media/<x>`
+> — the server would resolve that to `/exports/exports/media/<x>` and the mount
+> fails with `No such file or directory`. (This bit us while testing on
+> 2026-08-21.) Correspondingly, `/media/data` on the host is exported to clients
+> as `/media`, not `/media/data`.
+
+**That's it!** No need to create additional bind mounts or export entries. The `/exports/media` bind mount already provides access to all subdirectories under `/media/data/`. Verified 2026-08-21: with only `fsid=0/1/2` exported (no dedicated `fsid=3`), a client mounting the plain `/media` export can read `nextcloud/` inside it — so Nextcloud needs no export of its own.
 
 **Example: Nextcloud and Immich**
 
@@ -924,11 +937,24 @@ ls -la /media/data
 ```
 
 **Stale file handle errors:**
+
+Usually caused by a mergerfs remount/restart: the pool gets a new mount, the
+`/exports/media` bind still points at the old one, and NFS clients hold handles
+to now-gone inodes. First refresh nfsd; if that doesn't clear it, re-point the
+bind and refresh again:
 ```bash
-# On storage node, unexport and re-export
+# On storage node, unexport and re-export (refreshes nfsd)
 sudo exportfs -ua
 sudo exportfs -ra
+
+# If still stale after a mergerfs remount, re-point the export bind at the pool:
+sudo umount -l /exports/media
+sudo mount --bind /media/data /exports/media
+sudo exportfs -ra
 ```
+The `noforget,inodecalc=path-hash` mergerfs options (see below) make handles
+survive a remount, and `mergerfs-media.service` automates the rebind + refresh.
+See **Storage durability** below for the permanent fix.
 
 **Connection refused:**
 ```bash
@@ -968,3 +994,151 @@ You should see pods running on different nodes, not all on the storage node.
 ---
 
 **🎯 Result**: Your K3s cluster now has Kubernetes-native access to the SnapRAID+MergerFS storage pool. Pods can run on any node while accessing centralized storage, enabling efficient resource utilization and high availability!
+
+---
+
+## Storage durability (mergerfs crash hardening)
+
+**Background — the 2026-08-21 incident.** mergerfs (v2.40.2-5) segfaulted in a
+read thread. Because the pool was mounted from `/etc/fstab`, nothing restarted
+it: `/media/data` went `Transport endpoint is not connected` (ENOTCONN), the
+`/exports/media` NFS export served broken handles, and every NFS-backed pod in
+the cluster (Nextcloud, Jellyfin, qBittorrent, Immich, Home Assistant, …)
+cascaded into failure. Recovery required a manual remount plus `exportfs` and a
+round of pod restarts. Three independent weaknesses turned one crash into a
+multi-hour outage; each layer below removes one.
+
+### Layer 1 — Prevent the crash: keep mergerfs current
+The segfault is a mergerfs bug. Newer releases fix crash classes in the FUSE
+path, **auto-unmount a broken ENOTCONN mount on start** (2.42.0), and improve
+inode stability across restarts (2.41.0). Install the project's own `.deb`
+(recommended over the distro package):
+```bash
+# On the storage host. Check https://github.com/trapexit/mergerfs/releases for the current version.
+mergerfs --version                      # confirm current (was 2.40.2)
+curl -fsSLO https://github.com/trapexit/mergerfs/releases/download/2.42.0/mergerfs_2.42.0.debian-trixie_amd64.deb
+sudo dpkg -i mergerfs_2.42.0.debian-trixie_amd64.deb
+mergerfs --version                      # confirm >= 2.42.0
+```
+The upgrade does not touch data (files live on the ext4 branches `/mnt/data1-4`;
+mergerfs is only a union view). It does require one remount of the pool — do it
+in the maintenance window below.
+
+### Layer 2 — Auto-restart mergerfs + auto-refresh exports
+`config/systemd/mergerfs-media.service` replaces the fstab mergerfs mount with a
+foreground service (`mergerfs -f`, `Restart=on-failure`). On a crash systemd
+remounts the pool, re-points the `/exports/*` bind mounts at the fresh pool, and
+runs `exportfs -ra` — turning a multi-hour outage into a ~5-second blip. Install
+with `ansible-playbook -i inventory.yml playbooks/mergerfs-service.yml` (installs
+the unit only; does not enable it).
+
+> ⚠️ **Validate before enabling at boot.** The unit only touches mounts/exports,
+> never data, but a bad unit can disrupt NFS *serving*. Adopting it requires
+> commenting out the mergerfs line in `/etc/fstab` to avoid a double mount, then:
+> ```bash
+> sudo systemctl daemon-reload
+> sudo systemctl enable --now mergerfs-media.service
+> systemctl status mergerfs-media.service
+> # Crash test: confirm auto-restart + clients still read afterwards
+> sudo kill -SEGV "$(pgrep -x mergerfs)"
+> sleep 8; systemctl status mergerfs-media.service   # should be active again
+> ```
+
+### Layer 3 — Make a remount transparent to NFS clients
+The mergerfs options `noforget` (don't drop nodes NFS still references) and
+`inodecalc=path-hash` (deterministic, path-derived inodes that stay stable
+across branches and restarts) let NFS clients keep valid file handles across a
+mergerfs remount — no more mass pod restarts. Added to both the fstab reference
+(`config/system-configs/fstab`) and the service unit. Requires mergerfs >= 2.41.
+Never *lazy*-umount the running pool: it leaves NFS exports hung until
+`exportfs` runs (this is what broke exports during the incident).
+
+### Layer 4 — Detect it: server-side NFS export health check
+Layers 1–3 *prevent* and *auto-recover* from the crash; Layer 4 makes sure it's
+*noticed* if it ever happens again. `scripts/monitor-storage.sh` (run every 5 min
+by `disk-monitor.timer`, as root) now also validates the **server-side NFS
+export layer** via `check_nfs_export_layer()`, which checks:
+
+1. `nfs-server.service` is active (nfsd is serving).
+2. Each `/exports/*` bind (`/exports/media`, `/exports/configs`,
+   `/exports/games`) is mounted **and** readable within a timeout — a timed
+   `stat` catches an ENOTCONN pool or a stale bind that would otherwise hang
+   (the exact stale-handle source from the incident).
+3. The kernel export table (`/proc/fs/nfs/exports`) lists the expected fsids
+   (`fsid=1` media, `fsid=2` configs) — catches a dropped export where the bind
+   looks fine locally but clients can't mount (the incident fix was
+   `exportfs -ra`). `/exports/games` has no dedicated fsid (served via the
+   pseudo-root) so it is checked as a bind but not as an fsid.
+
+This is **advisory**: it logs and emits metrics but never triggers the array
+lockdown, because a stale export is a *serving* problem, not a drive failure. It
+complements the *remediation* in Layer 2 — detection here, auto-restart +
+`exportfs -ra` there. Metrics are written to `nfs_export.prom` for the
+node_exporter textfile collector (`nfs_export_status`, `nfs_server_active`,
+`nfs_export_bind_accessible`, `nfs_export_fsid_present`,
+`nfs_export_last_run_timestamp_seconds`) and alerted on by
+`cluster/applications/monitoring/prometheus-rules-system-monitoring.yaml`
+(`NFSServerDown`, `NFSExportBindStale`, `NFSExportMissing`, `NFSExportDegraded`,
+`NFSExportCheckStale`). Quick manual read: `./scripts/monitor-storage.sh status`
+(see the `=== NFS Export Layer ===` section).
+
+> **History.** An earlier standalone `nfs-monitor.service` + `monitor-nfs-health.sh`
+> existed but was removed in commit `f0d16c4` (2026-01-21, CSI→native-NFS
+> migration) as "no longer needed" — it was a *client-side* CSI stale-mount
+> watcher that couldn't remediate a server-side pool crash anyway. Its repo files
+> were deleted cleanly, but the systemd units were left installed on the host and
+> failed `203/EXEC` every minute for ~7 months until removed on 2026-08-21. The
+> coverage that was actually missing (the server-side export layer) now lives in
+> `monitor-storage.sh`, which is repo-tracked and deployed as the running unit.
+
+### Nextcloud export — no dedicated export needed (verified)
+The Nextcloud PV (`cluster/applications/cloud/nextcloud/storage-pvs.yaml`) uses
+`path: /media/nextcloud`, which resolves via the persistent `/exports/media`
+(`fsid=1`) export — Nextcloud's data is simply a subdirectory of the `/media`
+export tree (same filesystem, no mount-crossing). Verified 2026-08-21 with a
+read-only test pod mounting the plain `/media` export and reading
+`nextcloud/`. A manually-added `fsid=3` export for `/media/nextcloud` is **not
+required** and is not in `/etc/exports`; what un-sticks Nextcloud after a
+remount is refreshing nfsd (`exportfs -ra`), now automated by Layer 2.
+
+> **Cleanup note (post-incident state).** Manual debugging during the incident
+> left orphaned runtime bind mounts on the host that are **not** in `/etc/fstab`
+> (`/media/nextcloud` — stacked twice, `/exports/media/nextcloud`,
+> `/media/data/nextcloud`). They are harmless (all point into the same pool) and
+> a reboot clears them, but should be unmounted for cleanliness. Find stragglers:
+> `grep -E '/media/nextcloud|/exports/media/nextcloud|/media/data/nextcloud' /proc/mounts`
+> The maintenance runbook below removes them.
+
+### Maintenance-window runbook (host, requires sudo)
+As of 2026-08-21 the host still runs mergerfs **2.40.2-5** mounted from
+`/etc/fstab` (pid via `pgrep -x mergerfs`) with the **old options** (no
+`noforget`/`inodecalc`). Data is untouched by this runbook (options/exports/
+binaries only). One pool remount briefly disrupts `/media`-backed pods;
+`/configs`-backed pods (separate disk) are unaffected.
+```bash
+# 1. Layer 1 — upgrade mergerfs (see the Layer 1 commands above).
+# 2. Layer 3 — add options to the /etc/fstab mergerfs line:
+#      ...,moveonenospc=true,noforget,inodecalc=path-hash 0 0
+#    (config/system-configs/fstab already reflects this.)
+# 3. Remount the pool so the new binary + options take effect:
+sudo systemctl stop nfs-server            # quiesce clients
+# clear the orphaned incident-recovery binds (ignore "not mounted" errors):
+sudo umount -l /media/nextcloud /media/nextcloud /exports/media/nextcloud /media/data/nextcloud 2>/dev/null
+sudo umount -l /exports/media /exports/games
+sudo umount /media/data || sudo fusermount -uz /media/data
+sudo mount /media/data                     # picks up new options (or start the service, Layer 2)
+sudo mount --bind /media/data /exports/media
+sudo mount --bind /media/data/games /exports/games
+sudo exportfs -ra
+sudo systemctl start nfs-server
+# 3b. Verify the new binary + options are actually live. NOTE: mergerfs-internal
+#     options (noforget/inodecalc/moveonenospc) do NOT appear in /proc/mounts —
+#     FUSE only exposes kernel flags there. Check the running process instead:
+mergerfs --version                         # expect >= 2.42.0
+pgrep -a mergerfs                          # options must include noforget,inodecalc=path-hash
+# 4. Restart the /media-backed pods once to clear any old handles. Exact set
+#    (deployments mounting a /media PV on 192.168.1.94):
+#      kubectl -n automation rollout restart deploy/home-assistant
+#      kubectl -n cloud      rollout restart deploy/immich-server deploy/nextcloud
+#      kubectl -n media      rollout restart deploy/jellyfin deploy/qbittorrent deploy/radarr deploy/sonarr
+```

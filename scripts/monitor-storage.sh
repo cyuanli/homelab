@@ -27,6 +27,25 @@ PARITY_DRIVES=("sdf")
 
 MERGERFS_MOUNT="/media/data"
 
+# Server-side NFS export layer (the /exports/* binds nfsd serves to the cluster).
+# The SMART/mount/mergerfs checks above cover the physical drives and the pool,
+# but NOT the NFS serving layer. When mergerfs crashed on 2026-08-21 the pool
+# went ENOTCONN and nfsd served stale handles to every client, cascading the
+# whole cluster - the server-side failure class the old (since-removed, commit
+# f0d16c4) nfs-monitor never actually covered. These checks are ADVISORY: they
+# log + emit metrics but never trigger the array lockdown, because a stale
+# export is a serving problem, not a drive failure. Override any of these in
+# config/service-configs/monitoring.conf if the export layout changes.
+NFS_SERVER_UNIT="${NFS_SERVER_UNIT:-nfs-server.service}"
+NFS_KERNEL_EXPORTS="${NFS_KERNEL_EXPORTS:-/proc/fs/nfs/exports}"
+NFS_STAT_TIMEOUT="${NFS_STAT_TIMEOUT:-10}"
+# Bind mounts that MUST be mounted + readable for clients to see their data.
+NFS_EXPORT_BINDS=("/exports/media" "/exports/configs" "/exports/games")
+# fsids that MUST appear in the kernel export table. fsid=0 is the /exports
+# pseudo-root (implied); /exports/games has no dedicated fsid - it is served
+# through the pseudo-root, so it is checked as a bind above but not as an fsid.
+NFS_EXPECTED_FSIDS=("1" "2")
+
 ALL_PARTITIONS=("${DATA_PARTITIONS[@]}" "${PARITY_PARTITIONS[@]}")
 ALL_DRIVES=("${DATA_DRIVES[@]}" "${PARITY_DRIVES[@]}")
 ALL_MOUNT_POINTS=("${DATA_MOUNT_POINTS[@]}" "${PARITY_MOUNT_POINTS[@]}")
@@ -307,6 +326,107 @@ export_disk_metrics() {
     write_metric_file "disk_monitor.prom" "$metrics_content"
 }
 
+export_nfs_export_metrics() {
+    local overall_status="$1"  # 1=healthy, 0=failed
+
+    local metrics_content=""
+
+    # Overall NFS export layer status
+    metrics_content+=$(export_gauge "nfs_export_status" "$overall_status" 'type="overall"' "NFS export layer health (1=healthy, 0=degraded)")
+    metrics_content+=$'\n'
+
+    # NFS server unit active
+    local server_active=0
+    if systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
+        server_active=1
+    fi
+    metrics_content+=$(export_gauge "nfs_server_active" "$server_active" "unit=\"$NFS_SERVER_UNIT\"" "NFS server unit active (1=active, 0=inactive)")
+    metrics_content+=$'\n'
+
+    # Per-bind accessibility (mounted + readable within timeout)
+    metrics_content+=$(export_gauge_header "nfs_export_bind_accessible" "NFS export bind accessible (1=ok, 0=stale/missing)")
+    metrics_content+=$'\n'
+    for bind in "${NFS_EXPORT_BINDS[@]}"; do
+        local bind_value=0
+        if mountpoint -q "$bind" && timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
+            bind_value=1
+        fi
+        metrics_content+=$(export_gauge_line "nfs_export_bind_accessible" "$bind_value" "mount=\"$bind\"")
+        metrics_content+=$'\n'
+    done
+
+    # Expected fsids present in the kernel export table
+    metrics_content+=$(export_gauge_header "nfs_export_fsid_present" "Expected fsid present in kernel export table (1=present, 0=missing)")
+    metrics_content+=$'\n'
+    for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
+        local fsid_value=0
+        if [[ -r "$NFS_KERNEL_EXPORTS" ]] && grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
+            fsid_value=1
+        fi
+        metrics_content+=$(export_gauge_line "nfs_export_fsid_present" "$fsid_value" "fsid=\"$fsid\"")
+        metrics_content+=$'\n'
+    done
+
+    # Last run timestamp
+    metrics_content+=$(export_gauge "nfs_export_last_run_timestamp_seconds" "$(get_timestamp)" "" "Last NFS export health check timestamp")
+    metrics_content+=$'\n'
+
+    write_metric_file "nfs_export.prom" "$metrics_content"
+}
+
+# Server-side NFS export-layer health check.
+# Advisory only: logs failures and emits metrics, but NEVER calls lockdown_array
+# (a stale export is a serving problem, not a drive failure). Detects the class
+# of failure that cascaded the cluster on 2026-08-21: pool ENOTCONN, a stale or
+# missing /exports/* bind, nfsd down, or a dropped export (needs 'exportfs -ra').
+check_nfs_export_layer() {
+    info "Checking server-side NFS export layer..."
+    local healthy=true
+
+    # 1. nfsd must be serving.
+    if ! systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
+        error "NFS server ($NFS_SERVER_UNIT) is not active - exports are down"
+        healthy=false
+    fi
+
+    # 2. Each export bind must be mounted AND readable within a timeout. A timed
+    #    stat catches an ENOTCONN pool or a stale bind (which would otherwise
+    #    hang) - the exact stale-handle source from the incident.
+    for bind in "${NFS_EXPORT_BINDS[@]}"; do
+        if ! mountpoint -q "$bind"; then
+            error "NFS export bind $bind is not mounted - clients will get stale handles"
+            healthy=false
+        elif ! timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
+            error "NFS export bind $bind is not accessible (stale/ENOTCONN pool?)"
+            healthy=false
+        fi
+    done
+
+    # 3. The kernel export table must actually list the expected fsids. A bind
+    #    can look fine locally while nfsd has dropped the export, so clients
+    #    still cannot mount it - the fix during the incident was 'exportfs -ra'.
+    if [[ -r "$NFS_KERNEL_EXPORTS" ]]; then
+        for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
+            if ! grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
+                error "NFS export table is missing fsid=$fsid (nfsd not exporting; needs 'exportfs -ra')"
+                healthy=false
+            fi
+        done
+    else
+        warn "Cannot read $NFS_KERNEL_EXPORTS - skipping export-table check"
+    fi
+
+    if [[ "$healthy" == true ]]; then
+        export_nfs_export_metrics 1
+        info "NFS export layer healthy (server active, binds accessible, fsids exported)"
+        return 0
+    fi
+
+    export_nfs_export_metrics 0
+    error "NFS export layer DEGRADED (see errors above). Workloads NOT locked down - this is an NFS serving issue, not a drive failure. Recover the pool/binds and re-run 'sudo exportfs -ra'."
+    return 1
+}
+
 check_all_drives() {
     local failures=()
     local all_healthy=true
@@ -440,6 +560,30 @@ show_status() {
     done
 
     echo ""
+    echo "=== NFS Export Layer ==="
+    if systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
+        echo "$NFS_SERVER_UNIT: active"
+    else
+        echo "$NFS_SERVER_UNIT: NOT ACTIVE"
+    fi
+    for bind in "${NFS_EXPORT_BINDS[@]}"; do
+        if mountpoint -q "$bind" && timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
+            echo "$bind: OK"
+        else
+            echo "$bind: STALE/MISSING"
+        fi
+    done
+    if [[ -r "$NFS_KERNEL_EXPORTS" ]]; then
+        for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
+            if grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
+                echo "export fsid=$fsid: present"
+            else
+                echo "export fsid=$fsid: MISSING (run 'sudo exportfs -ra')"
+            fi
+        done
+    fi
+
+    echo ""
     echo "=== Workload Status ==="
     if command -v kubectl >/dev/null 2>&1; then
         echo "K8s workloads:"
@@ -485,6 +629,13 @@ main() {
             fi
 
             if ! check_all_drives; then
+                exit 1
+            fi
+
+            # Server-side NFS export-layer health (advisory: logs + metrics,
+            # never triggers array lockdown). Runs only once the drives/pool are
+            # healthy, so a real drive failure still short-circuits above.
+            if ! check_nfs_export_layer; then
                 exit 1
             fi
             ;;

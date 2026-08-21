@@ -1,0 +1,28 @@
+# Opt-in playbook — NOT imported by site.yml.
+#
+# Installs the mergerfs auto-restart unit (config/systemd/mergerfs-media.service).
+# It deliberately does NOT enable or start the unit, because adopting it requires
+# a manual, deliberate step: comment out the mergerfs line in /etc/fstab first to
+# avoid a double mount. Enable it only after validating the crash-restart path
+# (see docs/STORAGE.md "Storage durability"):
+#
+#   ansible-playbook -i inventory.yml playbooks/mergerfs-service.yml
+#   # then, on the storage host, in a maintenance window:
+#   #   sudoedit /etc/fstab                 # comment out the mergerfs pool line
+#   #   sudo systemctl daemon-reload
+#   #   sudo systemctl enable --now mergerfs-media.service
+- name: Install mergerfs auto-restart service
+  hosts: storage
+  become: true
+  tasks:
+    - name: Copy mergerfs-media.service unit
+      ansible.builtin.copy:
+        src: ../../config/systemd/mergerfs-media.service
+        dest: /etc/systemd/system/mergerfs-media.service
+        mode: "0644"
+      notify: Reload systemd
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
