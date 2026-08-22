@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Node Management Script
-# Enhanced version of add-node.sh with additional functionality
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,13 +52,11 @@ EOF
 get_cluster_info() {
     log_info "Gathering cluster information"
 
-    # Get server URL (local network IP)
     local server_ip
     server_ip=$(get_server_ip) || return 1
 
     local server_url="https://${server_ip}:6443"
 
-    # Get cluster token
     local cluster_token=""
     if [[ -f /var/lib/rancher/k3s/server/node-token ]]; then
         cluster_token=$(sudo cat /var/lib/rancher/k3s/server/node-token)
@@ -76,7 +72,7 @@ get_cluster_info() {
 
 create_node_config() {
     local node_name="$1"
-    local node_role="${2:-agent}"  # Default to agent if not specified
+    local node_role="${2:-agent}"
 
     if [[ -z "$node_name" ]]; then
         log_error "Node hostname not provided"
@@ -84,13 +80,11 @@ create_node_config() {
         return 1
     fi
 
-    # Validate role
     if [[ "$node_role" != "server" && "$node_role" != "agent" ]]; then
         log_error "Invalid role: $node_role. Must be 'server' or 'agent'"
         return 1
     fi
 
-    # Load configuration
     load_config
 
     log_step "Creating configuration for node: $node_name (role: $node_role)"
@@ -99,10 +93,8 @@ create_node_config() {
     local template_file="$node_dir/config.env"
     local config_file="$node_dir/config.env.local"
 
-    # Create node directory
     mkdir -p "$node_dir"
 
-    # Get cluster info - use local network IP
     local server_ip
     server_ip=$(get_server_ip) || return 1
 
@@ -115,12 +107,10 @@ create_node_config() {
         return 1
     fi
 
-    # Create template file from template (with placeholders)
     export NODE_NAME="$node_name"
     export NODE_ROLE="$node_role"
     envsubst < "$HOMELAB_ROOT/config/templates/node-config.env.template" > "$template_file"
 
-    # Create actual config file by copying template and replacing placeholders
     cp "$template_file" "$config_file"
     sed -i "s|REPLACE_WITH_CLUSTER_TOKEN|$cluster_token|g" "$config_file"
     sed -i "s|REPLACE_WITH_SERVER_URL|$server_url|g" "$config_file"
@@ -130,15 +120,9 @@ create_node_config() {
     log_success "Created config file: $config_file"
     log_info "Template contains placeholders, actual config has real secrets from server"
 
-    # Create default labels.yaml (can be customized later)
     local labels_file="$node_dir/labels.yaml"
     cat > "$labels_file" << EOF
-# Node labels for $node_name
-# Apply with: kubectl apply -f labels.yaml
-#
-# Customize these labels based on node hardware specs:
-# - homelab/cpu-tier: high (8+ cores) or low (4 cores)
-# - homelab/memory-tier: high (16GB+) or low (8GB)
+# cpu-tier high = 8+ cores, memory-tier high = 16GB+
 apiVersion: v1
 kind: Node
 metadata:
@@ -151,13 +135,11 @@ EOF
     log_success "Created labels file: $labels_file"
     log_info "Remember to update labels.yaml with actual node specs (cpu-tier: high/low, memory-tier: high/low)"
 
-    # Fix ownership of node directory
     if [[ -n "$HOMELAB_USER" ]]; then
         chown -R "$HOMELAB_USER:$HOMELAB_USER" "$node_dir"
         log_success "Set ownership of $node_dir to $HOMELAB_USER:$HOMELAB_USER"
     fi
 
-    # Create setup instructions
     cat > "$node_dir/README.md" << EOF
 # Node Setup Instructions for $node_name
 
@@ -215,7 +197,6 @@ EOF
 - Verify network connectivity: \`ping $server_ip\`
 EOF
 
-    # Show instructions
     cat << EOF
 
 ${GREEN}✅ Node configuration created for $node_name (role: $node_role)${NC}
@@ -260,21 +241,17 @@ remove_node() {
 
     log_step "Removing node: $node_name"
 
-    # Check if node exists in cluster
     if ! kubectl get node "$node_name" >/dev/null 2>&1; then
         log_warning "Node $node_name not found in cluster"
         return 0
     fi
 
-    # Drain the node first
     log_info "Draining node: $node_name"
     kubectl drain "$node_name" --ignore-daemonsets --delete-emptydir-data --force
 
-    # Delete the node
     log_info "Deleting node: $node_name"
     kubectl delete node "$node_name"
 
-    # Remove node configuration
     local node_dir="$HOMELAB_ROOT/nodes/$node_name"
     if [[ -d "$node_dir" ]]; then
         log_info "Removing node configuration: $node_dir"
@@ -383,13 +360,11 @@ main() {
 
     case "$command" in
         "add")
-            # Check if we're on a K3s server node
             if [[ ! -f /var/lib/rancher/k3s/server/node-token ]]; then
                 log_error "This command must be run on a K3s server node"
                 exit 1
             fi
 
-            # Parse arguments for add command
             local hostname=""
             local role="agent"
 
@@ -443,7 +418,6 @@ main() {
     esac
 }
 
-# Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

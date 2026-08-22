@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Homelab Main Orchestrator Script
-# Provides a unified interface for all homelab operations
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,7 +43,6 @@ EOF
 }
 
 validate_environment() {
-    # Check if we're in the homelab directory
     if [[ ! -d "$HOMELAB_ROOT/scripts" ]] || [[ ! -d "$HOMELAB_ROOT/cluster" ]]; then
         log_error "This script must be run from the homelab directory"
         log_error "Current directory: $(pwd)"
@@ -53,14 +50,12 @@ validate_environment() {
         exit 1
     fi
 
-    # Load configuration
     load_config
 }
 
 run_setup_all() {
     log_step "Deploying all applications"
 
-    # Validate prerequisites
     check_not_root
 
     log_info "This will deploy all applications (Ansible playbooks + K3s must be set up first)"
@@ -80,17 +75,14 @@ run_setup_all() {
         fi
     fi
 
-    # Record start time
     local start_time=$(date +%s)
 
     "$SCRIPT_DIR/deploy-applications.sh" all deploy
 
-    # Calculate duration
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     local duration_formatted=$(printf "%02d:%02d:%02d" $((duration/3600)) $((duration%3600/60)) $((duration%60)))
 
-    # Show completion summary
     cat << EOF
 
 ${GREEN}🎉 Homelab setup completed successfully!${NC}
@@ -133,7 +125,6 @@ run_deploy() {
     "$SCRIPT_DIR/deploy-applications.sh" "$@"
 }
 
-
 run_nodes() {
     "$SCRIPT_DIR/manage-nodes.sh" "$@"
 }
@@ -160,7 +151,6 @@ run_monitor() {
 show_status() {
     log_step "Homelab Status"
 
-    # Load configuration
     validate_environment
 
     echo ""
@@ -173,7 +163,6 @@ show_status() {
     echo ""
     log_info "System Status:"
 
-    # Check system components
     if command_exists docker; then
         echo "  - Docker: ${GREEN}Installed${NC}"
     else
@@ -197,7 +186,6 @@ show_status() {
         echo "  - Tailscale: ${RED}Not installed${NC}"
     fi
 
-    # Check K3s status
     if check_k3s_running; then
         echo "  - K3s: ${GREEN}Running${NC}"
 
@@ -225,7 +213,6 @@ show_config() {
         echo ""
         log_info "Configuration file: $node_config"
         echo ""
-        # Show config with sensitive values masked
         sed 's/\(.*TOKEN.*=\).*/\1***MASKED***/; s/\(.*AUTHKEY.*=\).*/\1***MASKED***/; s/\(.*WEBHOOK.*=\).*/\1***MASKED***/' "$node_config"
     else
         log_warning "Node configuration file not found: $node_config"
@@ -248,7 +235,6 @@ show_logs() {
 
     log_info "Showing logs for service: $service"
 
-    # Try to find the service in different namespaces
     local namespaces=("media" "cloud" "infrastructure" "location" "utilities")
     local found=false
 
@@ -285,7 +271,6 @@ open_shell() {
 
     log_info "Opening shell in service: $service"
 
-    # Try to find the service in different namespaces
     local namespaces=("media" "cloud" "infrastructure" "location" "utilities")
     local found=false
 
@@ -344,7 +329,6 @@ main() {
     esac
 }
 
-# Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

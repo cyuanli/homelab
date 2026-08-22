@@ -1,5 +1,4 @@
 ---
-# PVC for Immich thumbnails
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,7 +14,6 @@ spec:
       storage: 20Gi
 
 ---
-# PVC for Immich encoded videos
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -31,7 +29,6 @@ spec:
       storage: 30Gi
 
 ---
-# PVC for Immich profile pictures
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

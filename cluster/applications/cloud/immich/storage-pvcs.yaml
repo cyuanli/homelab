@@ -1,5 +1,4 @@
 ---
-# Immich photo library
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

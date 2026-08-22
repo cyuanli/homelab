@@ -1,4 +1,3 @@
-# Select nodes with high CPU and low memory
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

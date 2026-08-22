@@ -1,15 +1,9 @@
-# Minecraft Fabric Server - Helm Values
-# Chart: itzg/minecraft
-
 minecraftServer:
-  # Accept EULA
   eula: true
 
-  # Server version and type
   version: "LATEST"
   type: "FABRIC"
 
-  # Server properties
   difficulty: normal
   maxPlayers: 20
   motd: "Cliff's Magical World"
@@ -18,35 +12,27 @@ minecraftServer:
   onlineMode: true
   spawnProtection: 0
 
-  # Whitelist - only allow specific players
   whitelist: "prim_plum,sirolol,Schluedi"
 
-  # Modrinth mods to install
   modrinth:
     projects:
       - ferrite-core
       - lithium
 
-  # World settings
   levelSeed: ""
   viewDistance: 10
 
-  # Server performance
   memory: 2G
 
-  # RCON for remote console access
   rcon:
     enabled: true
     password: "cobblestone-rcon-2025"
 
-  # Network service type (ClusterIP for mc-router integration)
   serviceType: ClusterIP
 
-# mc-router integration - route cobblestone.mc.cliff.li to this server
 serviceAnnotations:
   mc-router.itzg.me/externalServerName: "cobblestone.mc.cliff.li"
 
-# Resource requests and limits
 resources:
   requests:
     cpu: 1000m
@@ -54,18 +40,16 @@ resources:
   limits:
     memory: 4Gi
 
-# Storage - Local SSD for performance
 persistence:
   storageClass: local-path
   dataDir:
     enabled: true
     Size: 50Gi
 
-# Pin to cyl-mitx node for consistent local storage
+# local-path PV is node-local, the pod must stay on this node.
 nodeSelector:
   kubernetes.io/hostname: cyl-mitx
 
-# Ensure pod stays on same node (required for local-path)
 tolerations: []
 affinity:
   nodeAffinity:

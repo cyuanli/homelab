@@ -1,5 +1,4 @@
 ---
-# NFS PersistentVolume for Owntracks backups on HDD
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -19,7 +18,6 @@ spec:
     path: /media/owntracks
 
 ---
-# PersistentVolumeClaim for Owntracks backups
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

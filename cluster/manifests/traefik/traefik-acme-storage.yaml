@@ -1,5 +1,4 @@
 ---
-# NFS PersistentVolume for Traefik ACME certificates
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -27,7 +26,6 @@ spec:
     path: /configs/traefik/acme
 
 ---
-# PersistentVolumeClaim for ACME certificates
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

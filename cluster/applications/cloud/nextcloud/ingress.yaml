@@ -6,7 +6,6 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     cert-manager.io/cluster-issuer: letsencrypt-production
-    # traefik.ingress.kubernetes.io/router.middlewares: cloud-nextcloud-security@kubernetescrd,cloud-nextcloud-wellknown@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:

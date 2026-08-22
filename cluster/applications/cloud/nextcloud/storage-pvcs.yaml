@@ -1,5 +1,4 @@
 ---
-# Nextcloud user files PVC
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

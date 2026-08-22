@@ -1,16 +1,12 @@
 #!/bin/bash
 
-# Common utility functions for homelab setup scripts
-
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -31,13 +27,11 @@ log_step() {
     echo -e "\n${BLUE}==== $1 ====${NC}"
 }
 
-# Error handling
 set_error_handling() {
     set -euo pipefail
     trap 'log_error "Script failed at line $LINENO"' ERR
 }
 
-# Load configuration
 load_config() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
     local homelab_root="$(cd "$script_dir/.." && pwd)"
@@ -58,17 +52,14 @@ load_config() {
     # shellcheck source=/dev/null
     source "$config_file"
 
-    # Export commonly used variables
     export HOMELAB_ROOT="$homelab_root"
     export CONFIG_FILE="$config_file"
 }
 
-# Check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Check required variables are set
 check_required_vars() {
     local missing_vars=()
 
@@ -87,7 +78,6 @@ check_required_vars() {
     fi
 }
 
-# Wait for condition with timeout
 wait_for_condition() {
     local condition="$1"
     local timeout="${2:-300}"
@@ -111,7 +101,6 @@ wait_for_condition() {
     log_success "Condition met: $condition"
 }
 
-# Check if running as root
 check_not_root() {
     if [[ $EUID -eq 0 ]]; then
         log_error "This script should not be run as root"
@@ -119,7 +108,6 @@ check_not_root() {
     fi
 }
 
-# Check if running as specific user
 check_user() {
     local required_user="$1"
     if [[ "$(whoami)" != "$required_user" ]]; then
@@ -128,7 +116,6 @@ check_user() {
     fi
 }
 
-# Create directory with proper ownership
 create_directory() {
     local dir="$1"
     local owner="${2:-$HOMELAB_USER:$HOMELAB_USER}"
@@ -140,7 +127,6 @@ create_directory() {
     fi
 }
 
-# Apply Kubernetes manifest with substitution
 apply_k8s_manifest() {
     local template_file="$1"
     local namespace="${2:-default}"
@@ -152,11 +138,9 @@ apply_k8s_manifest() {
 
     log_info "Applying manifest: $template_file"
 
-    # Substitute environment variables in template
     envsubst < "$template_file" | kubectl apply -f -
 }
 
-# Wait for deployment to be ready
 wait_for_deployment() {
     local deployment="$1"
     local namespace="${2:-default}"
@@ -165,7 +149,6 @@ wait_for_deployment() {
     kubectl rollout status deployment/"$deployment" -n "$namespace" --timeout=300s
 }
 
-# Wait for all pods in namespace to be ready
 wait_for_namespace_ready() {
     local namespace="$1"
 
@@ -173,15 +156,12 @@ wait_for_namespace_ready() {
     wait_for_condition "kubectl get pods -n $namespace --no-headers 2>/dev/null | grep -v Completed | awk '{print \$3}' | grep -v Running | wc -l | grep -q '^0$'" 300
 }
 
-# Check if K3s is running
 check_k3s_running() {
     local service_name="k3s"
     if [[ "${NODE_ROLE:-}" == "agent" ]]; then
         service_name="k3s-agent"
     fi
 
-    # For agent nodes, just check if the service is active
-    # For server nodes, also verify kubectl works
     if systemctl is-active --quiet "$service_name"; then
         if [[ "${NODE_ROLE:-}" == "agent" ]]; then
             return 0
@@ -193,7 +173,6 @@ check_k3s_running() {
     fi
 }
 
-# Ensure service is enabled and started
 ensure_service_enabled() {
     local service_name="$1"
 
@@ -207,7 +186,6 @@ ensure_service_enabled() {
     fi
 }
 
-# Backup configuration files
 backup_configs() {
     local backup_dir="$1"
     local source_dir="$2"
@@ -223,7 +201,6 @@ backup_configs() {
     fi
 }
 
-# Restore configuration files
 restore_configs() {
     local backup_dir="$1"
     local target_dir="$2"
@@ -240,7 +217,6 @@ restore_configs() {
     fi
 }
 
-# Generate random password
 generate_password() {
     local length="${1:-32}"
     openssl rand -base64 "$length" | tr -d "=+/" | cut -c1-"$length"

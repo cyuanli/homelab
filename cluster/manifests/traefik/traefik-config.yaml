@@ -36,10 +36,8 @@ data:
       kubernetesIngress: {}
       kubernetesCRD: {}
 
-    # Enable access logs
     accessLog: {}
 
-    # Metrics
     metrics:
       prometheus:
         addEntryPointsLabels: true

@@ -1,7 +1,3 @@
-# Tier 1: High CPU (12 cores) + High Memory (16GB)
-# Resource limits for cyl-mitx
-# Burstable QoS: No CPU limits to allow proportional sharing via requests
-# With low-priority-preemptible + 0m request, BOINC only uses idle CPU
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -13,7 +9,7 @@ spec:
       - name: boinc-client
         resources:
           requests:
-            cpu: "0m"      # Zero weight - BOINC only uses truly idle CPU, yields to all workloads with requests
-            memory: 2Gi    # Low request for scheduling, configmap controls actual usage
+            cpu: "0m"      # Zero weight, BOINC gets only idle CPU.
+            memory: 2Gi
           limits:
-            memory: 4Gi   # 8GB conservative limit with headroom for other workloads
+            memory: 4Gi

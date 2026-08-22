@@ -4,7 +4,6 @@ metadata:
   name: boinc-config
   namespace: boinc
 data:
-  # BOINC client configuration
   cc_config.xml: |
     <cc_config>
       <log_flags>
@@ -26,7 +25,6 @@ data:
       </options>
     </cc_config>
 
-  # Global preferences
   global_prefs_override.xml: |
     <global_preferences>
       <run_on_batteries>0</run_on_batteries>

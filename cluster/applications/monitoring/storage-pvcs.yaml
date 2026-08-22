@@ -1,5 +1,4 @@
 ---
-# Grafana NFS Persistent Volume Claim
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,7 +14,7 @@ spec:
       storage: 10Gi
 
 ---
-# Prometheus NFS Persistent Volume Claim (name must match StatefulSet volumeClaimTemplate pattern)
+# Name must match the StatefulSet volumeClaimTemplate pattern.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

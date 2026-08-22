@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Comprehensive Disk Health Monitor for SnapRAID + MergerFS
-# Monitors all drives under SnapRAID protection and locks down entire array on ANY failure
+# Locks down the ENTIRE array on any single drive failure.
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -15,46 +14,36 @@ source "$SCRIPT_DIR/utils/metrics.sh"
 LOG_FILE="/var/log/disk-monitor.log"
 STATE_FILE="/var/lib/disk-monitor/state"
 
-# Default drive configuration - can be overridden by config
 DATA_PARTITIONS=("sdb1" "sdc1" "sdd1" "sde1")
 DATA_MOUNT_POINTS=("/mnt/data4" "/mnt/data2" "/mnt/data3" "/mnt/data1")
 PARITY_PARTITIONS=("sdf1")
 PARITY_MOUNT_POINTS=("/mnt/parity1")
 
-# Physical drives for SMART checks (remove partition numbers)
 DATA_DRIVES=("sdb" "sdc" "sdd" "sde")
 PARITY_DRIVES=("sdf")
 
 MERGERFS_MOUNT="/media/data"
 
-# Server-side NFS export layer (the /exports/* binds nfsd serves to the cluster).
-# The SMART/mount/mergerfs checks above cover the physical drives and the pool,
-# but NOT the NFS serving layer. When mergerfs crashed on 2026-08-21 the pool
-# went ENOTCONN and nfsd served stale handles to every client, cascading the
-# whole cluster - the server-side failure class the old (since-removed, commit
-# f0d16c4) nfs-monitor never actually covered. These checks are ADVISORY: they
-# log + emit metrics but never trigger the array lockdown, because a stale
-# export is a serving problem, not a drive failure. Override any of these in
-# config/service-configs/monitoring.conf if the export layout changes.
+# NFS serving layer, not covered by the SMART/mount/mergerfs checks above.
+# A mergerfs crash leaves the pool ENOTCONN and nfsd serving stale handles to
+# every client, cascading the cluster (2026-08-21). ADVISORY only: never
+# triggers lockdown, a stale export is a serving fault, not a drive failure.
+# Override in config/service-configs/monitoring.conf.
 NFS_SERVER_UNIT="${NFS_SERVER_UNIT:-nfs-server.service}"
 NFS_KERNEL_EXPORTS="${NFS_KERNEL_EXPORTS:-/proc/fs/nfs/exports}"
 NFS_STAT_TIMEOUT="${NFS_STAT_TIMEOUT:-10}"
-# Bind mounts that MUST be mounted + readable for clients to see their data.
 NFS_EXPORT_BINDS=("/exports/media" "/exports/configs" "/exports/games")
-# fsids that MUST appear in the kernel export table. fsid=0 is the /exports
-# pseudo-root (implied); /exports/games has no dedicated fsid - it is served
-# through the pseudo-root, so it is checked as a bind above but not as an fsid.
+# fsid=0 (/exports pseudo-root) is implied. /exports/games is served through
+# the pseudo-root and has no fsid of its own, so it is only checked as a bind.
 NFS_EXPECTED_FSIDS=("1" "2")
 
 ALL_PARTITIONS=("${DATA_PARTITIONS[@]}" "${PARITY_PARTITIONS[@]}")
 ALL_DRIVES=("${DATA_DRIVES[@]}" "${PARITY_DRIVES[@]}")
 ALL_MOUNT_POINTS=("${DATA_MOUNT_POINTS[@]}" "${PARITY_MOUNT_POINTS[@]}")
 
-# Load configuration
 load_monitoring_config() {
     load_config
 
-    # Load monitoring-specific config
     local monitoring_config="$HOMELAB_ROOT/config/service-configs/monitoring.conf"
     if [[ -f "$monitoring_config" ]]; then
         log_info "Loading monitoring configuration from $monitoring_config"
@@ -127,14 +116,12 @@ check_mount_point() {
         return 1
     fi
 
-    # get mount options
     local opts
     if ! opts=$(findmnt -n -o OPTIONS --target "$mount_point" 2>/dev/null); then
         warn "Could not query mount options for $mount_point"
         opts=""
     fi
 
-    # If mounted read-write, do a safe write test
     if echo "$opts" | grep -qw "ro"; then
         info "$mount_point mounted read-only"
     else
@@ -146,7 +133,6 @@ check_mount_point() {
         rm -f "$tf" || true
     fi
 
-    # Check kernel logs for critical hardware/filesystem errors (last 5 minutes only)
     if dmesg -T --since "5 minutes ago" 2>/dev/null | grep -E "(ext4_mb_generate_buddy.*corruption|EXT4-fs error.*Corrupt|XFS.*Metadata corruption|xfs_inode_buf_verify.*bad magic|COMRESET failed \(errno=-16\)|link is slow to respond.*ready=0|SStatus.*SError.*UnrecovData|blk_update_request: I/O error.*sector [0-9]+|status: \{ DRDY ERR \}.*error: \{ UNC \}|ata[0-9]+\.00: exception Emask.*frozen)" | grep -i "$partition" >/dev/null; then
         error "Critical hardware/filesystem errors detected for $partition / $mount_point"
         return 1
@@ -191,7 +177,6 @@ stop_all_docker_containers() {
     fi
 }
 
-# Stop K8s workloads instead of Docker containers
 stop_all_k8s_workloads() {
     if ! command -v kubectl >/dev/null 2>&1; then
         info "kubectl missing; skipping k8s workload stop"
@@ -200,7 +185,6 @@ stop_all_k8s_workloads() {
 
     info "Stopping K8s workloads to prevent data loss..."
 
-    # Scale down deployments in media namespace
     local namespaces=("media" "cloud")
     for ns in "${namespaces[@]}"; do
         if kubectl get namespace "$ns" >/dev/null 2>&1; then
@@ -251,7 +235,6 @@ remount_all_drives_readonly() {
 lockdown_array() {
     info "INITIATING ARRAY LOCKDOWN - Drive failure detected"
 
-    # Stop workloads (both Docker and K8s)
     stop_all_docker_containers
     stop_all_k8s_workloads
     unmount_mergerfs
@@ -262,26 +245,23 @@ lockdown_array() {
 
 
 export_disk_metrics() {
-    local overall_status="$1"  # 1=healthy, 0=failed
-    local smart_results="$2"   # Associative array as string
-    local mount_results="$3"   # Associative array as string
-    local mergerfs_status="$4" # 1=ok, 0=failed
+    local overall_status="$1"
+    local smart_results="$2"
+    local mount_results="$3"
+    local mergerfs_status="$4"
 
     local timestamp=$(get_timestamp)
     local metrics_content=""
 
-    # Overall disk monitor status
     metrics_content+=$(export_gauge "disk_monitor_status" "$overall_status" 'type="overall"' "Disk monitoring overall status (1=healthy, 0=failed)")
     metrics_content+=$'\n'
 
-    # Individual drive SMART health - output header once, then all data lines
     metrics_content+=$(export_gauge_header "disk_smart_health" "SMART health status per drive (1=pass, 0=fail)")
     metrics_content+=$'\n'
     for i in "${!ALL_DRIVES[@]}"; do
         local drive="${ALL_DRIVES[$i]}"
         local drive_type="data"
 
-        # Determine if this is a parity drive
         for parity_drive in "${PARITY_DRIVES[@]}"; do
             if [ "$drive" = "$parity_drive" ]; then
                 drive_type="parity"
@@ -289,7 +269,6 @@ export_disk_metrics() {
             fi
         done
 
-        # Check SMART health (1=pass, 0=fail)
         local smart_value=1
         if ! check_smart_health "$drive" >/dev/null 2>&1; then
             smart_value=0
@@ -299,7 +278,6 @@ export_disk_metrics() {
         metrics_content+=$'\n'
     done
 
-    # Mount point accessibility - output header once, then all data lines
     metrics_content+=$(export_gauge_header "disk_mount_accessible" "Mount point accessibility (1=ok, 0=failed)")
     metrics_content+=$'\n'
     for i in "${!ALL_MOUNT_POINTS[@]}"; do
@@ -314,28 +292,23 @@ export_disk_metrics() {
         metrics_content+=$'\n'
     done
 
-    # MergerFS status
     metrics_content+=$(export_gauge "disk_mergerfs_status" "$mergerfs_status" "mount=\"$MERGERFS_MOUNT\"" "MergerFS pool status (1=ok, 0=failed)")
     metrics_content+=$'\n'
 
-    # Last run timestamp
     metrics_content+=$(export_gauge "disk_monitor_last_run_timestamp_seconds" "$timestamp" "" "Last successful monitoring run timestamp")
     metrics_content+=$'\n'
 
-    # Write metrics to file
     write_metric_file "disk_monitor.prom" "$metrics_content"
 }
 
 export_nfs_export_metrics() {
-    local overall_status="$1"  # 1=healthy, 0=failed
+    local overall_status="$1"
 
     local metrics_content=""
 
-    # Overall NFS export layer status
     metrics_content+=$(export_gauge "nfs_export_status" "$overall_status" 'type="overall"' "NFS export layer health (1=healthy, 0=degraded)")
     metrics_content+=$'\n'
 
-    # NFS server unit active
     local server_active=0
     if systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
         server_active=1
@@ -343,7 +316,6 @@ export_nfs_export_metrics() {
     metrics_content+=$(export_gauge "nfs_server_active" "$server_active" "unit=\"$NFS_SERVER_UNIT\"" "NFS server unit active (1=active, 0=inactive)")
     metrics_content+=$'\n'
 
-    # Per-bind accessibility (mounted + readable within timeout)
     metrics_content+=$(export_gauge_header "nfs_export_bind_accessible" "NFS export bind accessible (1=ok, 0=stale/missing)")
     metrics_content+=$'\n'
     for bind in "${NFS_EXPORT_BINDS[@]}"; do
@@ -355,7 +327,6 @@ export_nfs_export_metrics() {
         metrics_content+=$'\n'
     done
 
-    # Expected fsids present in the kernel export table
     metrics_content+=$(export_gauge_header "nfs_export_fsid_present" "Expected fsid present in kernel export table (1=present, 0=missing)")
     metrics_content+=$'\n'
     for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
@@ -367,31 +338,22 @@ export_nfs_export_metrics() {
         metrics_content+=$'\n'
     done
 
-    # Last run timestamp
     metrics_content+=$(export_gauge "nfs_export_last_run_timestamp_seconds" "$(get_timestamp)" "" "Last NFS export health check timestamp")
     metrics_content+=$'\n'
 
     write_metric_file "nfs_export.prom" "$metrics_content"
 }
 
-# Server-side NFS export-layer health check.
-# Advisory only: logs failures and emits metrics, but NEVER calls lockdown_array
-# (a stale export is a serving problem, not a drive failure). Detects the class
-# of failure that cascaded the cluster on 2026-08-21: pool ENOTCONN, a stale or
-# missing /exports/* bind, nfsd down, or a dropped export (needs 'exportfs -ra').
 check_nfs_export_layer() {
     info "Checking server-side NFS export layer..."
     local healthy=true
 
-    # 1. nfsd must be serving.
     if ! systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
         error "NFS server ($NFS_SERVER_UNIT) is not active - exports are down"
         healthy=false
     fi
 
-    # 2. Each export bind must be mounted AND readable within a timeout. A timed
-    #    stat catches an ENOTCONN pool or a stale bind (which would otherwise
-    #    hang) - the exact stale-handle source from the incident.
+    # Timed stat: an ENOTCONN pool or stale bind would otherwise hang forever.
     for bind in "${NFS_EXPORT_BINDS[@]}"; do
         if ! mountpoint -q "$bind"; then
             error "NFS export bind $bind is not mounted - clients will get stale handles"
@@ -402,9 +364,8 @@ check_nfs_export_layer() {
         fi
     done
 
-    # 3. The kernel export table must actually list the expected fsids. A bind
-    #    can look fine locally while nfsd has dropped the export, so clients
-    #    still cannot mount it - the fix during the incident was 'exportfs -ra'.
+    # A bind can look fine locally while nfsd has dropped its export, leaving
+    # clients unable to mount. Fix is 'exportfs -ra'.
     if [[ -r "$NFS_KERNEL_EXPORTS" ]]; then
         for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
             if ! grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
@@ -433,7 +394,6 @@ check_all_drives() {
 
     info "Starting comprehensive disk health check..."
 
-    # Data drives
     for i in "${!DATA_DRIVES[@]}"; do
         local drive="${DATA_DRIVES[$i]}"
         local partition="${DATA_PARTITIONS[$i]}"
@@ -452,7 +412,6 @@ check_all_drives() {
         fi
     done
 
-    # Parity drives
     for i in "${!PARITY_DRIVES[@]}"; do
         local drive="${PARITY_DRIVES[$i]}"
         local partition="${PARITY_PARTITIONS[$i]}"
@@ -471,7 +430,6 @@ check_all_drives() {
         fi
     done
 
-    # MergerFS health check
     local mergerfs_failed=false
     if ! check_mergerfs_health; then
         if [ "$all_healthy" = true ]; then
@@ -495,7 +453,6 @@ check_all_drives() {
             printf 'FAILED\n%s\n%s\n' "$(date)" "$failure_message" > "$STATE_FILE"
         } || true
 
-        # Export failure metrics to Prometheus
         local mergerfs_ok=0
         check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
         export_disk_metrics 0 "" "" "$mergerfs_ok"
@@ -504,24 +461,20 @@ check_all_drives() {
     else
         info "All drives are healthy"
 
-        # Check if we're recovering from a failure state
         local was_failed=false
         if [ -f "$STATE_FILE" ] && grep -q "FAILED" "$STATE_FILE" 2>/dev/null; then
             was_failed=true
         fi
 
-        # Update state file
         {
             printf 'HEALTHY\n%s\n' "$(date)" > "$STATE_FILE"
         } || true
 
-        # Log recovery notification if recovering from failure
         if [ "$was_failed" = true ]; then
             info "RECOVERY COMPLETE - All drives are now healthy on $(hostname)"
             info "All SnapRAID drives have passed health checks: $(printf '/dev/%s ' "${ALL_DRIVES[@]}")"
         fi
 
-        # Export success metrics to Prometheus
         local mergerfs_ok=0
         check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
         export_disk_metrics 1 "" "" "$mergerfs_ok"
@@ -632,9 +585,8 @@ main() {
                 exit 1
             fi
 
-            # Server-side NFS export-layer health (advisory: logs + metrics,
-            # never triggers array lockdown). Runs only once the drives/pool are
-            # healthy, so a real drive failure still short-circuits above.
+            # Runs only once drives/pool are healthy, so a real drive failure
+            # short-circuits above.
             if ! check_nfs_export_layer; then
                 exit 1
             fi

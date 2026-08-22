@@ -1,8 +1,4 @@
-# Node labels and taints for cyl-optiplex9020
-# Apply with: kubectl apply -f labels.yaml
-#
-# Hardware specs: 4 CPUs, 8GB RAM
-# Taints: Restrict to essential workloads only (monitoring, infrastructure)
+# 4 CPU, 8GB
 apiVersion: v1
 kind: Node
 metadata:

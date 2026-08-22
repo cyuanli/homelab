@@ -1,25 +1,19 @@
-# Local configuration files with secrets
 *.env.local
+# *.conf are live configs with secrets, only .template variants are tracked
 *.conf
 
-# SSH keys
 *.pem
 *.pub
 id_rsa*
 id_ed25519*
 
-# Logs
 *.log
 
-# Traefik
 acme.json
 
-# Kubernetes secrets
 cluster/applications/**/secrets.yaml
 
-# Borgmatic passphrase files
 config/borgmatic/.borg-passphrase
 config/borgmatic/.borg-passphrase-env
 
-# Aider
 .aider*

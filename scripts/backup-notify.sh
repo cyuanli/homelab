@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Borgmatic backup metrics export script
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,23 +12,19 @@ source "$SCRIPT_DIR/utils/metrics.sh"
 SERVICE_RESULT="${1:-unknown}"
 HOSTNAME="$(hostname)"
 
-# Load configuration
 load_config
 
 export_borgmatic_metrics() {
-    local status="$1"  # 1=success, 0=failed
+    local status="$1"
     local timestamp=$(get_timestamp)
     local metrics_content=""
 
-    # Backup status
     metrics_content+=$(export_gauge "borgmatic_last_run_status" "$status" "" "Last Borgmatic backup status (1=success, 0=failed)")
     metrics_content+=$'\n'
 
-    # Last run timestamp
     metrics_content+=$(export_gauge "borgmatic_last_run_timestamp_seconds" "$timestamp" "" "Last Borgmatic backup run timestamp")
     metrics_content+=$'\n'
 
-    # Write metrics to file
     write_metric_file "borgmatic.prom" "$metrics_content"
 }
 

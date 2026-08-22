@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: qbittorrent
-        # Pinned to ls428 - ls430+ has critical OOM issues during startup
+        # Pinned: ls430+ OOMs during startup.
         image: lscr.io/linuxserver/qbittorrent@sha256:26a08cd60d81e632aba8947b2c64dfd5f870a5f4a837ec4abedf2e1d174df891
         env:
         - name: PUID
@@ -48,7 +48,7 @@ spec:
           mountPath: /incomplete
         - name: media-data
           mountPath: /data
-        # Backwards compatibility for existing torrents with /downloads path
+        # Existing torrents still reference /downloads.
         - name: media-data
           mountPath: /downloads
           subPath: downloads

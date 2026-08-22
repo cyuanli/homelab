@@ -1,5 +1,3 @@
-# Node labels for cyl-inspiron14
-# Apply with: kubectl apply -f labels.yaml
 apiVersion: v1
 kind: Node
 metadata:

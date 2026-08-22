@@ -1,13 +1,8 @@
 ---
-# NFS Direct StorageClass - manual PV provisioning (no dynamic provisioning)
-#
-# Standard mount options for NFS PVs (copy to new PVs):
+# No dynamic provisioning. Copy these mount options into every new NFS PV:
 #   vers=4.1 hard timeo=300 retrans=3 rsize=1048576 wsize=1048576
 #   _netdev noatime actimeo=30 lookupcache=positive
-#
-# Key options: timeo=300 (30s timeout), retrans=3 (retries), noatime (perf),
-#              actimeo=30 (attribute cache 30s). Failover ~1-2min.
-# Refs: AWS EFS docs, Azure NetApp Files best practices
+# Failover takes 1-2min.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

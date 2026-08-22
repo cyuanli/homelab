@@ -13,7 +13,6 @@ spec:
   - name: cluster_health
     interval: 30s
     rules:
-    # Node alerts
     - alert: NodeDown
       expr: up{job="kubernetes-nodes"} == 0
       for: 5m
@@ -68,7 +67,6 @@ spec:
         summary: "Critical disk space on {{ $labels.instance }}"
         description: "Disk usage on {{ $labels.instance }} is {{ $value | humanize }}%. Immediate action required!"
 
-    # Pod alerts
     - alert: PodOOMKilled
       expr: |
         kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
@@ -108,7 +106,6 @@ spec:
         summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} not ready"
         description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in {{ $labels.phase }} state for more than 15 minutes."
 
-    # Persistent Volume alerts
     - alert: PersistentVolumeFillingUp
       expr: 100 - ((kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) * 100) > 85
       for: 10m
@@ -118,7 +115,6 @@ spec:
         summary: "PersistentVolume {{ $labels.persistentvolumeclaim }} is filling up"
         description: "PersistentVolume {{ $labels.persistentvolumeclaim }} is {{ $value | humanize }}% full."
 
-    # etcd alerts (for K3s with etcd)
     - alert: EtcdHighNumberOfFailedGRPCRequests
       expr: sum(rate(grpc_server_handled_total{grpc_code!="OK",job="kubernetes-apiservers"}[5m])) BY (grpc_service, grpc_method) > 0.01
       for: 10m
@@ -128,7 +124,6 @@ spec:
         summary: "High number of failed gRPC requests"
         description: "{{ $value }}% of requests for {{ $labels.grpc_method }} failed on {{ $labels.grpc_service }}."
 
-    # API server alerts
     - alert: KubernetesAPIServerDown
       expr: up{job="kubernetes-apiservers"} == 0
       for: 5m
@@ -138,7 +133,6 @@ spec:
         summary: "Kubernetes API server is down"
         description: "Kubernetes API server has been down for more than 5 minutes."
 
-    # General cluster alerts
     - alert: TooManyPods
       expr: count(kube_pod_info) > 100
       for: 5m

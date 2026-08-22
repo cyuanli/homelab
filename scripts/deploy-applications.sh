@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Application Deployment Script
-# Deploys applications to K3s cluster
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +37,6 @@ EOF
 }
 
 check_prerequisites() {
-    # Check if running on correct system
     load_config
 
     if ! command_exists kubectl; then
@@ -63,33 +60,27 @@ check_prerequisites() {
 deploy_infrastructure() {
     log_step "Deploying infrastructure components"
 
-    # Deploy namespaces first
     if [[ -d "$HOMELAB_ROOT/cluster/manifests/namespaces" ]]; then
         log_info "Deploying namespaces"
         kubectl apply -f "$HOMELAB_ROOT/cluster/manifests/namespaces/"
     fi
 
-    # Deploy storage
     if [[ -d "$HOMELAB_ROOT/cluster/manifests/storage" ]]; then
         log_info "Deploying storage classes"
         kubectl apply -f "$HOMELAB_ROOT/cluster/manifests/storage/"
 
-        # Wait for storage class to be ready
         log_info "Waiting for storage class to be ready"
         wait_for_condition "kubectl get storageclass local-storage >/dev/null 2>&1" 60
     fi
 
-    # Deploy Traefik
     if [[ -d "$HOMELAB_ROOT/cluster/manifests/traefik" ]]; then
         log_info "Deploying Traefik ingress controller"
         kubectl apply -f "$HOMELAB_ROOT/cluster/manifests/traefik/"
 
-        # Wait for Traefik to be ready
         log_info "Waiting for Traefik to be ready"
         wait_for_deployment "traefik" "infrastructure"
     fi
 
-    # Deploy cert-manager if available
     if [[ -d "$HOMELAB_ROOT/cluster/manifests/cert-manager" ]]; then
         log_info "Deploying cert-manager"
         kubectl apply -f "$HOMELAB_ROOT/cluster/manifests/cert-manager/"
@@ -111,7 +102,6 @@ deploy_cloud() {
     log_info "Deploying Nextcloud"
     kubectl apply -k "$app_path"
 
-    # Wait for deployments to be ready
     wait_for_deployment "redis" "cloud"
     wait_for_deployment "nextcloud" "cloud"
 
@@ -128,13 +118,11 @@ deploy_media() {
         return 1
     fi
 
-    # Deploy media storage (PVs and PVCs) first if using NFS
     if [[ -d "$app_path/storage" ]]; then
         log_info "Deploying media storage (PVs and PVCs)"
         kubectl apply -f "$app_path/storage/media-pvs.yaml"
         kubectl apply -f "$app_path/storage/media-pvcs.yaml"
 
-        # Wait for PVCs to be bound
         log_info "Waiting for PVCs to be bound"
         local timeout=60
         local elapsed=0
@@ -158,7 +146,6 @@ deploy_media() {
     log_info "Deploying media stack (Prowlarr, Sonarr, Radarr, qBittorrent, Jellyfin)"
     kubectl apply -k "$app_path"
 
-    # Wait for all media deployments to be ready
     local services=("prowlarr" "sonarr" "radarr" "qbittorrent" "jellyfin")
     for service in "${services[@]}"; do
         log_info "Waiting for $service to be ready"
@@ -199,7 +186,6 @@ deploy_utilities() {
     if [[ -d "$utilities_path" ]]; then
         log_info "Deploying utility services"
 
-        # Deploy each utility subdirectory
         for utility_dir in "$utilities_path"/*; do
             if [[ -d "$utility_dir" && -f "$utility_dir/kustomization.yaml" ]]; then
                 local utility_name=$(basename "$utility_dir")
@@ -422,7 +408,6 @@ main() {
     esac
 }
 
-# Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

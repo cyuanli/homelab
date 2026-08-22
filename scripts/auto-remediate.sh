@@ -1,16 +1,13 @@
 #!/bin/bash
 
-# Auto-remediation script: restarts Kubernetes deployments when ServiceDown alerts fire.
-# Designed to run via systemd timer every 15 minutes.
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/utils/common.sh"
 
-COOLDOWN_SECONDS=3600 # 1 hour
+COOLDOWN_SECONDS=3600
 ALERTMANAGER_LOCAL_PORT=9093
 PORTFORWARD_PID=""
 
-# Alert-to-deployment mapping: subdomain -> deployment:namespace
+# subdomain -> deployment:namespace
 declare -A SERVICE_MAP=(
     [drive]="nextcloud:cloud"
     [photos]="immich-server:cloud"
@@ -55,7 +52,6 @@ set_cooldown() {
     date +%s > "/tmp/auto-remediate-${deployment}.last"
 }
 
-# Start port-forward to alertmanager
 log_info "Starting port-forward to alertmanager-operated"
 kubectl port-forward -n monitoring svc/alertmanager-operated "$ALERTMANAGER_LOCAL_PORT":9093 &>/dev/null &
 PORTFORWARD_PID=$!
@@ -63,17 +59,15 @@ sleep 2
 
 if ! kill -0 "$PORTFORWARD_PID" 2>/dev/null; then
     log_error "Failed to start port-forward to alertmanager"
-    exit 0 # exit 0 to avoid timer backoff
+    exit 0 # avoid timer backoff
 fi
 
-# Query active ServiceDown alerts
 log_info "Querying Alertmanager for active ServiceDown alerts"
 ALERTS_JSON=$(curl -sf "http://localhost:${ALERTMANAGER_LOCAL_PORT}/api/v2/alerts?filter=alertname%3D%22ServiceDown%22&active=true" 2>/dev/null) || {
     log_error "Failed to query Alertmanager API"
     exit 0
 }
 
-# Kill port-forward now that we have the data
 cleanup
 PORTFORWARD_PID=""
 
@@ -85,9 +79,7 @@ fi
 
 log_warning "Found $ALERT_COUNT active ServiceDown alert(s)"
 
-# Process each alert
 echo "$ALERTS_JSON" | jq -r '.[].labels.instance // empty' | while read -r instance_url; do
-    # Extract subdomain from URL (e.g. https://jellyfin.cliff.li -> jellyfin)
     subdomain=$(echo "$instance_url" | sed -E 's|https?://([^.]+)\..*|\1|')
 
     if [[ -z "$subdomain" ]]; then

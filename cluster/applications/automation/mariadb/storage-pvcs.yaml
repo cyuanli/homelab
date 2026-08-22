@@ -1,5 +1,4 @@
 ---
-# MariaDB data storage
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
