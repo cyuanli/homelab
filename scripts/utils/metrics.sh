@@ -8,7 +8,7 @@ TEXTFILE_DIR="${TEXTFILE_DIR:-/var/lib/node_exporter/textfile_collector}"
 ensure_textfile_dir() {
     if [ ! -d "$TEXTFILE_DIR" ]; then
         mkdir -p "$TEXTFILE_DIR" 2>/dev/null || {
-            log_warn "Cannot create textfile directory: $TEXTFILE_DIR"
+            log_warning "Cannot create textfile directory: $TEXTFILE_DIR"
             return 1
         }
     fi
@@ -36,7 +36,7 @@ EOF
         return 0
     else
         rm -f "$tmpfile" 2>/dev/null || true
-        log_warn "Failed to write metric file: $filepath"
+        log_warning "Failed to write metric file: $filepath"
         return 1
     fi
 }

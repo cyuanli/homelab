@@ -224,6 +224,34 @@ prometheus-node-exporter:
     limits:
       # No CPU limit - allow bursting during scrapes
       memory: 128Mi
+
+  # ---------------------------------------------------------------------------
+  # Textfile collector. WITHOUT THIS BLOCK EVERY SCRIPT-EXPORTED METRIC IS LOST.
+  #
+  # node_exporter enables the textfile collector by default, but it reads
+  # nothing unless --collector.textfile.directory is set, and the host directory
+  # has to be mounted into the container. Neither was configured until
+  # 2026-08-22, so nothing any script wrote to
+  # /var/lib/node_exporter/textfile_collector had ever reached Prometheus:
+  # disk_monitor_*, nfs_export_*, snapraid_*, borgmatic_* and homelab_db_dump_*
+  # were all absent. Every alert built on them silently evaluated against no
+  # data and could never fire - drive failure, SnapRAID, NFS export and backup
+  # alerting were all inert.
+  #
+  # Verify after any change to this block (expect one series per .prom file):
+  #   kubectl -n monitoring exec ds/kube-prometheus-stack-prometheus-node-exporter \
+  #     -- wget -qO- localhost:9100/metrics | grep node_textfile_mtime_seconds
+  extraArgs:
+    - --collector.textfile.directory=/host/textfile_collector
+  extraHostVolumeMounts:
+    - name: textfile-collector
+      hostPath: /var/lib/node_exporter/textfile_collector
+      mountPath: /host/textfile_collector
+      # DirectoryOrCreate, not Directory: only the storage and monitoring nodes
+      # actually run the exporting scripts, and a plain Directory would leave the
+      # DaemonSet pod stuck ContainerCreating on every other node.
+      type: DirectoryOrCreate
+      readOnly: true
   prometheus:
     monitor:
       # Attach node metadata to enable hostname labeling

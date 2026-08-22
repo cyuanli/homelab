@@ -98,6 +98,7 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | `monitor-storage.sh` | SnapRAID disk health + server-side NFS export checks (run by `disk-monitor.timer`) |
 | `auto-remediate.sh` | Restarts deployments on `ServiceDown` alerts (run by `auto-remediate.timer`) |
 | `backup-notify.sh` | Borgmatic notification hook |
+| `backup-databases.sh` | Dumps the Nextcloud + Immich Postgres DBs (borgmatic `before_backup` hook) |
 | `snapraid-notify.sh` | SnapRAID metrics export |
 | `50-tailscale-udp-gro` | NetworkManager dispatcher hook, tunes UDP GRO for Tailscale |
 | `utils/common.sh` | Shared utility functions |

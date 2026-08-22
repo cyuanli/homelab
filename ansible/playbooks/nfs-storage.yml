@@ -29,39 +29,50 @@
         group: nogroup
         mode: "0755"
 
+    # Modes/owners below mirror the verified running state. Do not "simplify"
+    # them back into a single uniform loop: each service writes as its own UID
+    # and a wrong owner silently costs that service write access to its data.
     - name: Create syncthing directories
       ansible.builtin.file:
-        path: "{{ app_storage_root }}/{{ item }}"
+        path: "{{ app_storage_root }}/{{ item.path }}"
         state: directory
         owner: "1000"
         group: "1000"
-        mode: "0755"
+        mode: "{{ item.mode }}"
       loop:
-        - syncthing/data
-        - syncthing/config
+        - { path: syncthing/data, mode: "0755" }
+        # 0700: holds Syncthing's device certificate and private key
+        - { path: syncthing/config, mode: "0700" }
 
     - name: Create automation service directories
       ansible.builtin.file:
-        path: "{{ app_storage_root }}/automation/{{ item }}"
+        path: "{{ app_storage_root }}/automation/{{ item.path }}"
         state: directory
-        owner: nobody
-        group: nogroup
-        mode: "0755"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - mosquitto-data
-        - zigbee2mqtt-data
+        # Mosquitto's daemon drops to uid/gid 1883 and owns mosquitto.db.
+        # Setting this to nobody makes the persistence DB unwritable and loses
+        # retained messages + persistent subscriptions.
+        - { path: mosquitto-data, owner: "1883", group: "1883", mode: "02755" }
+        - { path: zigbee2mqtt-data, owner: nobody, group: nogroup, mode: "02755" }
 
+    # NOTE: once the bind mounts are active these paths resolve to the bind
+    # *targets*, so a chmod here rewrites the underlying directory (e.g.
+    # /exports/games -> /media/data/games). Modes must match the targets.
     - name: Create export bind mount points
       ansible.builtin.file:
-        path: "{{ exports_root }}/{{ item }}"
+        path: "{{ exports_root }}/{{ item.path }}"
         state: directory
         owner: root
         group: root
-        mode: "0755"
+        mode: "{{ item.mode }}"
       loop:
-        - media
-        - configs
-        - games
+        - { path: media, mode: "0755" }
+        - { path: configs, mode: "0755" }
+        # setgid, matching /media/data/games
+        - { path: games, mode: "02755" }
 
     - name: Add bind mounts to fstab
       ansible.posix.mount:

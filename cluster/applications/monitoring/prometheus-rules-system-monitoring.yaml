@@ -144,3 +144,44 @@ spec:
       annotations:
         summary: "No backup in 2 days on {{ $labels.instance }}"
         description: "Last Borgmatic backup was {{ $value | humanizeDuration }} ago. Expected daily."
+
+    # Database dump alerts (emitted by scripts/backup-databases.sh via borgmatic).
+    #
+    # These are the ONLY signal that a database dump failed. The dump script
+    # deliberately exits 0 so one unreachable database cannot abort the whole
+    # backup run, which means BorgmaticBackupFailed will NOT fire for a dump
+    # failure - borgmatic reports success while silently archiving a stale dump.
+    # If these alerts are removed or their metrics stop being scraped, database
+    # backup failures become invisible.
+    - alert: DatabaseDumpFailed
+      expr: homelab_db_dump_success == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Database dump failed for {{ $labels.database }}"
+        description: "Could not dump the {{ $labels.database }} database on {{ $labels.instance }}. The previous dump was kept, so the backup contains a STALE copy of this database. Check: journalctl -u borgmatic.service"
+
+    # 2 days rather than the dump cadence: borgmatic runs daily at 3 AM, so a
+    # single missed night is not yet actionable, but two means the newest dump
+    # in the borg repository no longer matches the file trees beside it.
+    - alert: DatabaseDumpStale
+      expr: time() - homelab_db_dump_timestamp_seconds > 172800
+      for: 1h
+      labels:
+        severity: critical
+      annotations:
+        summary: "Database dump for {{ $labels.database }} is stale"
+        description: "Newest dump of {{ $labels.database }} on {{ $labels.instance }} is {{ $value | humanizeDuration }} old. Expected daily. Restoring now would roll this database back by that much."
+
+    # A dump that collapses to near-nothing is the shape a failed restore takes:
+    # pg_dump succeeded against an empty or half-initialised database and the
+    # good dump was overwritten. Both databases are in the hundreds of MB.
+    - alert: DatabaseDumpSuspiciouslySmall
+      expr: homelab_db_dump_size_bytes < 1048576
+      for: 10m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Database dump for {{ $labels.database }} is suspiciously small"
+        description: "Dump of {{ $labels.database }} on {{ $labels.instance }} is only {{ $value | humanize1024 }}B. Expected hundreds of MB. The database may be empty or the dump may be incomplete - verify before relying on this backup."

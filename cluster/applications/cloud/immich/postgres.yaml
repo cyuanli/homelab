@@ -62,11 +62,27 @@ spec:
             cpu: 1000m
             memory: 1Gi
   volumeClaimTemplates:
+  # local-path, NOT nfs-direct. Immich's requirements are explicit that the
+  # Postgres data directory "should ideally use local SSD storage, and never a
+  # network share of any kind" - Postgres assumes fsync durability and POSIX
+  # locking semantics that NFS does not reliably provide, and the failure mode
+  # is silent corruption after a network blip rather than an error at startup.
+  # https://docs.immich.app/install/requirements/
+  #
+  # This is why the database is the one Immich volume not on the NAS while the
+  # library, thumbs, profile and encoded-video PVCs all use nfs-direct.
+  #
+  # Consequence: the PV is pinned by nodeAffinity to whichever node first bound
+  # it (currently cyl-aspiree17) and cannot reschedule elsewhere, so Immich is
+  # down whenever that node is. That is the accepted trade against corruption.
+  # It also makes scripts/backup-databases.sh load-bearing: the PV's reclaim
+  # policy is Delete, so this database exists in exactly one place plus the
+  # nightly dump.
   - metadata:
       name: postgres-data
     spec:
-      accessModes: ["ReadWriteMany"]
-      storageClassName: nfs-direct
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: local-path
       resources:
         requests:
           storage: 20Gi

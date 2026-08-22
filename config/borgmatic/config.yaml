@@ -3,6 +3,10 @@ source_directories:
   - /media/data/immich/library/library
   - /media/data/owntracks/rec
   - /media/data/games
+  # PostgreSQL dumps written by the before_backup hook below. Without these the
+  # file backups above are not restorable on their own: Nextcloud files carry no
+  # users/shares/metadata and the Immich library carries no albums/faces/people.
+  - /media/data/db-dumps
 
 repositories:
   - path: ssh://cyl-optiplex9020/media/wd_elements/borg
@@ -21,10 +25,22 @@ checks:
 
 before_backup:
   - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --on"
+  # Runs after maintenance mode is on so the Nextcloud dump is taken while the
+  # app is quiesced and cannot write mid-dump. Never aborts the run on a single
+  # unreachable database - it reports failures as Prometheus metrics instead.
+  # See scripts/backup-databases.sh.
+  - /home/cyl/homelab/scripts/backup-databases.sh
 
 after_backup:
   - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
   - /home/cyl/homelab/scripts/backup-notify.sh success
 
 on_error:
+  # after_backup only runs on success, so nothing took Nextcloud out of
+  # maintenance mode when a backup failed. On 2026-08-22 a hung borg create left
+  # it unreachable to users for ~7 hours. This runs BEFORE the notification, so
+  # a broken notify script can never be what keeps the app down.
+  # Safe to run unconditionally - disabling maintenance mode that is already off
+  # is a no-op.
+  - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
   - /home/cyl/homelab/scripts/backup-notify.sh error

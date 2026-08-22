@@ -696,6 +696,31 @@ Our NFS setup uses `/exports` as the NFSv4 root with bind mounts for each servic
 `config/system-configs/exports` is copied to `/etc/exports`, and a handler runs
 `exportfs -ra`. Edit the repo copy, then:
 
+> ⚠️ **Always run this playbook with `--check --diff` first.** Besides the
+> exports it enforces ownership and modes on the service data directories, and
+> those values are load-bearing: each service writes as its own UID, so a wrong
+> owner silently removes that service's write access to its own data. A 2026-08
+> dry run caught the playbook trying to chown `mosquitto-data` from `1883:1883`
+> to `nobody` — Mosquitto's daemon drops to uid 1883 and owns `mosquitto.db`, so
+> applying it would have lost retained messages and persistent subscriptions,
+> cascading into Zigbee2MQTT and Home Assistant. It also would have loosened
+> `syncthing/config` from `0700` to `0755` (that directory holds Syncthing's
+> device certificate and private key) and dropped the setgid bit from
+> `/media/data/games` via the `/exports/games` bind. The playbook's values now
+> mirror the verified running state:
+>
+> | Directory | Owner | Mode | Why |
+> |---|---|---|---|
+> | `automation/mosquitto-data` | `1883:1883` | `02755` | daemon drops to uid 1883 |
+> | `automation/zigbee2mqtt-data` | `nobody:nogroup` | `02755` | writes as 65534 |
+> | `syncthing/config` | `1000:1000` | `0700` | holds device cert + private key |
+> | `syncthing/data` | `1000:1000` | `0755` | |
+> | `/exports/games` | `root:root` | `02755` | chmod here rewrites the bind target `/media/data/games` |
+>
+> Note that once the binds are mounted, `/exports/*` resolves to the bind
+> *target* — a mode change there rewrites the underlying data directory, not the
+> mount point.
+
 ```bash
 cd ansible
 ansible-playbook playbooks/nfs-storage.yml --ask-become-pass --limit cyl-homelab
@@ -939,6 +964,27 @@ spec:
 > fails with `No such file or directory`. (This bit us while testing on
 > 2026-08-21.) Correspondingly, `/media/data` on the host is exported to clients
 > as `/media`, not `/media/data`.
+
+> ⛔ **Never put a PostgreSQL data directory on `nfs-direct`.** Postgres assumes
+> fsync durability and POSIX file-locking semantics that NFS does not reliably
+> provide; the failure mode is silent corruption after a network blip, not an
+> error at startup. Immich's own requirements say the database "should ideally
+> use local SSD storage, and **never a network share of any kind**"
+> ([docs.immich.app](https://docs.immich.app/install/requirements/)).
+>
+> Both cluster databases therefore use `local-path`:
+>
+> | PVC | Node | Reclaim |
+> |-----|------|---------|
+> | `postgres-data-immich-postgres-0` | `cyl-aspiree17` | `Delete` |
+> | `postgres-data-postgres-0` (Nextcloud) | `cyl-homelab` | `Delete` |
+>
+> Two consequences worth knowing before touching either: a `local-path` PV is
+> pinned by `nodeAffinity` to the node that first bound it, so the app is down
+> whenever that node is (Immich, 2026-08-22) and the pod **cannot** be
+> rescheduled to fix it; and reclaim policy `Delete` means deleting the PVC
+> destroys the database permanently. The nightly dump
+> (`scripts/backup-databases.sh`) is the only other copy.
 
 **That's it!** No need to create additional bind mounts or export entries. The `/exports/media` bind mount already provides access to all subdirectories under `/media/data/`. Verified 2026-08-21: with only `fsid=0/1/2` exported (no dedicated `fsid=3`), a client mounting the plain `/media` export can read `nextcloud/` inside it — so Nextcloud needs no export of its own.
 
