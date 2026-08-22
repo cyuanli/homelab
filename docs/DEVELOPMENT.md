@@ -4,21 +4,38 @@
 
 ```
 cluster/
-├── manifests/              # Core infrastructure
-│   ├── traefik/           # Ingress controller
-│   ├── cert-manager/      # SSL certificate management
-│   └── storage/           # Storage configuration
-├── infrastructure/         # NFS storage, priority classes
+├── manifests/              # Cluster bootstrap (plain kubectl apply)
+│   ├── namespaces/        # Core namespaces
+│   ├── traefik/           # Ingress controller (DaemonSet, infrastructure ns)
+│   ├── cert-manager/      # Let's Encrypt ClusterIssuers
+│   └── storage/           # local-path + Nextcloud/Postgres PVs
+├── infrastructure/         # nfs-direct StorageClass, priority classes
 └── applications/           # Application deployments
-    ├── automation/        # Home Assistant, MariaDB
-    ├── boinc/             # BOINC distributed computing
+    ├── automation/        # Home Assistant, MariaDB, Mosquitto, Zigbee2MQTT
+    ├── boinc/             # BOINC distributed computing (not deployed)
     ├── cloud/             # Nextcloud, Immich
-    ├── games/             # Minecraft servers
+    ├── games/             # Minecraft worlds, mc-router, backup CronJob
     ├── location/          # OwnTracks
-    ├── media-stack/       # Jellyfin, Sonarr, Radarr, etc.
-    ├── monitoring/        # Prometheus, Grafana, Alertmanager
-    └── utilities/         # Whoami test service
+    ├── media-stack/       # Jellyfin, Sonarr, Radarr, Prowlarr, qBittorrent
+    ├── monitoring/        # kube-prometheus-stack values, alert rules, blackbox
+    └── utilities/         # Syncthing, Whoami
 ```
+
+### Deployment mechanism per app
+
+Not everything is Kustomize — know which tool owns a given app before editing:
+
+| App | Managed by |
+|-----|-----------|
+| media-stack, utilities, location, automation (mosquitto/zigbee2mqtt/mariadb), nextcloud, boinc | Kustomize (`kubectl apply -k`) |
+| Immich | Helm `immich/immich` + Kustomize for PVs/PVCs/postgres/redis/ingress |
+| Home Assistant | Helm chart + Kustomize for PVs/PVCs/ingress |
+| Minecraft worlds | Helm `itzg/minecraft`, one release per world |
+| Prometheus/Grafana/Alertmanager | Helm `kube-prometheus-stack` |
+| blackbox-exporter | Helm `prometheus-blackbox-exporter` |
+| Traefik, cert-manager issuers, namespaces, storage | plain `kubectl apply -f` |
+
+Check what a release actually uses with `helm list -A`.
 
 ## Adding New Services
 
@@ -76,11 +93,13 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | Script | Purpose |
 |--------|---------|
 | `homelab.sh` | Main CLI orchestrator |
-| `deploy-applications.sh` | Application deployment to K3s |
+| `deploy-applications.sh` | Application deployment to K3s (infrastructure, cloud, media, location, utilities) |
 | `manage-nodes.sh` | Cluster node management |
-| `monitor-storage.sh` | SnapRAID disk health monitoring |
+| `monitor-storage.sh` | SnapRAID disk health + server-side NFS export checks (run by `disk-monitor.timer`) |
+| `auto-remediate.sh` | Restarts deployments on `ServiceDown` alerts (run by `auto-remediate.timer`) |
 | `backup-notify.sh` | Borgmatic notification hook |
 | `snapraid-notify.sh` | SnapRAID metrics export |
+| `50-tailscale-udp-gro` | NetworkManager dispatcher hook, tunes UDP GRO for Tailscale |
 | `utils/common.sh` | Shared utility functions |
 | `utils/metrics.sh` | Prometheus metrics helpers |
 
@@ -92,9 +111,15 @@ Scripts use shared functions from `scripts/utils/common.sh`:
 source "$(dirname "${BASH_SOURCE[0]}")/utils/common.sh"
 
 log_info "Info message"
-log_warn "Warning"
+log_success "Done"
+log_warning "Warning"
 log_error "Error"
-load_config  # Loads config/homelab.env
+log_step "Section heading"
+
+load_config              # Loads nodes/$(hostname)/config.env.local; exits if absent
+check_not_root           # Refuse to run as root
+wait_for_deployment <ns> <name>
+wait_for_namespace_ready <ns>
 ```
 
 ## Testing Changes
@@ -114,11 +139,19 @@ kubectl rollout restart deployment/<service> -n <namespace>
 
 For services needing persistent storage on the NAS:
 
-1. Create directory on storage node: `sudo mkdir -p /media/data/<service>`
-2. Create PV pointing to NFS path (see existing `storage-pvs.yaml` files)
-3. Create matching PVC
+1. Create the directory on the storage node (`cyl-homelab`):
+   - bulk / read-heavy data → `sudo mkdir -p /media/data/<service>`
+   - write-heavy config or cache → `sudo mkdir -p /srv/app-storage/<service>`
+2. Create a PV with `storageClassName: nfs-direct` pointing at the NFS path
+   (see existing `storage-pvs.yaml` files)
+3. Create a matching PVC
 
-NFS server: `192.168.1.94`, export root: `/exports`
+NFS server: `192.168.1.94`. The export root is `/exports`, but PV paths are
+written **relative to the NFSv4 pseudo-root** — i.e. `/media/<service>` for the
+`/exports/media` bind (`fsid=1`) and `/configs/<service>` for the
+`/exports/configs` bind (`fsid=2`). Existing exports are listed in
+`config/system-configs/exports`; adding a new top-level export requires editing
+`/etc/fstab` and `/etc/exports` on the host, then `sudo exportfs -ra`.
 
 ## Common Commands
 

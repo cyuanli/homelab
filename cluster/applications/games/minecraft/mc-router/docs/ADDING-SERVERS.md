@@ -484,15 +484,17 @@ vim backup/cronjob.yaml  # Remove volume mounts and volumes
 
 ### Server Not Discovered by mc-router
 
-**Check pod labels**:
+**Check the Service annotation** — discovery keys off the *Service*, not the pod:
 ```bash
-kubectl get pods -n games -o yaml | grep -A 5 externalServerName
+kubectl get svc -n games -o custom-columns=\
+'NAME:.metadata.name,ROUTE:.metadata.annotations.mc-router\.itzg\.me/externalServerName'
 ```
 
-Ensure the label is present:
+Ensure the annotation is present:
 ```yaml
-labels:
-  mc-router.itzg.me/externalServerName: "yourserver.cliff.li"
+metadata:
+  annotations:
+    mc-router.itzg.me/externalServerName: "yourserver.mc.cliff.li"
 ```
 
 **Check mc-router logs**:
@@ -592,4 +594,4 @@ kubectl rollout restart deployment/minecraft-<servername>-minecraft -n games
 - [itzg/minecraft-server Chart Documentation](https://github.com/itzg/minecraft-server-charts)
 - [Minecraft Server Properties Reference](https://minecraft.wiki/w/Server.properties)
 - [mc-router GitHub](https://github.com/itzg/mc-router)
-- Implementation details: `MC-ROUTER-IMPLEMENTATION.md`
+- mc-router setup in this repo: `README.md` (same directory)

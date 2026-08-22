@@ -20,12 +20,17 @@ Internet → VPS (Nginx) → Tailscale Tunnel → K3s Cluster (Traefik) → Appl
 ```
 
 ### Services
-- **Media Stack**: Prowlarr, Sonarr, Radarr, qBittorrent, Jellyfin
-- **Cloud Storage**: Nextcloud, Immich (photo management)
-- **Home Automation**: Home Assistant with MariaDB
-- **Games**: Minecraft servers with mc-router
-- **Monitoring**: Prometheus, Grafana, Alertmanager
-- **Other**: OwnTracks, BOINC, Whoami
+- **Media Stack** (`media`): Prowlarr, Sonarr, Radarr, qBittorrent, Jellyfin
+- **Cloud Storage** (`cloud`): Nextcloud, Immich (photo management), PostgreSQL, Redis
+- **Home Automation** (`automation`): Home Assistant, MariaDB, Mosquitto (MQTT), Zigbee2MQTT
+- **Games** (`games`): Minecraft servers (Cobblestone, Sandstone, Apricorn) with mc-router
+- **Monitoring** (`monitoring`): Prometheus, Grafana, Alertmanager, blackbox-exporter, alertmanager-discord
+- **Utilities** (`utilities`): Syncthing, Whoami
+- **Location** (`location`): OwnTracks (recorder + frontend)
+
+BOINC manifests live in `cluster/applications/boinc/` but are **not currently
+deployed** (no `boinc` namespace in the cluster). See its
+[README](cluster/applications/boinc/README.md).
 
 ## Quick Start
 
@@ -44,27 +49,32 @@ For detailed setup instructions, see [Installation Guide](docs/INSTALLATION.md).
 homelab/
 ├── cluster/                    # K3s manifests
 │   ├── applications/          # Application deployments
-│   │   ├── automation/       # Home Assistant, MariaDB
-│   │   ├── boinc/            # BOINC distributed computing
+│   │   ├── automation/       # Home Assistant, MariaDB, Mosquitto, Zigbee2MQTT
+│   │   ├── boinc/            # BOINC distributed computing (not deployed)
 │   │   ├── cloud/            # Nextcloud, Immich
-│   │   ├── games/            # Minecraft servers
+│   │   ├── games/            # Minecraft worlds, mc-router, backup CronJob
 │   │   ├── location/         # OwnTracks
-│   │   ├── media-stack/      # Jellyfin, Sonarr, Radarr, etc.
-│   │   ├── monitoring/       # Prometheus, Grafana, Alertmanager
-│   │   └── utilities/        # Whoami test service
-│   ├── infrastructure/        # NFS storage, priority classes
-│   └── manifests/            # Traefik, cert-manager
+│   │   ├── media-stack/      # Jellyfin, Sonarr, Radarr, Prowlarr, qBittorrent
+│   │   ├── monitoring/       # kube-prometheus-stack values, alert rules, blackbox
+│   │   └── utilities/        # Syncthing, Whoami
+│   ├── infrastructure/        # NFS StorageClass, priority classes
+│   └── manifests/            # Namespaces, Traefik, cert-manager issuers, storage
 ├── config/                    # Configuration
-│   ├── borgmatic/            # Backup configuration
-│   ├── service-configs/      # Auth, monitoring configs
+│   ├── borgmatic/            # Backup config + systemd units
+│   ├── service-configs/      # Storage monitoring config (gitignored + template)
+│   ├── system-configs/       # Backed-up host configs (fstab, snapraid, exports)
 │   ├── systemd/              # Timer/service units
-│   └── templates/            # Node config templates
+│   └── templates/            # Node config template
 ├── ansible/                   # Ansible playbooks for host setup
 ├── docs/                      # Documentation
-├── nodes/                     # Per-node configs (gitignored secrets)
+├── nodes/                     # Per-node configs + labels (secrets gitignored)
 ├── scripts/                   # Automation scripts
 └── vps/                       # VPS reverse proxy setup
 ```
+
+Note: `cluster/manifests/` holds cluster bootstrap resources applied with plain
+`kubectl apply`; `cluster/applications/` holds per-app Kustomize overlays and
+Helm values.
 
 ## Script Usage
 
@@ -77,11 +87,17 @@ ansible-playbook playbooks/k3s.yml --ask-become-pass
 # See docs/INSTALLATION.md for full list
 
 # Shell scripts (app deployment + management)
-./scripts/homelab.sh deploy        # Deploy all applications
+./scripts/homelab.sh deploy        # Deploy the script-managed stacks
 ./scripts/homelab.sh deploy media  # Deploy specific stack
 ./scripts/homelab.sh status        # Cluster health check
 ./scripts/homelab.sh logs <svc>    # View service logs
 ```
+
+`homelab.sh deploy` covers only the components `deploy-applications.sh` knows
+about: `infrastructure`, `cloud`, `media`, `location` (behind
+`ENABLE_LOCATION_SERVICES`) and `utilities`. The **automation**, **games**,
+**monitoring** and **boinc** stacks are deployed separately with `kubectl apply
+-k` or Helm — see the per-app READMEs and [Installation](docs/INSTALLATION.md).
 
 ## Adding Nodes
 

@@ -89,13 +89,11 @@ These settings should be applied:
 
 ## Notes
 
-- These settings are stored in `/var/www/html/config/config.php`
-- The config file is in the Nextcloud app volume, so it persists across pod restarts
-- If you need to reset Nextcloud completely, these must be reapplied
-- Settings were migrated from old Docker setup's `custom-config.php`
-
-## Notes
-
-- Settings persist in `/var/www/html/config/config.php` (Nextcloud app volume)
-- trusted_proxies use k3s pod/service network ranges (10.42.0.0/16, 10.43.0.0/16)
-- maintenance_window_start=1 aligns with backup schedule (1-5 AM window)
+- Settings persist in `/var/www/html/config/config.php`, which lives in the
+  Nextcloud app volume — they survive pod restarts
+- If you reset Nextcloud completely, these must be reapplied
+- `trusted_proxies` uses the k3s pod/service network ranges (10.42.0.0/16,
+  10.43.0.0/16)
+- `maintenance_window_start=1` gives a 1–5 AM window, which brackets the
+  SnapRAID sync (02:00) and borgmatic backup (03:00)
+- Settings were migrated from the old Docker setup's `custom-config.php`

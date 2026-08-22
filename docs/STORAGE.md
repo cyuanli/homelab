@@ -367,37 +367,21 @@ systemctl list-timers snapraid-runner.timer
 sudo touch /var/log/snapraid.log
 ```
 
-### Optional: Set up Discord notifications for failures:
-```bash
-# Create notification script
-sudo tee /usr/local/bin/snapraid-notify << 'EOF'
-#!/bin/bash
+### Failure notifications
 
-WEBHOOK_URL="YOUR_DISCORD_WEBHOOK_URL_HERE"
-LOG_FILE="/var/log/snapraid.log"
+No extra setup needed — `snapraid-runner.service` already chains the repo's
+notify script:
 
-# Get last few lines of log to check status
-LAST_LINES=$(tail -20 "$LOG_FILE")
-
-# Check if sync failed
-if echo "$LAST_LINES" | grep -q "FAILED\|ERROR\|DANGER"; then
-    # Extract error details
-    ERROR_MSG=$(echo "$LAST_LINES" | grep -E "FAILED|ERROR|DANGER" | tail -5)
-    
-    # Send Discord notification
-    curl -H "Content-Type: application/json" \
-         -d "{\"content\": \"🚨 **SnapRAID FAILED on $(hostname)**\n\`\`\`\n$ERROR_MSG\n\`\`\`\"}" \
-         "$WEBHOOK_URL"
-fi
-EOF
-
-sudo chmod +x /usr/local/bin/snapraid-notify
+```ini
+ExecStart=/usr/local/bin/snapraid-runner -c /etc/snapraid-runner.conf
+ExecStartPost=/home/cyl/homelab/scripts/snapraid-notify.sh
 ```
 
-Update the cron job to include notifications:
-```bash
-0 2 * * * /usr/local/bin/snapraid-runner && /usr/local/bin/snapraid-notify
-```
+`scripts/snapraid-notify.sh` parses `/var/log/snapraid.log` and writes
+Prometheus metrics to the node_exporter textfile collector; Alertmanager routes
+them to Discord via the `alertmanager-discord` deployment in the `monitoring`
+namespace. There is no standalone `/usr/local/bin/snapraid-notify` and no
+webhook URL to configure here.
 
 ---
 
@@ -530,20 +514,20 @@ If you need to set up monitoring manually:
 sudo apt install -y smartmontools curl
 ```
 
-#### Configure Discord Alerts:
+#### Configure the drive map:
 ```bash
-# Copy the configuration template
-cp scripts/disk-monitor.conf.example scripts/disk-monitor.conf
-
-# Edit with your Discord webhook URL
-nano scripts/disk-monitor.conf
+# Copy the configuration template (.conf is gitignored)
+cp config/service-configs/monitoring.conf.template config/service-configs/monitoring.conf
+nano config/service-configs/monitoring.conf
 ```
 
-Add your Discord webhook URL:
-```bash
-# Get webhook from Discord: Server Settings > Integrations > Webhooks
-DISK_MONITOR_WEBHOOK="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_TOKEN"
-```
+This file maps partitions to mount points and lists the physical drives to SMART
+check. It contains **no webhook** — alerts leave the host as Prometheus metrics
+in the node_exporter textfile collector and are routed to Discord by
+Alertmanager. Keys and a warning about unstable `/dev/sdX` names are documented
+in [Configuration](CONFIGURATION.md#monitoringconf); the current authoritative
+device mapping is in
+[`config/system-configs/DRIVE-MAPPING.md`](../config/system-configs/DRIVE-MAPPING.md).
 
 #### Setup Automated Monitoring:
 ```bash
@@ -565,11 +549,17 @@ journalctl -u disk-monitor.service -n 20
 - Tests write capability to all drives
 - Detects filesystem errors in system logs
 
-**🚨 Immediate Response on ANY Drive Failure:**
-1. **Stops ALL Docker containers** - Prevents new writes
-2. **Unmounts MergerFS pool** - Disables unified storage access
-3. **Remounts ALL drives as read-only** - Complete write protection
-4. **Exports Prometheus metrics** - Status exported for alerting
+**🚨 Immediate Response on ANY Drive Failure** (`lockdown_array()`), in order:
+1. **Stops all Docker containers** - prevents new writes (skipped if no docker)
+2. **Scales all deployments to 0 in the `media` and `cloud` namespaces** -
+   note this does *not* cover `automation`, `games` or `location`, which also
+   hold NFS-backed PVs
+3. **Unmounts the MergerFS pool** - disables unified storage access
+4. **Remounts ALL SnapRAID drives read-only** - complete write protection
+5. **Exports Prometheus metrics** - status exported for alerting
+
+The NFS export checks (Layer 4, below) are **advisory** and never trigger
+lockdown.
 
 **📊 Metric Types:**
 - 🚨 **Drive Health** - SMART failures, mount issues, filesystem errors
@@ -1015,10 +1005,10 @@ inode stability across restarts (2.41.0). Install the project's own `.deb`
 (recommended over the distro package):
 ```bash
 # On the storage host. Check https://github.com/trapexit/mergerfs/releases for the current version.
-mergerfs --version                      # confirm current (was 2.40.2)
+mergerfs -V                             # currently 2.42.0 (was 2.40.2-5 before 2026-08-21)
 curl -fsSLO https://github.com/trapexit/mergerfs/releases/download/2.42.0/mergerfs_2.42.0.debian-trixie_amd64.deb
 sudo dpkg -i mergerfs_2.42.0.debian-trixie_amd64.deb
-mergerfs --version                      # confirm >= 2.42.0
+mergerfs -V                             # confirm >= 2.42.0
 ```
 The upgrade does not touch data (files live on the ext4 branches `/mnt/data1-4`;
 mergerfs is only a union view). It does require one remount of the pool — do it
@@ -1030,7 +1020,12 @@ foreground service (`mergerfs -f`, `Restart=on-failure`). On a crash systemd
 remounts the pool, re-points the `/exports/*` bind mounts at the fresh pool, and
 runs `exportfs -ra` — turning a multi-hour outage into a ~5-second blip. Install
 with `ansible-playbook -i inventory.yml playbooks/mergerfs-service.yml` (installs
-the unit only; does not enable it).
+the unit only; does not enable it). The playbook is intentionally excluded from
+`site.yml` for the same reason.
+
+> **Not yet adopted (as of 2026-08-21).** The unit is not installed on
+> `cyl-homelab` and the pool is still mounted from `/etc/fstab`. This is the one
+> outstanding layer.
 
 > ⚠️ **Validate before enabling at boot.** The unit only touches mounts/exports,
 > never data, but a bad unit can disrupt NFS *serving*. Adopting it requires
@@ -1101,20 +1096,44 @@ read-only test pod mounting the plain `/media` export and reading
 required** and is not in `/etc/exports`; what un-sticks Nextcloud after a
 remount is refreshing nfsd (`exportfs -ra`), now automated by Layer 2.
 
-> **Cleanup note (post-incident state).** Manual debugging during the incident
-> left orphaned runtime bind mounts on the host that are **not** in `/etc/fstab`
+> **Cleanup note (resolved 2026-08-21).** Manual debugging during the incident
+> left orphaned runtime bind mounts on the host that were **not** in `/etc/fstab`
 > (`/media/nextcloud` — stacked twice, `/exports/media/nextcloud`,
-> `/media/data/nextcloud`). They are harmless (all point into the same pool) and
-> a reboot clears them, but should be unmounted for cleanliness. Find stragglers:
+> `/media/data/nextcloud`). The maintenance runbook below removed them; the only
+> match left is the legitimate kubelet NFS mount for the Nextcloud PV. Re-check
+> after any future incident:
 > `grep -E '/media/nextcloud|/exports/media/nextcloud|/media/data/nextcloud' /proc/mounts`
-> The maintenance runbook below removes them.
 
 ### Maintenance-window runbook (host, requires sudo)
-As of 2026-08-21 the host still runs mergerfs **2.40.2-5** mounted from
-`/etc/fstab` (pid via `pgrep -x mergerfs`) with the **old options** (no
-`noforget`/`inodecalc`). Data is untouched by this runbook (options/exports/
-binaries only). One pool remount briefly disrupts `/media`-backed pods;
-`/configs`-backed pods (separate disk) are unaffected.
+
+> **Status: completed 2026-08-21.** Layers 1 and 3 are live on `cyl-homelab`.
+> Verified after the window:
+> ```
+> $ mergerfs -V
+> mergerfs v2.42.0
+> $ pgrep -a mergerfs
+> 632 mergerfs /mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data \
+>     -o rw,noatime,direct_io,minfreespace=51G,category.create=epmfs,\
+>        moveonenospc=true,noforget,inodecalc=path-hash,dev,suid
+> ```
+> The orphaned incident-recovery binds are gone (`grep -E
+> '/media/nextcloud|/exports/media/nextcloud|/media/data/nextcloud' /proc/mounts`
+> returns only the legitimate kubelet NFS mount), `nfs-server` is active, and
+> `/proc/fs/nfs/exports` lists `fsid=1` and `fsid=2`.
+>
+> **Layer 2 is still NOT adopted.** `mergerfs-media.service` is not installed on
+> the host (`systemctl is-enabled mergerfs-media.service` → `not-found`) and the
+> pool is still mounted from `/etc/fstab`. A mergerfs crash therefore still
+> requires a manual remount — Layer 1's 2.42.0 ENOTCONN auto-unmount and Layer
+> 3's stable handles reduce the blast radius, but nothing restarts the pool
+> automatically yet. Adopt it via the Layer 2 steps above when you next have a
+> window.
+>
+> Keep the runbook below for the next mergerfs upgrade or drive change.
+
+Data is untouched by this runbook (options/exports/binaries only). One pool
+remount briefly disrupts `/media`-backed pods; `/configs`-backed pods (separate
+disk) are unaffected.
 ```bash
 # 1. Layer 1 — upgrade mergerfs (see the Layer 1 commands above).
 # 2. Layer 3 — add options to the /etc/fstab mergerfs line:

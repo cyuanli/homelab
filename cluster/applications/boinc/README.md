@@ -2,6 +2,23 @@
 
 BOINC (Berkeley Open Infrastructure for Network Computing) clients deployed across the K3s cluster as low-priority background workloads to contribute idle computing power to scientific research projects.
 
+> ⚠️ **Not currently deployed (checked 2026-08-21).** There is no `boinc`
+> namespace in the cluster and no BOINC DaemonSets are running. Everything below
+> describes the manifests in this directory and how to bring them up, not the
+> live state.
+
+## Layout — use `base/` + `overlays/`, not the root manifests
+
+Two generations of manifests coexist here:
+
+- **`base/` + `overlays/{standard,highcpu,highmem,xlarge}/`** — the current
+  DaemonSet-per-tier design described in this README. **Deploy from these.**
+- **Root-level `namespace.yaml`, `configmap.yaml`, `service.yaml`,
+  `secrets.yaml`, `kustomization.yaml`** — leftovers from the earlier
+  single-Deployment design. The root `kustomization.yaml` is **broken**: it
+  lists a `deployment.yaml` that does not exist, so `kubectl apply -k
+  cluster/applications/boinc/` fails. These files should be deleted.
+
 ## Architecture
 
 ### DaemonSet with Node-Type Overlays
@@ -12,6 +29,13 @@ BOINC runs as **DaemonSets** with **Kustomize overlays** per node tier:
 - **highmem** (cyl-aspiree17): 4 cores, 16GB RAM → 500m CPU request, 12Gi memory limit
 - **highcpu** (cyl-xps13): 8 cores, 8GB RAM → 500m CPU request, 6Gi memory limit
 - **standard** (cyl-inspiron14, cyl-yoga213): 4 cores, 8GB RAM → 500m CPU request, 6Gi memory limit
+
+Overlays select nodes via the `homelab/cpu-tier` and `homelab/memory-tier`
+labels in `nodes/<hostname>/labels.yaml`. Two low/low nodes are deliberately
+excluded from the `standard` tier: `cyl-homelab` by an explicit `NotIn`
+hostname rule (control plane + storage node), and `cyl-optiplex9020` by its
+`workload=essential-only:NoSchedule` taint, which the DaemonSet does not
+tolerate.
 
 ### Resource Management Strategy
 

@@ -32,11 +32,16 @@ minecraft/
 
 ## Active Servers
 
-| Server | Domain | MOTD | Type | Node |
-|--------|--------|------|------|------|
-| Cobblestone | cobblestone.mc.cliff.li | Cliff's Magical World | Fabric (Latest) | cyl-mitx |
-| Sandstone | sandstone.mc.cliff.li | it gets everywhere | Fabric (Latest) | cyl-mitx |
-| Apricorn | apricorn.mc.cliff.li | Cobblemon Adventures | Fabric (Latest) + Cobblemon | cyl-mitx |
+| Server | Domain | MOTD | Type | Node | State (2026-08-21) |
+|--------|--------|------|------|------|--------------------|
+| Cobblestone | cobblestone.mc.cliff.li | Cliff's Magical World | Fabric (Latest) | cyl-mitx | running (1/1) |
+| Sandstone | sandstone.mc.cliff.li | it gets everywhere | Fabric (Latest) | cyl-mitx | **scaled to 0** |
+| Apricorn | apricorn.mc.cliff.li | Cobblemon Adventures | Fabric (Latest) + Cobblemon | cyl-mitx | **scaled to 0** |
+
+Sandstone and Apricorn are idled at `replicas: 0` — their Helm releases, PVCs
+and services still exist, so bring one back with
+`kubectl scale deployment -n games minecraft-<name> --replicas=1`. The backup
+CronJob still covers all three.
 
 ## Architecture
 
@@ -222,26 +227,28 @@ helm upgrade minecraft-cobblestone itzg/minecraft -n games \
 
 ## Backup System
 
-- **Schedule**: Daily at 1 AM UTC
-- **Location**: NFS at `192.168.1.94:/games/minecraft/backups`
-- **Retention**: Last 7 daily backups per world
-- **Method**: rsync via Kubernetes CronJob
+- **Schedule**: `0 0 * * *` — daily at midnight UTC
+- **Storage**: NFS PV on `192.168.1.94`, path `/media/games` (StorageClass
+  `nfs-direct`), mounted at `/backups` in the job
+- **Worlds covered**: all three (cobblestone, sandstone, apricorn) — including
+  the two currently scaled to 0
+- **Retention**: last 7 daily backups per world; a daily that ages out is
+  **promoted to `weekly/`** if it is 7+ days newer than the newest existing
+  weekly, otherwise deleted
+- **Method**: rsync via Kubernetes CronJob (3 successful jobs kept in history)
 
 **Backup structure**:
 ```
 /backups/
-├── cobblestone/daily/
-│   ├── 20251231-010000/
-│   ├── 20251230-010000/
-│   └── ...
-├── sandstone/daily/
-│   ├── 20251231-010000/
-│   ├── 20251230-010000/
-│   └── ...
-└── apricorn/daily/
-    ├── 20251231-010000/
-    ├── 20251230-010000/
-    └── ...
+├── cobblestone/
+│   ├── daily/20251231-000000/ …   (last 7)
+│   └── weekly/20251215-000000/ …  (promoted)
+├── sandstone/
+│   ├── daily/ …
+│   └── weekly/ …
+└── apricorn/
+    ├── daily/ …
+    └── weekly/ …
 ```
 
 ### Restore from Backup
@@ -386,7 +393,6 @@ helm upgrade minecraft-<servername> itzg/minecraft -n games \
 
 - **mc-router Setup**: `mc-router/docs/README.md`
 - **Adding Servers**: `mc-router/docs/ADDING-SERVERS.md`
-- **Implementation Details**: `mc-router/docs/MC-ROUTER-IMPLEMENTATION.md`
 
 ## External Resources
 

@@ -10,10 +10,16 @@ Reverse proxy for Minecraft servers that enables routing multiple Minecraft serv
 
 ## How It Works
 
-mc-router uses Kubernetes auto-discovery to find Minecraft servers with the label:
+mc-router uses Kubernetes auto-discovery to find Minecraft **Services** carrying
+the annotation:
 ```yaml
-mc-router.itzg.me/externalServerName: "subdomain.cliff.li"
+metadata:
+  annotations:
+    mc-router.itzg.me/externalServerName: "subdomain.mc.cliff.li"
 ```
+
+With the `itzg/minecraft` Helm chart this is set via `serviceAnnotations:` in
+the world's values file — see `worlds/*-values.yaml`.
 
 When a client connects to a specific domain, mc-router reads the hostname from the Minecraft handshake packet and routes the connection to the appropriate backend server.
 

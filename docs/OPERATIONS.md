@@ -48,10 +48,13 @@ Automated backups using borgmatic with systemd timer (daily at 3:00 AM).
 ```bash
 sudo apt install borgmatic
 sudo mkdir -p /etc/borgmatic
-sudo cp config/templates/borgmatic.yaml.template /etc/borgmatic/config.yaml
+
+# The repo's tracked config is config/borgmatic/config.yaml
+sudo cp config/borgmatic/config.yaml /etc/borgmatic/config.yaml
 # Edit with your backup repositories and passphrase
 
 # Copy notification script for hooks
+sudo mkdir -p /etc/borgmatic/hooks
 sudo cp scripts/backup-notify.sh /etc/borgmatic/hooks/
 sudo chmod +x /etc/borgmatic/hooks/backup-notify.sh
 
@@ -61,6 +64,9 @@ sudo cp config/borgmatic/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now borgmatic.timer
 ```
+
+The passphrase lives in `config/borgmatic/.borg-passphrase` /
+`.borg-passphrase-env` — both gitignored.
 
 ### Commands
 
@@ -122,34 +128,22 @@ cat /var/lib/node_exporter/textfile_collector/*.prom
 ```bash
 # Create monitoring config from template
 cp config/service-configs/monitoring.conf.template config/service-configs/monitoring.conf
-# Edit with your drive configuration
-
-# Add cron job for disk monitoring (runs every 5 minutes)
-(crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/homelab/scripts/monitor-storage.sh check >/dev/null 2>&1") | crontab -
-
-# Test it works
-./scripts/monitor-storage.sh status
+# Edit with your drive configuration — see docs/CONFIGURATION.md
 ```
 
-**Backup monitoring** (if using borgmatic):
+The check itself runs from `disk-monitor.timer` (every 5 minutes), deployed by
+`ansible-playbook playbooks/systemd-timers.yml`. It is **not** a cron job.
 
 ```bash
-# Install borgmatic
-sudo apt install borgmatic
-
-# Create borgmatic config
-sudo mkdir -p /etc/borgmatic
-sudo cp config/templates/borgmatic.yaml.template /etc/borgmatic/config.yaml
-# Edit with your backup repositories and passphrase
-
-# Copy notification script for hooks
-sudo cp scripts/backup-notify.sh /etc/borgmatic/hooks/
-sudo chmod +x /etc/borgmatic/hooks/backup-notify.sh
-
-# Enable systemd timer for daily backups
-sudo systemctl enable borgmatic.timer
-sudo systemctl start borgmatic.timer
+./scripts/monitor-storage.sh status     # manual read
+systemctl status disk-monitor.timer
+journalctl -u disk-monitor.service -n 20
 ```
+
+Beyond drive SMART/mount state it also validates the server-side NFS export
+layer — see [Storage](STORAGE.md) → "Storage durability → Layer 4".
+
+**Backup monitoring**: see the Backups (Borgmatic) section above.
 
 ## Certificate Management
 

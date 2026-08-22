@@ -2,11 +2,15 @@
 
 ## Prerequisites
 
-- Fresh Debian 12 or Ubuntu 22.04 LTS
-- Root/sudo access
+- Debian-based Linux with sudo access. All current nodes run **Debian 13
+  (trixie)**; the playbooks were originally written against Debian 12 and should
+  still work there.
 - Tailscale account ([tailscale.com](https://tailscale.com))
 - Domain name (for SSL certificates)
+- Ansible on the control machine, plus `kubectl` and `helm` for the K8s steps
 - VPS with public IP (optional, for external access)
+
+Current cluster runs K3s `v1.33.5+k3s1` with containerd `2.1.4-k3s1`.
 
 ## Quick Install
 
@@ -58,10 +62,36 @@ ansible-playbook playbooks/nfs-storage.yml --ask-become-pass
 ansible-playbook playbooks/systemd-timers.yml --ask-become-pass
 
 # K3s cluster (requires vault password for cluster token)
-ansible-playbook playbooks/k3s.yml --ask-become-pass
+ansible-playbook playbooks/k3s.yml --ask-become-pass --ask-vault-pass
+```
+
+Or run the whole sequence at once — `site.yml` imports exactly the playbooks
+above, in that order:
+
+```bash
+ansible-playbook site.yml --ask-become-pass --ask-vault-pass \
+  -e tailscale_authkey=tskey-auth-...
 ```
 
 Use `--limit <hostname>` to target a single node.
+
+Add the new node to `ansible/inventory.yml` first — group membership decides
+what a node gets: `servers` (K3s control plane), `agents` (K3s workers),
+`storage` (NFS server, Docker, SnapRAID/disk timers), `monitoring`
+(auto-remediate timer), `backup` (borgmatic).
+
+`playbooks/mergerfs-service.yml` is **deliberately not** in `site.yml`. It
+installs the mergerfs auto-restart unit without enabling it, because adopting it
+requires manually commenting out the mergerfs line in `/etc/fstab` first. See
+[Storage](STORAGE.md) → "Storage durability".
+
+### Apply node labels
+
+BOINC's overlays and some scheduling rules key off node labels:
+
+```bash
+kubectl apply -f nodes/<hostname>/labels.yaml
+```
 
 ### Bootstrap K8s Infrastructure (first server only)
 
@@ -71,8 +101,56 @@ After K3s is running, apply the core K8s manifests:
 kubectl apply -f cluster/manifests/namespaces/
 kubectl apply -f cluster/manifests/storage/
 kubectl apply -f cluster/infrastructure/storage/nfs-direct-storageclass.yaml
+kubectl apply -k cluster/infrastructure/priority-classes/
 kubectl apply -f cluster/manifests/traefik/
+```
+
+cert-manager itself is **not** vendored in this repo — only the ClusterIssuers
+are. Install it first, then apply the issuers (which reference `ACME_EMAIL` and
+your domain). The running cluster has `v1.16.2` installed from the upstream
+static manifest (there is no cert-manager Helm release):
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
+kubectl -n cert-manager rollout status deploy/cert-manager
 kubectl apply -f cluster/manifests/cert-manager/
+```
+
+### Deploy Applications
+
+Script-managed stacks (`infrastructure`, `cloud`, `media`, `location`,
+`utilities`):
+
+```bash
+./scripts/homelab.sh deploy
+```
+
+The remaining stacks are applied directly. Helm-based ones need their repo added
+first:
+
+```bash
+# Automation — namespace, MariaDB, Mosquitto, Zigbee2MQTT, plus Home
+# Assistant's PVs/PVCs and ingress (the parent kustomization includes them all)
+kubectl apply -k cluster/applications/automation/
+
+# Home Assistant itself is a Helm release on top of the above
+helm repo add pajikos http://pajikos.github.io/home-assistant-helm-chart/
+helm upgrade --install home-assistant pajikos/home-assistant -n automation \
+  -f cluster/applications/automation/home-assistant/values.yaml
+
+# Monitoring
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  -n monitoring -f cluster/applications/monitoring/kube-prometheus-stack-values.yaml
+helm upgrade --install prometheus-blackbox-exporter prometheus-community/prometheus-blackbox-exporter \
+  -n monitoring -f cluster/applications/monitoring/blackbox-exporter-values.yaml
+kubectl apply -f cluster/applications/monitoring/alertmanager-discord.yaml
+kubectl apply -f cluster/applications/monitoring/prometheus-rules-*.yaml
+kubectl apply -f cluster/applications/monitoring/storage-pvs.yaml \
+              -f cluster/applications/monitoring/storage-pvcs.yaml
+
+# Games — see cluster/applications/games/minecraft/README.md
+# Immich — see cluster/applications/cloud/immich/README.md
 ```
 
 ### Verify
@@ -80,7 +158,9 @@ kubectl apply -f cluster/manifests/cert-manager/
 ```bash
 ./scripts/homelab.sh status
 kubectl get pods -A
+helm list -A
 ```
+
 
 ## Adding More Nodes
 

@@ -2,6 +2,14 @@
 
 Immich is a high-performance self-hosted photo and video management solution, similar to Google Photos.
 
+> ⚠️ **Current state (checked 2026-08-21):** the Helm release is in `failed`
+> status at revision 21 (chart `immich-0.10.3`, app `v2.0.0`, last touched
+> 2025-12-09) even though `immich-server`, `immich-machine-learning` and
+> `immich-redis` are all running 1/1. A failed release blocks nothing today but
+> will complicate the next `helm upgrade`. Inspect with
+> `helm status immich -n cloud` and `helm history immich -n cloud` before
+> upgrading; a `helm rollback` to the last good revision may be needed first.
+
 ## Architecture
 
 - **Database**: PostgreSQL 16 with pgvecto-rs extension (for ML features)
@@ -41,21 +49,17 @@ This configuration reduces HDD wear by moving ~22GB of high-frequency write oper
 
 ## Deployment
 
-### Quick Deploy
+Immich is split across two tools: **Kustomize** owns the supporting resources
+(secrets, PVs/PVCs, PostgreSQL, Redis, ingress, middlewares) and **Helm** owns
+the Immich application itself.
 
-Run the deployment script:
-```bash
-./cluster/applications/media-stack/immich/deploy.sh
-```
-
-### Manual Deployment
-
-1. **Apply all resources using Kustomize**:
+1. **Apply the supporting resources with Kustomize** — this covers everything in
+   `kustomization.yaml`, including the ingress and middlewares:
    ```bash
    kubectl apply -k cluster/applications/cloud/immich/
    ```
 
-   Or manually:
+   Or individually:
    ```bash
    kubectl apply -f cluster/applications/cloud/immich/secrets.yaml
    kubectl apply -f cluster/applications/cloud/immich/storage-pvs.yaml
@@ -64,6 +68,8 @@ Run the deployment script:
    kubectl apply -f cluster/applications/cloud/immich/storage-cache-pvcs.yaml
    kubectl apply -f cluster/applications/cloud/immich/postgres.yaml
    kubectl apply -f cluster/applications/cloud/immich/redis.yaml
+   kubectl apply -f cluster/applications/cloud/immich/middleware.yaml
+   kubectl apply -f cluster/applications/cloud/immich/ingress.yaml
    ```
 
 2. **Deploy Immich via Helm**:
@@ -77,47 +83,31 @@ Run the deployment script:
        --wait
    ```
 
-3. **Apply ingress**:
-   ```bash
-   kubectl apply -f cluster/applications/cloud/immich/ingress.yaml
-   ```
-
 ## Access
 
-- **URL**: https://immich.cliff.li
-- **DNS**: Ensure `immich.cliff.li` points to your cluster's ingress IP
+- **URL**: https://photos.cliff.li
+- **DNS**: Ensure `photos.cliff.li` points to your cluster's ingress IP
 
 ## Post-Deployment
 
-1. Access the web interface at https://immich.cliff.li
+1. Access the web interface at https://photos.cliff.li
 2. Complete the initial setup wizard
 3. Create your admin account
 4. Download the Immich mobile app (iOS/Android)
-5. Configure the app to connect to `https://immich.cliff.li`
+5. Configure the app to connect to `https://photos.cliff.li`
 
 ## Machine Learning
 
-Machine learning is **disabled by default** to save resources. To enable:
+Machine learning is **enabled** (`machine-learning.enabled: true` in
+`values.yaml`); the `immich-machine-learning` deployment runs in the `cloud`
+namespace. To disable it and reclaim the resources, set `enabled: false` and
+upgrade the release:
 
-1. Edit `values.yaml` and set:
-   ```yaml
-   env:
-     IMMICH_MACHINE_LEARNING_ENABLED: "true"
-
-   machine-learning:
-     enabled: true
-     persistence:
-       cache:
-         enabled: true
-         size: 10Gi
-   ```
-
-2. Upgrade the Helm release:
-   ```bash
-   helm upgrade immich immich/immich \
-       --namespace cloud \
-       --values cluster/applications/cloud/immich/values.yaml
-   ```
+```bash
+helm upgrade immich immich/immich \
+    --namespace cloud \
+    --values cluster/applications/cloud/immich/values.yaml
+```
 
 ## Monitoring
 

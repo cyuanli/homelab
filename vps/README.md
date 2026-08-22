@@ -34,6 +34,19 @@ Internet → VPS (Nginx) → Tailscale VPN → K3s Cluster (Traefik) → Applica
 - **Automatic Failover**: Health checks (`max_fails=2 fail_timeout=5s`)
 - **SSL Passthrough**: Certificates handled by Traefik on homelab
 
+Nginx runs in `stream` mode (L4 TCP/UDP), so it forwards bytes without
+terminating TLS. Ports proxied:
+
+| Port | Proto | Upstream | Purpose |
+|------|-------|----------|---------|
+| 443 | TCP | Traefik :443 | HTTPS |
+| 443 | UDP | Traefik :443 | HTTP/3 (QUIC) |
+| 80 | TCP | Traefik :80 | HTTP (redirected to HTTPS by Traefik) |
+| 25565 | TCP | mc-router :25565 | Minecraft |
+| 51422 | TCP | first node :22 | SSH (single node, not load balanced) |
+
+Everything except SSH is balanced across all `HOME_PC_NAMES`.
+
 ## Management
 
 ```bash
