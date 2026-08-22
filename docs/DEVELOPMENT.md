@@ -150,8 +150,12 @@ NFS server: `192.168.1.94`. The export root is `/exports`, but PV paths are
 written **relative to the NFSv4 pseudo-root** — i.e. `/media/<service>` for the
 `/exports/media` bind (`fsid=1`) and `/configs/<service>` for the
 `/exports/configs` bind (`fsid=2`). Existing exports are listed in
-`config/system-configs/exports`; adding a new top-level export requires editing
-`/etc/fstab` and `/etc/exports` on the host, then `sudo exportfs -ra`.
+`config/system-configs/exports`. That file is Ansible-managed — adding a new
+top-level export means editing the bind mount in `/etc/fstab` on the host and
+the repo's `exports` file, then re-running
+`ansible-playbook playbooks/nfs-storage.yml --limit cyl-homelab`, which copies
+it and runs `exportfs -ra`. Exports are scoped to the 7 cluster node IPs, so a
+new node must be added to all three export lines before it can mount anything.
 
 ## Common Commands
 

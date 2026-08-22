@@ -1,6 +1,10 @@
 # Minecraft Fabric Server with Cobblemon - Helm Values
 # Chart: itzg/minecraft
 
+# Idled deliberately. Without this, the chart default (replicaCount: 1) makes
+# any `helm upgrade` silently restart this world. Set to 1 to bring it back.
+replicaCount: 0
+
 # Pin to Java 21 - Cobblemon requires exactly Java 21 (not 25)
 image:
   tag: java21

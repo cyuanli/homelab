@@ -249,11 +249,24 @@ exclude .snapshots/
 exclude lost+found/
 exclude /tmp/
 exclude .Trashes/
+# Transient write-probes from scripts/monitor-storage.sh (every 5 min)
+exclude .disk-health-test.*
 
 # Configuration
 block_size 256
 autosave 250
 ```
+
+> Unlike `/etc/exports`, **`/etc/snapraid.conf` is not Ansible-managed.**
+> `config/system-configs/snapraid.conf` is a reference copy only — changes must
+> be applied to the host by hand, and the two have drifted before (the live file
+> carries a 2-space indent on every line, which SnapRAID tolerates).
+>
+> The `.disk-health-test.*` exclusion matters because `monitor-storage.sh` drops
+> a `mktemp` probe into each drive root and the pool every 5 minutes to verify
+> writability. They are unlinked immediately, but without the exclusion a
+> concurrent `snapraid sync` can race against them and count them as new or
+> deleted files.
 
 ### Create content directory:
 ```bash
@@ -679,18 +692,23 @@ sudo systemctl enable --now nfs-kernel-server
 
 Our NFS setup uses `/exports` as the NFSv4 root with bind mounts for each service. This allows us to expose specific subdirectories with unique filesystem IDs.
 
+**Do not hand-edit `/etc/exports`.** It is Ansible-managed: the tracked file
+`config/system-configs/exports` is copied to `/etc/exports`, and a handler runs
+`exportfs -ra`. Edit the repo copy, then:
+
 ```bash
-sudo nano /etc/exports
+cd ansible
+ansible-playbook playbooks/nfs-storage.yml --ask-become-pass --limit cyl-homelab
 ```
 
-Add the following (adjust the network range to match your LAN):
+The exports look like this — one entry per client, three exports:
 ```bash
 # NFSv4 export root
-/exports 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+/exports 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.94(...) ...
 
 # Explicit subdirectory exports (bind mounts need explicit exports with fsid)
-/exports/media 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=1)
-/exports/configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
+/exports/media   <same 7 clients>(rw,sync,no_subtree_check,no_root_squash,fsid=1)
+/exports/configs <same 7 clients>(rw,sync,no_subtree_check,no_root_squash,fsid=2)
 ```
 
 **Note:** We use a simplified structure where `/exports/media` contains all application data (immich, nextcloud, games, etc.) as subdirectories. This avoids redundant bind mounts and export entries.
@@ -702,6 +720,32 @@ Add the following (adjust the network range to match your LAN):
 - `no_root_squash` - Preserve root permissions (needed for containers)
 - `fsid=0` - NFSv4 pseudo-root (allows relative paths in mounts)
 - `fsid=1,2,3...` - Unique filesystem IDs for each subdirectory export
+
+### Client scoping (why not `192.168.1.0/24`)
+
+Exports are listed per **cluster node IP**, not to the whole LAN subnet. These
+exports carry `no_root_squash`, which means any host permitted to mount them can
+write as **root** anywhere in the tree. Exporting to `192.168.1.0/24` extended
+that to every phone, TV, laptop and IoT device on the network. Scoping to the 7
+node IPs removes that exposure with no functional change — verified at the time
+of the change that only cluster nodes had NFS connections open.
+
+> ⚠️ This makes node addresses load-bearing. They must be DHCP reservations or
+> static leases: if a node's IP changes it silently loses access and every
+> NFS-backed pod on it fails. When adding or re-addressing a node, update all
+> three lines in `config/system-configs/exports` and re-run the playbook.
+
+**`no_root_squash` is still required on `/exports/media`.** Home Assistant runs
+as `uid=0` and writes root-owned files into `/media/data/home-assistant/config`
+(verified via `kubectl exec deploy/home-assistant -- id`), and the Minecraft
+backup CronJob writes root-owned directories under `/media/data/games`. Removing
+it would leave both unable to write. `/exports/configs` consumers all run
+non-root (mariadb 999, mosquitto 1883, zigbee2mqtt 65534, grafana 472,
+syncthing/media-stack/owntracks 1000), so that export could be squashed once
+verified — as could `/exports` (fsid=0), which serves no data. Fully closing
+`/exports/media` requires migrating Home Assistant and the backup job to a
+non-root UID and chown'ing their existing data — **back up first**, since an
+incomplete chown leaves the HA config and SQLite database unwritable.
 
 **Set up bind mounts:**
 

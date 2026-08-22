@@ -8,10 +8,32 @@
 # /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
 # /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
 
+# ---------------------------------------------------------------------------
+# Access is scoped to the 7 K3s cluster nodes rather than the whole
+# 192.168.1.0/24 LAN. These exports carry no_root_squash, so any host that can
+# mount them can write as root; limiting the client list keeps that capability
+# off every phone, TV and IoT device on the LAN.
+#
+#   192.168.1.92   cyl-optiplex9020  (server)
+#   192.168.1.94   cyl-homelab       (server, this NFS host - mounts its own exports)
+#   192.168.1.95   cyl-mitx          (server)
+#   192.168.1.100  cyl-inspiron14    (agent)
+#   192.168.1.102  cyl-yoga213       (agent)
+#   192.168.1.103  cyl-xps13         (agent)
+#   192.168.1.105  cyl-aspiree17     (agent)
+#
+# These must be DHCP reservations or static leases. If a node's address
+# changes, its NFS mounts fail and every NFS-backed pod on it breaks. When
+# adding or re-addressing a node, update all three lines below AND
+# docs/DEVELOPMENT.md, then run: sudo exportfs -ra
+#
+# no_root_squash is still required on /exports/media because Home Assistant
+# runs as uid 0 and writes root-owned files there. See docs/STORAGE.md.
+# ---------------------------------------------------------------------------
+
 # NFSv4 export root
-/exports 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+/exports 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=0)
 
 # Explicit subdirectory exports (bind mounts need explicit exports with fsid)
-/exports/media 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=1)
-/exports/configs 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,fsid=2)
-
+/exports/media 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=1)
+/exports/configs 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=2)

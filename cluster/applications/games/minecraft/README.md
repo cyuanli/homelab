@@ -38,10 +38,22 @@ minecraft/
 | Sandstone | sandstone.mc.cliff.li | it gets everywhere | Fabric (Latest) | cyl-mitx | **scaled to 0** |
 | Apricorn | apricorn.mc.cliff.li | Cobblemon Adventures | Fabric (Latest) + Cobblemon | cyl-mitx | **scaled to 0** |
 
-Sandstone and Apricorn are idled at `replicas: 0` — their Helm releases, PVCs
-and services still exist, so bring one back with
-`kubectl scale deployment -n games minecraft-<name> --replicas=1`. The backup
-CronJob still covers all three.
+Sandstone and Apricorn are idled — their Helm releases, PVCs and services still
+exist, only the pods are stopped. The idle state is pinned as `replicaCount: 0`
+in each world's values file, **not** by a manual `kubectl scale`: the chart
+defaults to `replicaCount: 1`, so an unpinned world silently restarts on the
+next `helm upgrade`.
+
+To bring a world back, set `replicaCount: 1` in its values file and upgrade —
+this keeps the repo authoritative:
+
+```bash
+helm upgrade minecraft-sandstone itzg/minecraft -n games \
+  -f worlds/sandstone-values.yaml
+```
+
+The backup CronJob covers all three worlds regardless of whether they're
+running.
 
 ## Architecture
 

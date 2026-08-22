@@ -7,17 +7,25 @@ BOINC (Berkeley Open Infrastructure for Network Computing) clients deployed acro
 > describes the manifests in this directory and how to bring them up, not the
 > live state.
 
-## Layout — use `base/` + `overlays/`, not the root manifests
+## Layout
 
-Two generations of manifests coexist here:
+`base/` + `overlays/{standard,highcpu,highmem,xlarge}/` is the single definition
+— the DaemonSet-per-tier design described below. Always deploy from an
+**overlay**, never from this directory:
 
-- **`base/` + `overlays/{standard,highcpu,highmem,xlarge}/`** — the current
-  DaemonSet-per-tier design described in this README. **Deploy from these.**
-- **Root-level `namespace.yaml`, `configmap.yaml`, `service.yaml`,
-  `secrets.yaml`, `kustomization.yaml`** — leftovers from the earlier
-  single-Deployment design. The root `kustomization.yaml` is **broken**: it
-  lists a `deployment.yaml` that does not exist, so `kubectl apply -k
-  cluster/applications/boinc/` fails. These files should be deleted.
+```bash
+kubectl apply -k cluster/applications/boinc/overlays/<tier>
+```
+
+There is deliberately no `kustomization.yaml` at this level, so
+`kubectl apply -k cluster/applications/boinc/` will not work.
+
+> **Cleanup 2026-08-22.** Leftovers from an earlier single-Deployment design
+> (root-level `namespace.yaml`, `configmap.yaml`, `service.yaml` — all
+> byte-identical to their `base/` copies — plus a `kustomization.yaml` that
+> referenced a `deployment.yaml` which never existed, so it could not build)
+> were removed. `secrets.yaml` (gitignored, holds the project account keys) and
+> `secrets.yaml.template` were kept.
 
 ## Architecture
 
