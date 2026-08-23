@@ -3,10 +3,8 @@ kind: Kustomization
 
 namespace: boinc
 
-# Name suffix to distinguish DaemonSets
 nameSuffix: -highmem
 
-# Common labels for all resources
 labels:
   - pairs:
       boinc.homelab/profile: highmem

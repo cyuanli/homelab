@@ -1,24 +1,11 @@
-# mergerfs-media.service — pooled storage /media/data with crash auto-restart
+# Replaces the fstab mergerfs mount. Under fstab a mergerfs segfault left
+# /media/data ENOTCONN, nfsd serving stale handles, and every NFS-backed pod
+# cascading until a manual remount (2026-08-21). noforget + inodecalc=path-hash
+# keep client file handles valid across a restart, needs mergerfs >= 2.41.
 #
-# PURPOSE (durability, added after the 2026-08-21 mergerfs segfault incident):
-#   The pool was mounted via /etc/fstab, so when mergerfs segfaulted nothing
-#   restarted it: /media/data went ENOTCONN, the NFS export served stale/broken
-#   handles, and the whole cluster's NFS-backed pods cascaded into failure until
-#   a manual remount. This unit replaces the fstab mergerfs mount so systemd:
-#     - auto-restarts mergerfs on crash (Restart=on-failure),
-#     - re-establishes the /exports/* bind mounts on top of the fresh pool,
-#     - refreshes nfsd (exportfs -ra) after every (re)mount — the manual step
-#       that was needed to un-stick NFS during the incident.
-#   Mount options add noforget + inodecalc=path-hash so NFS clients keep valid
-#   file handles across a restart (needs mergerfs >= 2.41 for stable inodes).
-#
-# ⚠️  VALIDATE BEFORE ENABLING AT BOOT — see docs/STORAGE.md "Storage durability".
-#     This unit only touches mounts/exports, never data (files live on the ext4
-#     branches /mnt/data1-4), but a bad unit can disrupt NFS *serving*. Test the
-#     crash -> restart -> rebind -> exportfs -> client-still-reads path first.
-#     Adopting it requires commenting out the mergerfs line in /etc/fstab to
-#     avoid a double mount. The /exports/configs bind (separate disk) stays in
-#     fstab and is unaffected.
+# VALIDATE BEFORE ENABLING AT BOOT, see docs/STORAGE.md "Storage durability".
+# A bad unit disrupts NFS serving. Adopting it requires commenting out the
+# mergerfs line in /etc/fstab first or the pool gets double-mounted.
 
 [Unit]
 Description=mergerfs pooled storage (/media/data)
@@ -31,14 +18,12 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-# Clear any stale/ENOTCONN mount left by a previous crash before remounting.
+# Clears a stale ENOTCONN mount left by a previous crash.
 ExecStartPre=-/bin/fusermount -uz /media/data
 ExecStart=/usr/bin/mergerfs -f -o defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true,noforget,inodecalc=path-hash /mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data
-# Wait until the FUSE mount is actually live.
 ExecStartPost=/bin/sh -c 'for i in $(seq 1 50); do mountpoint -q /media/data && exit 0; sleep 0.2; done; exit 1'
-# Re-point the NFS export bind mounts at the (possibly new) pool, then refresh
-# nfsd so clients see the current export. Lazy-umount clears a stale bind that
-# nfsd may still reference.
+# Re-point the export binds at the new pool, then refresh nfsd. Lazy umount
+# clears a stale bind nfsd may still reference.
 ExecStartPost=/bin/sh -c 'mountpoint -q /exports/media && umount -l /exports/media; mount --bind /media/data /exports/media'
 ExecStartPost=/bin/sh -c 'mountpoint -q /exports/games && umount -l /exports/games; mount --bind /media/data/games /exports/games'
 ExecStartPost=/usr/sbin/exportfs -ra

@@ -1,17 +1,13 @@
 ---
-# Kubernetes CronJob for backing up ALL Minecraft world data
-# Runs daily at 1 AM UTC
-# Keeps last 7 daily backups, promotes old dailies to weekly (12 weeks retained)
+# Keeps 7 dailies per world, promotes older ones to weekly, retains 12 weeklies.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: minecraft-backup
   namespace: games
 spec:
-  # Run daily at 1 AM CET (midnight UTC)
   schedule: "0 0 * * *"
 
-  # Keep last 3 successful jobs for history
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
 
@@ -24,7 +20,7 @@ spec:
         spec:
           restartPolicy: OnFailure
 
-          # Run on cyl-mitx to access local-path storage
+          # local-path PVs are node-local.
           nodeSelector:
             kubernetes.io/hostname: cyl-mitx
 
@@ -37,23 +33,19 @@ spec:
             - |
               set -e
 
-              # Install rsync
               apk add --no-cache rsync
 
-              # Create dated backup timestamp
               BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
 
               echo "Starting Minecraft worlds backup: $BACKUP_DATE"
 
-              # Function to check if world region data changed compared to previous backup
-              # Returns 0 (true) if changed or no previous backup, 1 (false) if unchanged
-              # Only checks world/region/ files (actual chunk data) to detect real changes
+              # Returns 0 when changed. Compares world/region only, the chunk
+              # data players actually modify.
               world_data_changed() {
                 local world_name=$1
                 local current_backup=$2
                 local previous_backup=$3
 
-                # If no previous backup, consider it "changed"
                 if [ -z "$previous_backup" ]; then
                   return 0
                 fi
@@ -61,32 +53,26 @@ spec:
                 local current_region="/backups/$world_name/daily/$current_backup/world/region"
                 local previous_region="/backups/$world_name/daily/$previous_backup/world/region"
 
-                # If region directories don't exist, compare full backup
                 if [ ! -d "$current_region" ] || [ ! -d "$previous_region" ]; then
                   return 0
                 fi
 
-                # Use rsync dry-run to check for differences in region files
-                # These are the actual chunk data that changes when players modify the world
                 local changes=$(rsync -ani "$current_region/" "$previous_region/" 2>/dev/null | grep -v '^\.d' | head -1)
 
                 if [ -n "$changes" ]; then
-                  return 0  # Changed
+                  return 0
                 else
-                  return 1  # Unchanged
+                  return 1
                 fi
               }
 
-              # Function to safely delete a backup directory (works with NFS)
               safe_delete() {
                 local dir=$1
 
-                # Validate the directory is in the expected backup location using case
                 case "$dir" in
                   /backups/cobblestone/daily/*|/backups/cobblestone/weekly/*|\
                   /backups/sandstone/daily/*|/backups/sandstone/weekly/*|\
                   /backups/apricorn/daily/*|/backups/apricorn/weekly/*)
-                    # Path is valid
                     ;;
                   *)
                     echo "  ERROR: Refusing to delete $dir - not in expected backup path"
@@ -94,37 +80,30 @@ spec:
                     ;;
                 esac
 
-                # Validate the directory exists
                 if [ ! -d "$dir" ]; then
                   echo "  WARNING: Directory $dir does not exist, skipping"
                   return 0
                 fi
 
                 echo "  Deleting $dir..."
-                # Use find with proper deletion order for NFS compatibility
-                # Delete files first, then directories from bottom-up
+                # NFS needs files gone before their directories, bottom-up.
                 find "$dir" -depth -type f -delete 2>/dev/null || true
                 find "$dir" -depth -type d -exec rmdir {} \; 2>/dev/null || true
-                # Final cleanup with rm -rf in case anything remains
                 rm -rf "$dir" 2>/dev/null || true
               }
 
-              # Function to backup a world and deduplicate if unchanged
               backup_world() {
                 local world_name=$1
                 local source_path=$2
 
                 echo "Backing up $world_name world..."
 
-                # Get previous backup before creating new one
                 local previous_backup=$(ls -1 /backups/$world_name/daily 2>/dev/null | sort -r | head -1)
 
-                # Always create the backup
                 mkdir -p "/backups/$world_name/daily/$BACKUP_DATE"
                 rsync -av --delete "$source_path/" "/backups/$world_name/daily/$BACKUP_DATE/"
                 echo "$world_name backup completed"
 
-                # Check if world data actually changed from previous backup
                 if [ -n "$previous_backup" ]; then
                   if ! world_data_changed "$world_name" "$BACKUP_DATE" "$previous_backup"; then
                     echo "  World data unchanged from $previous_backup, removing duplicate"
@@ -139,21 +118,17 @@ spec:
               backup_world "sandstone" "/data/sandstone"
               backup_world "apricorn" "/data/apricorn"
 
-              # Function to promote daily backup to weekly if needed
               promote_to_weekly() {
                 local world=$1
                 local backup_dir=$2
 
-                # Get most recent weekly backup date (if any)
                 local latest_weekly=""
                 if [ -d "/backups/$world/weekly" ]; then
                   latest_weekly=$(ls -1 /backups/$world/weekly 2>/dev/null | sort -r | head -1)
                 fi
 
-                # Extract just the date part (YYYYMMDD) from backup_dir
                 local backup_date=${backup_dir:0:8}
 
-                # If no weekly backup exists, promote this one
                 if [ -z "$latest_weekly" ]; then
                   echo "  No weekly backups exist, promoting $backup_dir to weekly"
                   mkdir -p "/backups/$world/weekly"
@@ -161,18 +136,15 @@ spec:
                   return 0
                 fi
 
-                # Extract date from latest weekly backup
                 local weekly_date=${latest_weekly:0:8}
 
-                # Calculate days difference
-                # Convert YYYYMMDD to YYYY-MM-DD for BusyBox date compatibility
+                # BusyBox date only parses YYYY-MM-DD.
                 local backup_fmt="${backup_date:0:4}-${backup_date:4:2}-${backup_date:6:2}"
                 local weekly_fmt="${weekly_date:0:4}-${weekly_date:4:2}-${weekly_date:6:2}"
                 local backup_epoch=$(date -d "$backup_fmt" +%s 2>/dev/null || echo 0)
                 local weekly_epoch=$(date -d "$weekly_fmt" +%s 2>/dev/null || echo 0)
                 local days_diff=$(( (backup_epoch - weekly_epoch) / 86400 ))
 
-                # If backup is 7+ days newer than latest weekly, promote it
                 if [ $days_diff -ge 7 ]; then
                   echo "  Backup $backup_dir is $days_diff days newer than latest weekly, promoting"
                   mv "/backups/$world/daily/$backup_dir" "/backups/$world/weekly/$backup_dir"
@@ -182,11 +154,9 @@ spec:
                 return 1
               }
 
-              # Rotate cobblestone backups (keep last 7 daily, promote old to weekly)
               echo "Rotating cobblestone backups..."
               if [ -d /backups/cobblestone/daily ]; then
                 cd /backups/cobblestone/daily
-                # Get backups sorted by name (newest first), skip first 7
                 for backup in $(ls -1 | sort -r | tail -n +8); do
                   if ! promote_to_weekly "cobblestone" "$backup"; then
                     safe_delete "/backups/cobblestone/daily/$backup"
@@ -194,7 +164,6 @@ spec:
                 done
               fi
 
-              # Rotate sandstone backups (keep last 7 daily, promote old to weekly)
               echo "Rotating sandstone backups..."
               if [ -d /backups/sandstone/daily ]; then
                 cd /backups/sandstone/daily
@@ -205,7 +174,6 @@ spec:
                 done
               fi
 
-              # Rotate apricorn backups (keep last 7 daily, promote old to weekly)
               echo "Rotating apricorn backups..."
               if [ -d /backups/apricorn/daily ]; then
                 cd /backups/apricorn/daily
@@ -216,7 +184,6 @@ spec:
                 done
               fi
 
-              # Keep only last 12 weekly backups per world (about 3 months)
               echo "Cleaning old weekly backups (keeping last 12)..."
               for world in cobblestone sandstone apricorn; do
                 if [ -d /backups/$world/weekly ]; then

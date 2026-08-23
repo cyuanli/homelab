@@ -6,7 +6,6 @@
       ansible.builtin.copy:
         dest: "/etc/sudoers.d/homelab-{{ homelab_user }}"
         content: |
-          # Homelab permissions for {{ homelab_user }}
           {{ homelab_user }} ALL=(ALL) NOPASSWD: /usr/local/bin/k3s*
           {{ homelab_user }} ALL=(ALL) NOPASSWD: /bin/systemctl
           {{ homelab_user }} ALL=(ALL) NOPASSWD: /usr/bin/apt

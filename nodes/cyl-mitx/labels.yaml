@@ -1,7 +1,4 @@
-# Node labels for cyl-mitx
-# Apply with: kubectl apply -f labels.yaml
-#
-# Hardware specs: 12 CPUs, 16GB RAM
+# 12 CPU, 16GB
 apiVersion: v1
 kind: Node
 metadata:

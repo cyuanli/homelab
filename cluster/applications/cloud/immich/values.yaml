@@ -1,9 +1,5 @@
-# Immich Helm Chart Values
-# Using official chart from immich-app/immich-charts
-
 replicaCount: 2
 
-# Global environment variables for all components
 controllers:
   main:
     containers:
@@ -11,7 +7,6 @@ controllers:
         image:
           tag: v2.3.1
         env:
-          # Database configuration
           DB_HOSTNAME: immich-postgres
           DB_PORT: "5432"
           DB_USERNAME: immich
@@ -21,10 +16,8 @@ controllers:
               secretKeyRef:
                 name: immich-secrets
                 key: db-password
-          # Redis configuration
           REDIS_HOSTNAME: immich-redis
           REDIS_PORT: "6379"
-          # Enable machine learning for facial recognition and object detection
           IMMICH_MACHINE_LEARNING_ENABLED: "true"
 
 immich:
@@ -48,7 +41,7 @@ server:
 
   ingress:
     main:
-      enabled: false  # We'll create a separate Ingress resource
+      enabled: false  # See ingress.yaml.
 
 machine-learning:
   enabled: true
@@ -64,13 +57,9 @@ machine-learning:
     cache:
       enabled: true
       size: 10Gi
-      # Using emptyDir for cache (will be recreated on pod restart)
-      # Change to persistentVolumeClaim if you want to persist the cache
       type: emptyDir
 
-# Disable embedded Valkey (we're using external Redis)
+# External Redis instead, see redis.yaml.
 valkey:
   enabled: false
 
-# Note: PostgreSQL and Redis subcharts have been removed from the Immich chart
-# We're using external PostgreSQL and Redis instances configured via env vars above

@@ -1,5 +1,4 @@
 ---
-# NFS PersistentVolume for Minecraft backups
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -19,7 +18,6 @@ spec:
     path: /media/games
 
 ---
-# PersistentVolumeClaim for backups
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

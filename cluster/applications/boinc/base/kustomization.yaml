@@ -9,4 +9,4 @@ resources:
   - service.yaml
   - daemonset.yaml
 
-# Secrets should be created separately (see secrets.yaml.template)
+# Secrets applied separately, see secrets.yaml.template.

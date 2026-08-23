@@ -1,28 +1,19 @@
-# SnapRAID + MergerFS Storage Pool
-# Added on 2025-08-29
-
-# Root filesystem
 UUID=5d0349bc-9c4b-4463-b21e-8ccaf6f861d1 / ext4 defaults 0 1
 
-# Parity drive (XFS)
 UUID=813d8234-916d-42e1-89ce-cff117feab67 /mnt/parity1 xfs defaults,noatime 0 2
 
-# Data drives (ext4) - ordered by size
 UUID=53c59e25-4e9a-4c82-a83a-40941151e959 /mnt/data1 ext4 defaults,noatime,nodiratime 0 2
 UUID=cade9ae8-5631-4ceb-9be4-af09085bcc8a /mnt/data2 ext4 defaults,noatime,nodiratime 0 2
 UUID=f3671b3e-6a45-4904-aec5-e5cfa774b64c /mnt/data3 ext4 defaults,noatime,nodiratime 0 2
 UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodiratime 0 2
 
-# MergerFS unified pool
-#   noforget + inodecalc=path-hash keep NFS file handles valid across a mergerfs
-#   remount/restart (prevents the cluster-wide "stale file handle" cascade).
-#   Requires mergerfs >= 2.41 for the improved inode stability. See docs/STORAGE.md.
-# NOTE: For crash auto-restart, this line is superseded by mergerfs-media.service
-#   (config/systemd/). If that service is enabled, comment this line out to avoid
-#   a double mount.
+# noforget + inodecalc=path-hash keep NFS file handles valid across a remount,
+# preventing a cluster-wide stale-handle cascade. Needs mergerfs >= 2.41.
+# Superseded by mergerfs-media.service. If that unit is enabled, comment this
+# line out or the pool gets double-mounted.
 /mnt/data1:/mnt/data2:/mnt/data3:/mnt/data4 /media/data mergerfs defaults,noatime,direct_io,minfreespace=51G,category.create=epmfs,moveonenospc=true,noforget,inodecalc=path-hash 0 0
 
-# NFS export bind mounts (NFSv4 requires single root with fsid=0)
+# NFSv4 needs a single export root with fsid=0.
 /media/data /exports/media none bind 0 0
 /srv/app-storage /exports/configs none bind 0 0
 /media/data/games /exports/games none bind 0 0

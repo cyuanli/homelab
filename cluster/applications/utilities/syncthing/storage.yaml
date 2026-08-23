@@ -1,5 +1,4 @@
 ---
-# PV for Syncthing data (git repo + synced files)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -27,7 +26,6 @@ spec:
     path: /configs/syncthing/data
 
 ---
-# PVC for Syncthing data
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -43,7 +41,6 @@ spec:
       storage: 5Gi
 
 ---
-# PV for Syncthing config (identity, peer/folder config)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -71,7 +68,6 @@ spec:
     path: /configs/syncthing/config
 
 ---
-# PVC for Syncthing config
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

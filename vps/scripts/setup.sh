@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -----------------------------
-# VPS Bootstrap Script
-# -----------------------------
-
-# Get script directory and vps root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VPS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Load environment variables
 CONFIG_FILE="$VPS_ROOT/config/vps.env.local"
 if [[ -f "$CONFIG_FILE" ]]; then
     echo "==> Loading configuration from $CONFIG_FILE"
@@ -24,9 +18,6 @@ apt update -y && apt upgrade -y
 echo "==> Installing prerequisites..."
 apt install -y nginx-full ufw curl jq
 
-# -----------------------------
-# Install Tailscale
-# -----------------------------
 if ! command -v tailscale &> /dev/null; then
     echo "==> Installing Tailscale..."
     curl -fsSL https://tailscale.com/install.sh | sh
@@ -42,13 +33,8 @@ else
     tailscale up
 fi
 
-# -----------------------------
-# Detect Home PC Tailscale IPs
-# -----------------------------
-
 echo "==> Detecting home PC Tailscale IPs..."
 
-# Support both HOME_PC_NAMES (multiple) and HOME_PC_NAME (single, legacy)
 if [[ -n "${HOME_PC_NAMES:-}" ]]; then
     PC_NAMES="$HOME_PC_NAMES"
 elif [[ -n "${HOME_PC_NAME:-}" ]]; then
@@ -58,7 +44,6 @@ else
     exit 1
 fi
 
-# Detect IPs for all specified PCs
 declare -a PC_IPS
 for pc_name in $PC_NAMES; do
     echo "  - Looking up $pc_name..."
@@ -80,13 +65,8 @@ fi
 
 echo "Detected ${#PC_IPS[@]} home PC(s) on Tailscale"
 
-# -----------------------------
-# Generate upstream blocks
-# -----------------------------
-
 echo "==> Generating upstream configurations..."
 
-# Generate server lines for each IP
 UPSTREAM_HTTPS=""
 UPSTREAM_HTTP3=""
 UPSTREAM_HTTP=""
@@ -100,12 +80,9 @@ for ip in "${PC_IPS[@]}"; do
     UPSTREAM_MINECRAFT+="    server $ip:25565 max_fails=2 fail_timeout=5s;\n"
 done
 
-# SSH uses only the first backend (no load balancing needed)
+# First backend only, no load balancing needed.
 UPSTREAM_SSH="    server ${PC_IPS[0]}:22;"
 
-# -----------------------------
-# Deploy and generate Nginx config
-# -----------------------------
 TEMPLATE_FILE="/etc/nginx/nginx.conf.template"
 NGINX_CONF="/etc/nginx/nginx.conf"
 SOURCE_TEMPLATE="$VPS_ROOT/nginx/nginx.conf.template"
@@ -119,7 +96,6 @@ fi
 cp "$SOURCE_TEMPLATE" "$TEMPLATE_FILE"
 
 echo "==> Generating Nginx configuration..."
-# Replace placeholders with upstream blocks
 sed -e "s|{{UPSTREAM_HTTPS}}|$UPSTREAM_HTTPS|g" \
     -e "s|{{UPSTREAM_HTTP3}}|$UPSTREAM_HTTP3|g" \
     -e "s|{{UPSTREAM_HTTP}}|$UPSTREAM_HTTP|g" \
@@ -127,12 +103,8 @@ sed -e "s|{{UPSTREAM_HTTPS}}|$UPSTREAM_HTTPS|g" \
     -e "s|{{UPSTREAM_MINECRAFT}}|$UPSTREAM_MINECRAFT|g" \
     "$TEMPLATE_FILE" > "$NGINX_CONF"
 
-# -----------------------------
-# Configure UFW
-# -----------------------------
 echo "==> Configuring firewall (UFW)..."
 
-# Define ports and protocols
 declare -A PORTS
 PORTS=(
   [22]="tcp"
@@ -143,19 +115,15 @@ PORTS=(
   [25565]="tcp"
 )
 
-# Apply rules
 for port in "${!PORTS[@]}"; do
     proto="${PORTS[$port]}"
-    # Convert key for UDP naming
+    # 443_udp key disambiguates the two 443 entries.
     portnum="${port/_udp/}"
     ufw allow "$portnum/$proto"
 done
 
 ufw --force enable
 
-# -----------------------------
-# Enable and start Nginx
-# -----------------------------
 echo "==> Testing Nginx configuration..."
 nginx -t
 
@@ -163,9 +131,6 @@ echo "==> Enabling and starting Nginx..."
 systemctl enable nginx
 systemctl restart nginx
 
-# -----------------------------
-# Configure SSH key access
-# -----------------------------
 echo "==> Configuring SSH key access..."
 
 if [[ -n "${SSH_PUBLIC_KEY:-}" ]]; then
@@ -180,11 +145,9 @@ chmod 700 /root/.ssh
 echo "$VPS_PUBLIC_KEY" >> /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
 
-# Disable password authentication for root
 sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/^#PermitRootLogin prohibit-password/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 
-# Restart SSH
 systemctl restart sshd
 
 echo "✅ SSH key installed and password login disabled."

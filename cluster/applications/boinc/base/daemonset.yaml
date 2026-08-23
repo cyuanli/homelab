@@ -14,10 +14,8 @@ spec:
       labels:
         app: boinc-client
     spec:
-      # Low priority - will be preempted by real workloads
       priorityClassName: low-priority-preemptible
 
-      # Allow scheduling on control plane
       tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
@@ -26,7 +24,6 @@ spec:
         operator: Exists
         effect: NoSchedule
 
-      # Init container to handle project attachment
       initContainers:
       - name: setup-projects
         image: boinc/client:latest
@@ -34,11 +31,9 @@ spec:
         - /bin/bash
         - -c
         - |
-          # Start BOINC temporarily in background
           /usr/bin/boinc --dir /var/lib/boinc --allow_remote_gui_rpc &
           BOINC_PID=$!
 
-          # Wait for BOINC to be ready
           echo "Waiting for BOINC to start..."
           for i in {1..30}; do
             if /usr/bin/boinccmd --get_cc_status >/dev/null 2>&1; then
@@ -48,7 +43,7 @@ spec:
             sleep 2
           done
 
-          # Define BOINC projects to attach (name|url|grep_pattern|auth_var)
+          # name|url|grep_pattern|auth_var
           declare -A projects=(
             ["Einstein@home"]="https://einsteinathome.org/|einsteinathome.org|$EINSTEIN_AUTH"
             ["World Community Grid"]="https://www.worldcommunitygrid.org/|worldcommunitygrid.org|$WCG_AUTH"
@@ -60,7 +55,6 @@ spec:
             ["Climateprediction.net"]="https://www.climateprediction.net/|climateprediction|$CLIMATE_AUTH"
           )
 
-          # Attach to all configured projects
           for project in "${!projects[@]}"; do
             IFS='|' read -r url grep_pattern auth <<< "${projects[$project]}"
 
@@ -73,7 +67,6 @@ spec:
             fi
           done
 
-          # Stop temporary BOINC instance
           kill $BOINC_PID 2>/dev/null || true
           wait $BOINC_PID 2>/dev/null || true
 
@@ -133,7 +126,6 @@ spec:
         - name: boinc-config
           mountPath: /var/lib/boinc/global_prefs_override.xml
           subPath: global_prefs_override.xml
-        # LXCFS virtualized /proc files
         - name: lxcfs-proc-meminfo
           mountPath: /proc/meminfo
         - name: lxcfs-proc-cpuinfo
@@ -148,7 +140,6 @@ spec:
         image: boinc/client:latest
         imagePullPolicy: Always
 
-        # Environment variables
         env:
         - name: BOINC_GUI_RPC_PASSWORD
           valueFrom:
@@ -156,11 +147,9 @@ spec:
               name: boinc-credentials
               key: gui-rpc-password
 
-        # BOINC command line arguments
         command: ["/usr/bin/boinc"]
         args: ["--allow_remote_gui_rpc", "--dir", "/var/lib/boinc"]
 
-        # Volume mounts for configuration and data persistence
         volumeMounts:
         - name: boinc-data
           mountPath: /var/lib/boinc
@@ -170,7 +159,6 @@ spec:
         - name: boinc-config
           mountPath: /var/lib/boinc/global_prefs_override.xml
           subPath: global_prefs_override.xml
-        # LXCFS virtualized /proc files
         - name: lxcfs-proc-meminfo
           mountPath: /proc/meminfo
         - name: lxcfs-proc-cpuinfo
@@ -180,7 +168,6 @@ spec:
         - name: lxcfs-proc-uptime
           mountPath: /proc/uptime
 
-        # Health checks
         livenessProbe:
           exec:
             command:
@@ -210,7 +197,7 @@ spec:
       - name: boinc-config
         configMap:
           name: boinc-config
-      # LXCFS virtualized /proc files from host
+      # LXCFS, so BOINC sizes work against the pod limit, not host memory.
       - name: lxcfs-proc-meminfo
         hostPath:
           path: /var/lib/lxcfs/proc/meminfo
@@ -228,10 +215,8 @@ spec:
           path: /var/lib/lxcfs/proc/uptime
           type: File
 
-      # Security context
       securityContext:
         runAsUser: 0
         fsGroup: 0
 
-      # Restart policy
       restartPolicy: Always

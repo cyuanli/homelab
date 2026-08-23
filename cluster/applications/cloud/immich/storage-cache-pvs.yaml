@@ -1,5 +1,4 @@
 ---
-# Immich thumbnails on SSD (/srv/app-storage)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -27,7 +26,6 @@ spec:
     path: /configs/immich/thumbs
 
 ---
-# Immich encoded videos on SSD (/srv/app-storage)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -55,7 +53,6 @@ spec:
     path: /configs/immich/encoded-video
 
 ---
-# Immich profile pictures on SSD (/srv/app-storage)
 apiVersion: v1
 kind: PersistentVolume
 metadata:

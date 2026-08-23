@@ -1,6 +1,3 @@
-# Blackbox Exporter Helm values
-# Used for external HTTP endpoint monitoring
-
 config:
   modules:
     http_2xx:
@@ -40,7 +37,6 @@ serviceMonitor:
     labels:
       release: kube-prometheus-stack
 
-# Service configuration
 service:
   annotations:
     prometheus.io/scrape: "true"

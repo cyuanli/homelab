@@ -1,7 +1,4 @@
-# Node labels for cyl-aspiree17
-# Apply with: kubectl apply -f labels.yaml
-#
-# Hardware specs: 4 CPUs, 16GB RAM
+# 4 CPU, 16GB
 apiVersion: v1
 kind: Node
 metadata:

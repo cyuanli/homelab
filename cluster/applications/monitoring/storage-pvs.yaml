@@ -1,5 +1,4 @@
 ---
-# Grafana NFS Persistent Volume
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -27,7 +26,6 @@ spec:
     path: /configs/monitoring/grafana-data
 
 ---
-# Prometheus NFS Persistent Volume
 apiVersion: v1
 kind: PersistentVolume
 metadata:

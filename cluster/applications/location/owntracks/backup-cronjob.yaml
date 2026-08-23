@@ -1,16 +1,12 @@
 ---
-# Kubernetes CronJob for backing up Owntracks data from SSD to HDD
-# Runs daily at 1 AM UTC
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: owntracks-backup
   namespace: location
 spec:
-  # Run daily at 1 AM CET (midnight UTC)
   schedule: "0 0 * * *"
 
-  # Keep last 3 successful jobs for history
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
 
@@ -23,7 +19,7 @@ spec:
         spec:
           restartPolicy: OnFailure
 
-          # Run on cyl-homelab to access SSD storage
+          # SSD storage is node-local here.
           nodeSelector:
             kubernetes.io/hostname: cyl-homelab
 
@@ -36,16 +32,13 @@ spec:
             - |
               set -e
 
-              # Install rsync
               apk add --no-cache rsync
 
               echo "Starting Owntracks SSD to HDD backup: $(date)"
 
-              # Sync from SSD to HDD (use --delete to mirror)
               echo "Syncing /ssd-data to /hdd-backup..."
               rsync -av --delete /ssd-data/ /hdd-backup/
 
-              # Show size
               SIZE=$(du -sh /hdd-backup | cut -f1)
               echo "Backup completed successfully. Total size: $SIZE"
 

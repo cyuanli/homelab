@@ -1,6 +1,5 @@
 ---
-# Discord webhook relay service for Alertmanager
-# No official Helm chart available, so keeping as custom manifest
+# No official Helm chart, hence the hand-written manifest.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,8 +19,7 @@ spec:
     spec:
       containers:
       - name: alertmanager-discord
-        # No versioned releases available - using :latest with IfNotPresent policy
-        # Consider pinning to digest: docker pull benjojo/alertmanager-discord:latest && docker inspect --format='{{index .RepoDigests 0}}'
+        # Upstream publishes no tags, so :latest is the only option.
         image: benjojo/alertmanager-discord:latest
         imagePullPolicy: IfNotPresent
         env:

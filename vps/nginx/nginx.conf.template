@@ -14,7 +14,6 @@ stream {
   access_log /var/log/nginx/stream_access.log basic;
   error_log  /var/log/nginx/stream_error.log warn;
 
-  # Upstream blocks for load balancing across control plane nodes
   upstream traefik_https {
 {{UPSTREAM_HTTPS}}
   }
@@ -35,7 +34,6 @@ stream {
 {{UPSTREAM_MINECRAFT}}
   }
 
-  # TCP 443 → Traefik (HTTPS)
   server {
     listen 443;
     listen [::]:443;
@@ -45,7 +43,6 @@ stream {
     proxy_timeout 60s;
   }
 
-  # UDP 443 → Traefik (HTTP/3)
   server {
     listen 443 udp;
     listen [::]:443 udp;
@@ -54,7 +51,6 @@ stream {
     proxy_timeout 60s;
   }
 
-  # TCP 80 → Traefik (HTTP)
   server {
     listen 80;
     listen [::]:80;
@@ -64,7 +60,6 @@ stream {
     proxy_timeout 60s;
   }
 
-  # SSH passthrough (uses first backend only)
   server {
     listen 51422;
     listen [::]:51422;
@@ -73,7 +68,6 @@ stream {
     proxy_timeout 10m;
   }
 
-  # Minecraft TCP passthrough
   server {
     listen 25565;
     listen [::]:25565;

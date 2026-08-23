@@ -1,5 +1,4 @@
-# Select nodes with low CPU and low memory
-# Exclude cyl-homelab (control plane with desktop)
+# cyl-homelab excluded, control plane with a desktop.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

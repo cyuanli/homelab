@@ -13,7 +13,6 @@ spec:
   - name: system_monitoring
     interval: 30s
     rules:
-    # Disk monitoring alerts
     - alert: DiskMonitorFailed
       expr: disk_monitor_status{type="overall"} == 0
       for: 1m
@@ -59,9 +58,8 @@ spec:
         summary: "MergerFS pool down on {{ $labels.instance }}"
         description: "MergerFS mount {{ $labels.mount }} is not accessible on {{ $labels.instance }}."
 
-    # NFS export-layer alerts (server-side; emitted by monitor-storage.sh).
-    # Covers the failure class that cascaded the cluster on 2026-08-21: a pool
-    # ENOTCONN, a stale/missing /exports bind, nfsd down, or a dropped export.
+    # Server-side NFS, from monitor-storage.sh. Covers the failure class that
+    # cascaded the cluster on 2026-08-21.
     - alert: NFSExportDegraded
       expr: nfs_export_status{type="overall"} == 0
       for: 2m
@@ -107,7 +105,6 @@ spec:
         summary: "NFS export health check hasn't run recently on {{ $labels.instance }}"
         description: "Last NFS export check was {{ $value | humanizeDuration }} ago. Expected every 5 minutes (disk-monitor.timer)."
 
-    # SnapRAID alerts
     - alert: SnapRAIDFailed
       expr: snapraid_last_run_status == 0
       for: 1m
@@ -126,7 +123,6 @@ spec:
         summary: "SnapRAID hasn't run in 2 days on {{ $labels.instance }}"
         description: "Last SnapRAID sync was {{ $value | humanizeDuration }} ago. Expected daily."
 
-    # Borgmatic backup alerts
     - alert: BorgmaticBackupFailed
       expr: borgmatic_last_run_status == 0
       for: 1m
@@ -145,14 +141,9 @@ spec:
         summary: "No backup in 2 days on {{ $labels.instance }}"
         description: "Last Borgmatic backup was {{ $value | humanizeDuration }} ago. Expected daily."
 
-    # Database dump alerts (emitted by scripts/backup-databases.sh via borgmatic).
-    #
-    # These are the ONLY signal that a database dump failed. The dump script
-    # deliberately exits 0 so one unreachable database cannot abort the whole
-    # backup run, which means BorgmaticBackupFailed will NOT fire for a dump
-    # failure - borgmatic reports success while silently archiving a stale dump.
-    # If these alerts are removed or their metrics stop being scraped, database
-    # backup failures become invisible.
+    # ONLY signal that a database dump failed. backup-databases.sh exits 0 by
+    # design, so BorgmaticBackupFailed stays quiet while borgmatic archives a
+    # stale dump. Remove these and DB backup failures become invisible.
     - alert: DatabaseDumpFailed
       expr: homelab_db_dump_success == 0
       for: 5m
@@ -162,9 +153,8 @@ spec:
         summary: "Database dump failed for {{ $labels.database }}"
         description: "Could not dump the {{ $labels.database }} database on {{ $labels.instance }}. The previous dump was kept, so the backup contains a STALE copy of this database. Check: journalctl -u borgmatic.service"
 
-    # 2 days rather than the dump cadence: borgmatic runs daily at 3 AM, so a
-    # single missed night is not yet actionable, but two means the newest dump
-    # in the borg repository no longer matches the file trees beside it.
+    # 2 days, not 1: dumps run nightly, but two misses mean the archived dump
+    # no longer matches the file trees beside it.
     - alert: DatabaseDumpStale
       expr: time() - homelab_db_dump_timestamp_seconds > 172800
       for: 1h
@@ -174,9 +164,8 @@ spec:
         summary: "Database dump for {{ $labels.database }} is stale"
         description: "Newest dump of {{ $labels.database }} on {{ $labels.instance }} is {{ $value | humanizeDuration }} old. Expected daily. Restoring now would roll this database back by that much."
 
-    # A dump that collapses to near-nothing is the shape a failed restore takes:
-    # pg_dump succeeded against an empty or half-initialised database and the
-    # good dump was overwritten. Both databases are in the hundreds of MB.
+    # Both DBs are hundreds of MB. A tiny dump means pg_dump succeeded against
+    # an empty or half-initialised database and overwrote the good one.
     - alert: DatabaseDumpSuspiciouslySmall
       expr: homelab_db_dump_size_bytes < 1048576
       for: 10m

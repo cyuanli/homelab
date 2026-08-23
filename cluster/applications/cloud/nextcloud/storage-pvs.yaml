@@ -1,5 +1,4 @@
 ---
-# Nextcloud user files storage
 apiVersion: v1
 kind: PersistentVolume
 metadata:

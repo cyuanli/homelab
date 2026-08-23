@@ -33,7 +33,6 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     cert-manager.io/cluster-issuer: letsencrypt-production
-    # traefik.ingress.kubernetes.io/router.middlewares: owntracks-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:

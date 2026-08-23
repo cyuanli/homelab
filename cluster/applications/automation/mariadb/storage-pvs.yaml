@@ -1,5 +1,4 @@
 ---
-# MariaDB data storage on SSD via NFS
 apiVersion: v1
 kind: PersistentVolume
 metadata:
