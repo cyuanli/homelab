@@ -1,0 +1,33 @@
+# helm upgrade --install smartctl-exporter prometheus-community/prometheus-smartctl-exporter \
+#   -n monitoring -f cluster/applications/monitoring/smartctl-exporter-values.yaml
+
+serviceMonitor:
+  enabled: true
+  interval: 60s
+  scrapeTimeout: 30s
+  # instance/node labels must match prometheus-node-exporter
+  attachMetadata:
+    node: true
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: instance
+      action: replace
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+      action: replace
+
+# chart rules are NVMe-only. real ones in prometheus-rules-system-monitoring.yaml
+prometheusRules:
+  enabled: false
+
+common:
+  config:
+    # keep >= scrape interval. each collect wakes sleeping drives
+    collect_not_more_than_period: 120s
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 64Mi

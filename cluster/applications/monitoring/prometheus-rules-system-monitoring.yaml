@@ -40,6 +40,64 @@ spec:
         summary: "SMART health failure on {{ $labels.device }}"
         description: "{{ $labels.type }} drive {{ $labels.device }} has failed SMART health checks on {{ $labels.instance }}."
 
+    # raw attributes, not the -H verdict. -H said PASSED at 88 pending sectors
+    - alert: DiskPendingSectors
+      expr: smartctl_device_attribute{attribute_name="Current_Pending_Sector",attribute_value_type="raw"} > 0
+      for: 15m
+      labels:
+        severity: critical
+      annotations:
+        summary: "{{ $value }} pending sectors on {{ $labels.device }} ({{ $labels.instance }})"
+        description: "Sectors failed to read and await reallocation. This is the signal that preceded the WD50NDZW failure. Check: sudo smartctl -x /dev/{{ $labels.device }}"
+
+    # growth, not absolute. sde sits at 1 reallocated, normal aging
+    - alert: DiskReallocatedSectorsGrowing
+      expr: increase(smartctl_device_attribute{attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw"}[24h]) > 0
+      for: 30m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Reallocated sectors rising on {{ $labels.device }} ({{ $labels.instance }})"
+        description: "Grew by {{ $value }} in 24h. The drive is consuming spare sectors. Replace it."
+
+    # cabling faults, not media
+    - alert: DiskCRCErrorsGrowing
+      expr: increase(smartctl_device_attribute{attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw"}[1h]) > 0
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Link CRC errors rising on {{ $labels.device }} ({{ $labels.instance }})"
+        description: "Grew by {{ $value }} in 1h. Reseat the SATA/USB cable before suspecting the drive."
+
+    # spinners only. join excludes SSDs, which run hotter by design
+    - alert: DiskTemperatureHigh
+      expr: smartctl_device_temperature{temperature_type="current"} > 52 and on(instance, device) smartctl_device_rotation_rate > 0
+      for: 30m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $labels.device }} at {{ $value }}C on {{ $labels.instance }}"
+        description: "Sustained heat is what killed the last backup drive. Check airflow and enclosure ventilation."
+
+    - alert: DiskTemperatureCritical
+      expr: smartctl_device_temperature{temperature_type="current"} > 58 and on(instance, device) smartctl_device_rotation_rate > 0
+      for: 10m
+      labels:
+        severity: critical
+      annotations:
+        summary: "{{ $labels.device }} at {{ $value }}C on {{ $labels.instance }}"
+        description: "Above the safe range for a spinning drive. Improve cooling or power it down."
+
+    - alert: SmartExporterDown
+      expr: up{job=~".*smartctl.*"} == 0
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "smartctl-exporter not scraping on {{ $labels.instance }}"
+        description: "All drive health alerts on this node are blind while this is down."
+
     - alert: DiskMountFailed
       expr: disk_mount_accessible == 0
       for: 2m
@@ -141,9 +199,16 @@ spec:
         summary: "No backup in 2 days on {{ $labels.instance }}"
         description: "Last Borgmatic backup was {{ $value | humanizeDuration }} ago. Expected daily."
 
-    # ONLY signal that a database dump failed. backup-databases.sh exits 0 by
-    # design, so BorgmaticBackupFailed stays quiet while borgmatic archives a
-    # stale dump. Remove these and DB backup failures become invisible.
+    - alert: BackupDiskFillingUp
+      expr: node_filesystem_avail_bytes{mountpoint="/media/archive"} / node_filesystem_size_bytes{mountpoint="/media/archive"} < 0.15
+      for: 30m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup disk {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} free on {{ $labels.instance }}"
+        description: "Trim keep_monthly in borgmatic config or reclaim space from the SMB share before backups start failing."
+
+    # only dump-failure signal. backup-databases.sh exits 0 by design
     - alert: DatabaseDumpFailed
       expr: homelab_db_dump_success == 0
       for: 5m

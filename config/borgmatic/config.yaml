@@ -3,12 +3,10 @@ source_directories:
   - /media/data/immich/library/library
   - /media/data/owntracks/rec
   - /media/data/games
-  # DB dumps from the before_backup hook. The file trees above are not
-  # restorable without them.
   - /media/data/db-dumps
 
 repositories:
-  - path: ssh://cyl-optiplex9020/media/wd_elements/borg
+  - path: ssh://cyl-optiplex9020/media/archive/borg
 
 # BORG_PASSPHRASE comes from borgmatic.service.
 compression: zstd
@@ -20,10 +18,12 @@ keep_monthly: 6
 checks:
   - name: repository
   - name: archives
+  - name: data
+    frequency: 1 month
 
 before_backup:
   - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --on"
-  # After maintenance mode, so Nextcloud cannot write mid-dump.
+  # after maintenance mode. no writes mid-dump
   - /home/cyl/homelab/scripts/backup-databases.sh
 
 after_backup:
@@ -31,9 +31,6 @@ after_backup:
   - /home/cyl/homelab/scripts/backup-notify.sh success
 
 on_error:
-  # after_backup runs only on success, so a failed backup used to strand
-  # Nextcloud in maintenance mode (7h outage, 2026-08-22). Ordered before the
-  # notification so a broken notify script cannot keep the app down. No-op when
-  # maintenance mode is already off.
+  # before notify. broken notify must not strand maintenance mode
   - kubectl exec -n cloud deployment/nextcloud -- su -s /bin/bash www-data -c "php /var/www/html/occ maintenance:mode --off"
   - /home/cyl/homelab/scripts/backup-notify.sh error
