@@ -382,19 +382,30 @@ sudo touch /var/log/snapraid.log
 
 ### Failure notifications
 
-No extra setup needed — `snapraid-runner.service` already chains the repo's
-notify script:
+No extra setup needed. `snapraid-runner.service` chains the repo's notify
+script:
 
 ```ini
 ExecStart=/usr/local/bin/snapraid-runner -c /etc/snapraid-runner.conf
-ExecStartPost=/home/cyl/homelab/scripts/snapraid-notify.sh
+ExecStopPost=-/home/cyl/homelab/scripts/snapraid-notify.sh $SERVICE_RESULT
 ```
 
-`scripts/snapraid-notify.sh` parses `/var/log/snapraid.log` and writes
-Prometheus metrics to the node_exporter textfile collector; Alertmanager routes
-them to Discord via the `alertmanager-discord` deployment in the `monitoring`
+> ⚠️ **`ExecStopPost`, never `ExecStartPost`.** systemd skips `ExecStartPost`
+> when `ExecStart` fails, so the failure branch of the notify script was
+> unreachable. Nine consecutive failed syncs reported
+> `snapraid_last_run_status 1` (2026-08-21 to 2026-09-03). Only
+> `SnapRAIDStale` caught it, two days late.
+
+`scripts/snapraid-notify.sh` takes systemd's `$SERVICE_RESULT` as
+authoritative, then falls back to grepping `/var/log/snapraid.log`, which
+catches a runner that exits 0 while logging errors. It writes Prometheus
+metrics to the node_exporter textfile collector. Alertmanager routes them to
+Discord via the `alertmanager-discord` deployment in the `monitoring`
 namespace. There is no standalone `/usr/local/bin/snapraid-notify` and no
 webhook URL to configure here.
+
+A manual `snapraid sync` writes no metric. Only runs through
+`snapraid-runner.service` do.
 
 ---
 
@@ -469,6 +480,23 @@ sudo snapraid diff
 # Force sync if safe
 sudo snapraid sync -h
 ```
+
+### "Unexpected data modification of a file without parity":
+
+SnapRAID assumes same name, size and timestamp means same content, and reuses
+the hash instead of computing parity. Files that collide on all three but
+differ in content fail every sync until fixed. Minecraft world backups do this
+across dimensions, where each `raids.dat` and `world_border.dat` is written in
+the same tick.
+
+```bash
+# The log names the offending files
+grep "Data change at file" /var/log/snapraid.log
+# Recompute parity without the copy heuristic
+sudo snapraid sync --force-nocopy
+```
+
+Sync fails closed, so parity stops updating array-wide until this is cleared.
 
 ### Performance issues:
 ```bash

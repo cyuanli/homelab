@@ -5,6 +5,7 @@ Documentation=https://github.com/Chronial/snapraid-runner
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/snapraid-runner -c /etc/snapraid-runner.conf
-ExecStartPost=/home/cyl/homelab/scripts/snapraid-notify.sh
+# not StartPost. skipped when ExecStart fails
+ExecStopPost=-/home/cyl/homelab/scripts/snapraid-notify.sh $SERVICE_RESULT
 StandardOutput=journal
 StandardError=journal

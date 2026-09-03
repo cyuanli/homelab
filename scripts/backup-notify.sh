@@ -44,7 +44,8 @@ case "$SERVICE_RESULT" in
         export_borgmatic_metrics 1
         ;;
     *)
-        log_error "Unknown service result: $SERVICE_RESULT"
-        exit 1
+        log_error "Borgmatic backup FAILED ($SERVICE_RESULT) at $(date)"
+        log_info "Check full logs with: journalctl -u borgmatic.service"
+        export_borgmatic_metrics 0
         ;;
 esac

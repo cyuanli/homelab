@@ -53,17 +53,19 @@ sudo mkdir -p /etc/borgmatic
 sudo cp config/borgmatic/config.yaml /etc/borgmatic/config.yaml
 # Edit with your backup repositories and passphrase
 
-# Copy notification script for hooks
-sudo mkdir -p /etc/borgmatic/hooks
-sudo cp scripts/backup-notify.sh /etc/borgmatic/hooks/
-sudo chmod +x /etc/borgmatic/hooks/backup-notify.sh
-
 # Enable timer
 sudo cp config/borgmatic/systemd/*.service /etc/systemd/system/
 sudo cp config/borgmatic/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now borgmatic.timer
 ```
+
+The hooks run `scripts/backup-notify.sh` straight from the repo path. Nothing
+is copied to `/etc/borgmatic/hooks/`.
+
+`borgmatic.service` also carries an `ExecStopPost=` calling the same script with
+`$SERVICE_RESULT`. borgmatic's own `on_error` hook cannot run if the process is
+killed, so without it an OOM or timeout leaves `borgmatic_last_run_status` at 1.
 
 The passphrase lives in `config/borgmatic/.borg-passphrase` /
 `.borg-passphrase-env` — both gitignored.
@@ -101,6 +103,12 @@ perturbs the whole file.
 Dumps are written atomically (`.part` → `mv`) and only promoted if pg_dump's
 completion marker is present, since `pg_dump` exits 0 on a connection dropped
 mid-stream.
+
+> ⚠️ **`kubectl exec` silently truncates large stdout and still exits 0**
+> ([kubernetes#124571](https://github.com/kubernetes/kubernetes/issues/124571)).
+> Measured on the 693 MB immich dump at roughly 3 attempts in 10. The dump is
+> retried up to 3 times against the completion marker, which is the only
+> reliable detector. Do not drop the retry loop or the marker check.
 
 > ⚠️ **A failed dump does not fail the backup.** The script always exits 0 so
 > that one unreachable database cannot cost you that night's file backups. It
@@ -253,6 +261,34 @@ Two gotchas when writing a new exporter script:
 - Nothing prunes this directory. A `.prom` file left behind by a deleted script
   keeps exporting its final values forever, and they look current. Delete the
   file when you retire the script.
+
+### SMART metrics (smartctl-exporter)
+
+A privileged DaemonSet on all nodes, separate from the textfile collector above
+and from `monitor-storage.sh`. It exports raw SMART attributes, not the
+`smartctl -H` verdict.
+
+```bash
+helm upgrade --install smartctl-exporter prometheus-community/prometheus-smartctl-exporter \
+  --version 0.17.1 -n monitoring \
+  -f cluster/applications/monitoring/smartctl-exporter-values.yaml
+```
+
+> ⚠️ **`smartctl -H` does not detect a dying drive.** `Current_Pending_Sector`
+> is an `Old_age` attribute with threshold `000`, so `-H` reports `PASSED` at
+> any count. The retired WD50NDZW read `PASSED` at 88 pending sectors.
+> `DiskPendingSectors` alerts on the raw value instead.
+
+Relabeling maps `instance` and `node` to the node name so these series join
+against node_exporter. The chart's own `prometheusRules` are NVMe-only and are
+disabled. The real alerts live in `prometheus-rules-system-monitoring.yaml`.
+
+Reallocated-sector and CRC alerts fire on `increase()` over 24h and 1h, not on
+absolute value, because `sde` sits at 1 reallocated sector and `sdb` at 1 CRC
+error. Both are stable and benign. Growth is not.
+
+Temperature alerts join against `smartctl_device_rotation_rate > 0` to exclude
+SSDs, which idle hotter by design.
 
 ### Monitoring Setup (One-time)
 

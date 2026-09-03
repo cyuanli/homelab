@@ -95,24 +95,36 @@ dump_database() {
         return 1
     fi
 
-    # Uncompressed: borg applies zstd itself and dedupes a plain dump far
-    # better than a gzip stream, where one changed row perturbs everything.
-    if ! kubectl exec -n "$namespace" "$pod" -- \
-        pg_dump --clean --if-exists --username="$user" --dbname="$dbname" > "$partial" 2>/dev/null; then
-        log_error "pg_dump failed for '$name' (pod $pod) - keeping previous dump"
-        rm -f "$partial"
-        record "$name" 0
-        return 1
-    fi
+    local attempt rc err
+    err="$(mktemp)"
 
-    # pg_dump exits 0 on a mid-stream disconnect, so trust the trailer, not the
-    # exit code. A truncated dump must never replace a good one.
-    if ! tail -5 "$partial" | grep -q "PostgreSQL database dump complete"; then
-        log_error "Dump for '$name' is truncated (no completion marker) - keeping previous dump"
+    # kubectl exec truncates stdout and still exits 0, see kubernetes#124571
+    for attempt in 1 2 3; do
+        # Uncompressed: borg applies zstd itself and dedupes a plain dump far
+        # better than a gzip stream, where one changed row perturbs everything.
+        kubectl exec -n "$namespace" "$pod" -- \
+            pg_dump --clean --if-exists --username="$user" --dbname="$dbname" > "$partial" 2>"$err"
+        rc=$?
+
+        if [[ $rc -ne 0 ]]; then
+            log_warning "pg_dump exit $rc for '$name' attempt $attempt/3: $(head -c 200 "$err")"
+        elif ! tail -5 "$partial" | grep -q "PostgreSQL database dump complete"; then
+            log_warning "Dump for '$name' truncated at $(stat -c %s "$partial") bytes, attempt $attempt/3"
+        else
+            break
+        fi
+
         rm -f "$partial"
-        record "$name" 0
-        return 1
-    fi
+        if [[ $attempt -eq 3 ]]; then
+            rm -f "$err"
+            log_error "All 3 dump attempts failed for '$name' - keeping previous dump"
+            record "$name" 0
+            return 1
+        fi
+        sleep 5
+    done
+
+    rm -f "$err"
 
     local size
     size="$(stat -c %s "$partial")"
@@ -126,15 +138,14 @@ dump_database() {
 }
 
 main() {
-    if ! command_exists kubectl; then
-        log_error "kubectl not found - cannot dump databases"
-        exit 0
-    fi
-
     # Probed up front so the log names the real fault instead of reporting
     # every database as individually missing.
     local api_ok=1 api_err
-    if ! api_err="$(kubectl get --raw='/readyz' 2>&1 | grep -v '^E[0-9]\{4\} ' | tail -1)"; then
+    if ! command_exists kubectl; then
+        api_ok=0
+        api_err="kubectl not found"
+        log_error "kubectl not found - cannot dump databases"
+    elif ! api_err="$(kubectl get --raw='/readyz' 2>&1 | grep -v '^E[0-9]\{4\} ' | tail -1)"; then
         api_ok=0
     elif [[ "$api_err" != "ok" ]]; then
         api_ok=0

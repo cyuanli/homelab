@@ -9,4 +9,7 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 Environment="KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
+EnvironmentFile=/home/cyl/homelab/config/borgmatic/.borg-passphrase-env
 ExecStart=/usr/bin/borgmatic --verbosity 1 --syslog-verbosity 1
+# on_error misses kills
+ExecStopPost=-/home/cyl/homelab/scripts/backup-notify.sh $SERVICE_RESULT

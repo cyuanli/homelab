@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/utils/metrics.sh"
 load_config
 
 LOG_FILE="/var/log/snapraid.log"
+SERVICE_RESULT="${1:-}"
 
 export_snapraid_metrics() {
     local status="$1"
@@ -30,6 +31,13 @@ export_snapraid_metrics() {
 
 LAST_LINES=$(tail -20 "$LOG_FILE" 2>/dev/null || echo "")
 
+if [[ -n "$SERVICE_RESULT" && "$SERVICE_RESULT" != "success" ]]; then
+    echo "SnapRAID run failed (systemd: $SERVICE_RESULT) - exporting metrics"
+    export_snapraid_metrics 0
+    exit 0
+fi
+
+# also catches runner exiting 0 with errors
 if echo "$LAST_LINES" | grep -q "FAILED\|ERROR\|DANGER\|Run failed"; then
     echo "SnapRAID sync failed - exporting metrics"
     export_snapraid_metrics 0
