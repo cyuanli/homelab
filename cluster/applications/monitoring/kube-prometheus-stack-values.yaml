@@ -79,10 +79,10 @@ prometheus:
             - https://jellyfin.cliff.li
             - https://owntracks.cliff.li
             - https://prometheus.cliff.li
-            - https://prowlarr.cliff.li
+            - https://prowlarr.cliff.li/ping
             - https://qbittorrent.cliff.li
-            - https://radarr.cliff.li
-            - https://sonarr.cliff.li
+            - https://radarr.cliff.li/ping
+            - https://sonarr.cliff.li/ping
             - https://traefik.cliff.li/ping
             - https://whoami.cliff.li
         relabel_configs:

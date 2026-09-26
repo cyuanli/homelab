@@ -50,24 +50,24 @@ spec:
         summary: "{{ $value }} pending sectors on {{ $labels.device }} ({{ $labels.instance }})"
         description: "Sectors failed to read and await reallocation. This is the signal that preceded the WD50NDZW failure. Check: sudo smartctl -x /dev/{{ $labels.device }}"
 
-    # growth, not absolute. sde sits at 1 reallocated, normal aging
+    # growth, not absolute. Keyed by serial: a device letter moving to another disk looks like growth
     - alert: DiskReallocatedSectorsGrowing
-      expr: increase(smartctl_device_attribute{attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw"}[24h]) > 0
+      expr: increase((max by (instance, serial_number) (smartctl_device_attribute{attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw"} * on(instance, device) group_left(serial_number) smartctl_device))[24h:5m]) > 0
       for: 30m
       labels:
         severity: critical
       annotations:
-        summary: "Reallocated sectors rising on {{ $labels.device }} ({{ $labels.instance }})"
+        summary: "Reallocated sectors rising on {{ $labels.serial_number }} ({{ $labels.instance }})"
         description: "Grew by {{ $value }} in 24h. The drive is consuming spare sectors. Replace it."
 
-    # cabling faults, not media
+    # cabling faults, not media. Keyed by serial, as above
     - alert: DiskCRCErrorsGrowing
-      expr: increase(smartctl_device_attribute{attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw"}[1h]) > 0
+      expr: increase((max by (instance, serial_number) (smartctl_device_attribute{attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw"} * on(instance, device) group_left(serial_number) smartctl_device))[1h:5m]) > 0
       for: 15m
       labels:
         severity: warning
       annotations:
-        summary: "Link CRC errors rising on {{ $labels.device }} ({{ $labels.instance }})"
+        summary: "Link CRC errors rising on {{ $labels.serial_number }} ({{ $labels.instance }})"
         description: "Grew by {{ $value }} in 1h. Reseat the SATA/USB cable before suspecting the drive."
 
     # spinners only. join excludes SSDs, which run hotter by design

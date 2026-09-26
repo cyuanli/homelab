@@ -14,13 +14,13 @@ spec:
     interval: 30s
     rules:
     - alert: ServiceDown
-      expr: probe_success{job="blackbox-http"} == 0 and probe_http_status_code{job="blackbox-http"} == 0
+      expr: probe_success{job="blackbox-http"} == 0
       for: 2m
       labels:
         severity: critical
       annotations:
         summary: "Service {{ $labels.instance }} is down"
-        description: "{{ $labels.instance }} has been unreachable for more than 2 minutes. Connection failed (no HTTP response received)."
+        description: "{{ $labels.instance }} has been unreachable for more than 2 minutes. HTTP probe failed."
 
     - alert: ServiceDegraded
       expr: probe_http_status_code{job="blackbox-http"} >= 500
