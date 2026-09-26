@@ -1,11 +1,11 @@
 UUID=5d0349bc-9c4b-4463-b21e-8ccaf6f861d1 / ext4 defaults 0 1
 
-UUID=813d8234-916d-42e1-89ce-cff117feab67 /mnt/parity1 xfs defaults,noatime 0 2
+UUID=744d3ce7-6c52-4e5a-a798-2b86a57e73d8 /mnt/parity1 xfs defaults,noatime 0 2
 
 UUID=53c59e25-4e9a-4c82-a83a-40941151e959 /mnt/data1 ext4 defaults,noatime,nodiratime 0 2
 UUID=cade9ae8-5631-4ceb-9be4-af09085bcc8a /mnt/data2 ext4 defaults,noatime,nodiratime 0 2
 UUID=f3671b3e-6a45-4904-aec5-e5cfa774b64c /mnt/data3 ext4 defaults,noatime,nodiratime 0 2
-UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodiratime 0 2
+UUID=777e02e3-19f2-40a6-9015-7268e58c9068 /mnt/data4 ext4 defaults,noatime,nodiratime 0 2
 
 # noforget + inodecalc=path-hash keep NFS file handles valid across a remount,
 # preventing a cluster-wide stale-handle cascade. Needs mergerfs >= 2.41.
@@ -17,3 +17,4 @@ UUID=f32cd179-7b68-42ef-81a6-dcf4e3e20968 /mnt/data4 ext4 defaults,noatime,nodir
 /media/data /exports/media none bind 0 0
 /srv/app-storage /exports/configs none bind 0 0
 /media/data/games /exports/games none bind 0 0
+UUID=ce4175ff-4c9e-4992-8d36-78e1ae2b767e none swap sw 0 0

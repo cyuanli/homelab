@@ -37,8 +37,8 @@ spec:
       labels:
         severity: critical
       annotations:
-        summary: "SMART health failure on {{ $labels.device }}"
-        description: "{{ $labels.type }} drive {{ $labels.device }} has failed SMART health checks on {{ $labels.instance }}."
+        summary: "SMART health failure on {{ $labels.mount }} ({{ $labels.serial }})"
+        description: "{{ $labels.type }} drive {{ $labels.serial }} at {{ $labels.mount }} (/dev/{{ $labels.device }} this boot) has failed SMART health checks on {{ $labels.instance }}."
 
     # raw attributes, not the -H verdict. -H said PASSED at 88 pending sectors
     - alert: DiskPendingSectors

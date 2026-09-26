@@ -555,20 +555,10 @@ If you need to set up monitoring manually:
 sudo apt install -y smartmontools curl
 ```
 
-#### Configure the drive map:
-```bash
-# Copy the configuration template (.conf is gitignored)
-cp config/service-configs/monitoring.conf.template config/service-configs/monitoring.conf
-nano config/service-configs/monitoring.conf
-```
-
-This file maps partitions to mount points and lists the physical drives to SMART
-check. It contains **no webhook** — alerts leave the host as Prometheus metrics
-in the node_exporter textfile collector and are routed to Discord by
-Alertmanager. Keys and a warning about unstable `/dev/sdX` names are documented
-in [Configuration](CONFIGURATION.md#monitoringconf); the current authoritative
-device mapping is in
-[`config/system-configs/DRIVE-MAPPING.md`](../config/system-configs/DRIVE-MAPPING.md).
+#### Drive map:
+None. `monitor-storage.sh` reads the disks from `/etc/snapraid.conf` and
+resolves devices on every run. Alerts leave the host as Prometheus metrics in
+the node_exporter textfile collector; Alertmanager routes them to Discord.
 
 #### Setup Automated Monitoring:
 ```bash
@@ -588,16 +578,38 @@ journalctl -u disk-monitor.service -n 20
 - Checks SMART health data every 5 minutes
 - Monitors mount point accessibility 
 - Tests write capability to all drives
-- Detects filesystem errors in system logs
+- Checks the kernel log for I/O errors, ext4/XFS corruption and ATA `UNC`
+  media errors on each disk (link resets alone do not count)
 
 **🚨 Immediate Response on ANY Drive Failure** (`lockdown_array()`), in order:
-1. **Stops all Docker containers** - prevents new writes (skipped if no docker)
-2. **Scales all deployments to 0 in the `media` and `cloud` namespaces** -
-   note this does *not* cover `automation`, `games` or `location`, which also
-   hold NFS-backed PVs
-3. **Unmounts the MergerFS pool** - disables unified storage access
-4. **Remounts ALL SnapRAID drives read-only** - complete write protection
-5. **Exports Prometheus metrics** - status exported for alerting
+1. **Disables `snapraid-runner.timer` and `borgmatic.timer`** - no sync against
+   a failing disk, no backups of a half-broken pool
+2. **Scales to 0 / suspends every Deployment, StatefulSet and CronJob that
+   mounts a PVC on the pool** (NFS PVs under `/media` or `/games`) and deletes
+   their running Jobs. The list is computed from the cluster, not hardcoded;
+   `status` prints it
+3. **Sets every mergerfs branch to `RO`** through the runtime xattr
+   (`/media/data/.mergerfs`, needs the `attr` package). This cannot fail with
+   EBUSY, so pool writes stop even if step 4 fails. Then waits up to 180s for the
+   pods to go
+4. **Remounts ALL SnapRAID disks read-only** (retries for 1 min per disk; logs
+   the holders if one stays busy). The pool stays mounted and serves reads;
+   unmounting it would expose the empty mountpoint on the root disk
+5. **Writes undo commands** to `/var/lib/disk-monitor/restore.sh`, newest
+   first. While that file exists, `disk_monitor_status` stays 0
+
+**Triggers:** the 5-minute `check`, and smartd. `config/smartmontools/run.d/60monitor-storage`
+(installed to `/etc/smartmontools/run.d/`) runs `monitor-storage.sh smartd` on
+every smartd warning. It locks down only for an array disk and only for the
+fail types `Health`, `CurrentPendingSector`, `OfflineUncorrectableSector` and
+`SelfTest`, which `smartctl -H` misses (it said PASSED at 88 pending sectors).
+`ErrorCount` is often cabling, so it only logs. A lock file serialises runs.
+
+Test without side effects:
+```bash
+sudo DRY_RUN=1 ./scripts/monitor-storage.sh lockdown
+sudo DRY_RUN=1 SMARTD_DEVICE=/dev/disk/by-id/<id> SMARTD_FAILTYPE=SelfTest ./scripts/monitor-storage.sh smartd
+```
 
 The NFS export checks (Layer 4, below) are **advisory** and never trigger
 lockdown.
@@ -630,41 +642,38 @@ journalctl -u disk-monitor.service -f
 
 When you receive a disk failure alert:
 
-1. **Investigate the failed drive(s)** mentioned in the alert
-2. **Replace any failed hardware**
-3. **Run SnapRAID sync** to rebuild protection:
+1. **Identify the drive by serial** (the `DiskSmartFailure` alert carries
+   `mount` and `serial`; `sudo ./scripts/monitor-storage.sh status` too)
+2. **Replace any failed hardware** - see
+   [`DRIVE-MAPPING.md`](../config/system-configs/DRIVE-MAPPING.md#drive-failure-scenarios)
+3. **Remount the disks rw** - `fix`/`sync` write the content file to every data
+   disk. The mergerfs branches can stay `RO`:
    ```bash
-   sudo snapraid sync
+   sudo grep 'remount,rw' /var/lib/disk-monitor/restore.sh | sudo sh -x
    ```
-4. **Restore system operation:**
+4. **Rebuild**: data disk `sudo snapraid -d dN fix`, then `-d dN -a check`,
+   then `sync`. Parity disk: `sudo snapraid sync`
+5. **Undo the rest of the lockdown** (workloads, then timers):
    ```bash
-   # Remount drives as read-write
-   sudo mount -o remount,rw /mnt/data1
-   sudo mount -o remount,rw /mnt/data2
-   sudo mount -o remount,rw /mnt/data3
-   sudo mount -o remount,rw /mnt/data4
-   sudo mount -o remount,rw /mnt/parity1
-   
-   # Remount MergerFS pool
-   sudo mount /media/data
-   
-   # Restart Docker containers
-   sudo docker start $(sudo docker ps -a -q)
+   sudo cat /var/lib/disk-monitor/restore.sh     # review first
+   sudo sh /var/lib/disk-monitor/restore.sh
+   sudo rm /var/lib/disk-monitor/restore.sh
    ```
+   Re-running the `remount,rw` lines is harmless.
 
 ### Monitoring System Files
 
 The monitoring system consists of:
 
-- **`scripts/monitor-storage.sh`** - Main monitoring script
-- **`config/service-configs/monitoring.conf`** - Drive configuration
-- **`config/service-configs/monitoring.conf.template`** - Configuration template
+- **`scripts/monitor-storage.sh`** - Monitoring + lockdown script
+- **`config/systemd/disk-monitor.{service,timer}`** - 5-minute schedule
+- **`/var/lib/disk-monitor/`** - `state` and, after a lockdown, `restore.sh`
 
 **⚠️ Important Notes:**
 - Monitoring runs as root (required for SMART access and service control)
 - False positives trigger protection (better safe than sorry)
 - No recovery automation (requires manual verification for safety)
-- Monitors ALL drives in SnapRAID config (data + parity)
+- Monitors ALL drives in `/etc/snapraid.conf` (data + parity)
 
 ---
 

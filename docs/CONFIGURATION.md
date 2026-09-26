@@ -6,7 +6,6 @@
 |------|---------|
 | `nodes/<hostname>/config.env.local` | Node-specific settings (secrets, gitignored) |
 | `nodes/<hostname>/labels.yaml` | Node labels/taints, applied with `kubectl apply -f` |
-| `config/service-configs/monitoring.conf` | Storage monitoring drive map (gitignored; template alongside) |
 | `config/borgmatic/config.yaml` | Borgmatic backup config (deployed to `/etc/borgmatic/config.yaml`) |
 | `config/system-configs/` | Reference copies of host configs (`fstab`, `snapraid.conf`, `exports`) |
 | `ansible/inventory.yml` | Node inventory and group membership |
@@ -64,38 +63,12 @@ SERVER_URL="https://100.x.x.x:6443"
 
 ## Service Configs
 
-### monitoring.conf
+### Storage monitoring
 
-Drive map used by `scripts/monitor-storage.sh`. Copy
-`config/service-configs/monitoring.conf.template` to `monitoring.conf` (the
-`.conf` extension is gitignored) and set it to match **this host's** partitions:
-
-```bash
-# Data partitions (without /dev/ prefix) and the mount point each one carries.
-# The two arrays are positional — index N of one must match index N of the other.
-DATA_PARTITIONS=("sdf1" "sdb1" "sdc1" "sde1")
-DATA_MOUNT_POINTS=("/mnt/data1" "/mnt/data2" "/mnt/data3" "/mnt/data4")
-
-PARITY_PARTITIONS=("sdd1")
-PARITY_MOUNT_POINTS=("/mnt/parity1")
-
-# Physical drives for SMART checks (without /dev/ prefix)
-DATA_DRIVES=("sdf" "sdb" "sdc" "sde")
-PARITY_DRIVES=("sdd")
-
-MERGERFS_MOUNT="/media/data"
-```
-
-> ⚠️ **`/dev/sdX` names are not stable across reboots.** They have already been
-> reshuffled once on `cyl-homelab`. After any reboot or drive change, re-derive
-> the mapping and update this file — a stale map means SMART checks run against
-> the wrong disk. Current authoritative mapping:
-> [`config/system-configs/DRIVE-MAPPING.md`](../config/system-configs/DRIVE-MAPPING.md).
->
-> ```bash
-> lsblk -o NAME,SIZE,FSTYPE,LABEL,UUID,MOUNTPOINT   # partition → mount
-> ls -l /dev/disk/by-id/ | grep -v part             # stable serial → /dev/sdX
-> ```
+`scripts/monitor-storage.sh` has no config file. It reads the SnapRAID disks
+from `/etc/snapraid.conf` and resolves devices at run time, because `/dev/sdX`
+names change between boots. Current mapping:
+[`config/system-configs/DRIVE-MAPPING.md`](../config/system-configs/DRIVE-MAPPING.md).
 
 Alerting is not configured here — alerts are emitted as Prometheus metrics to
 the node_exporter textfile collector and routed by Alertmanager (Discord via

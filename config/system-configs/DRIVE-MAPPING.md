@@ -1,6 +1,6 @@
 # Physical Drive to Logical Mount Mapping
 
-**Last Updated:** 2026-08-21
+**Last Updated:** 2026-09-26
 **System:** cyl-homelab
 
 > ⚠️ **`/dev/sdX` names are NOT stable.** They already changed once on this host:
@@ -14,15 +14,11 @@
 > lsblk -d -o NAME,SIZE,MODEL,SERIAL
 > ls -l /dev/disk/by-id/ | grep -v part
 > ```
->
-> `config/service-configs/monitoring.conf` also keys off `/dev/sdX` names —
-> update it in the same pass or SMART checks will silently run against the wrong
-> disk.
 
 ## Storage Array Overview
 
-- **Total Data Capacity:** ~6.8 TB usable pool (4 data drives)
-- **Parity Capacity:** 3.6 TB (1 parity drive)
+- **Total Data Capacity:** 9.9 TB pool (4 data drives)
+- **Parity Capacity:** 5.5 TB (1 parity drive)
 - **Array Type:** SnapRAID + MergerFS
 - **Unified Mount:** `/media/data`
 
@@ -30,16 +26,16 @@
 
 ## Drive Mapping Table
 
-Current as of 2026-08-21. Sorted by device letter.
+Current as of 2026-09-26, after the parity swap. Sorted by device letter.
 
 | Physical | Size | Model | Serial | Partition | Label | UUID | Mount | Purpose |
 |----------|------|-------|--------|-----------|-------|------|-------|---------|
-| `/dev/sda` | 447.1G | KINGSTON SA400S37480G | 50026B7380689D75 | sda1 | - | 5d0349bc-9c4b-4463-b21e-8ccaf6f861d1 | `/` | **OS Drive** (not in array) |
-| `/dev/sdb` | 1.8T | ST2000DM006-2DM164 | Z560WFLZ | sdb1 | data2 | cade9ae8-5631-4ceb-9be4-af09085bcc8a | `/mnt/data2` | **Data Drive 2** |
-| `/dev/sdc` | 931.5G | WDC WD10EADX-00TDHB0 | WD-WCAV5S398441 | sdc1 | data3 | f3671b3e-6a45-4904-aec5-e5cfa774b64c | `/mnt/data3` | **Data Drive 3** |
-| `/dev/sdd` | 3.6T | WDC WD40EFRX-68N32N0 | WD-WCC7K2UYA5A3 | sdd1 | parity1 | 813d8234-916d-42e1-89ce-cff117feab67 | `/mnt/parity1` | **Parity Drive** (XFS) |
-| `/dev/sde` | 465.8G | ST3500830AS | 9QG5N35P | sde1 | data4 | f32cd179-7b68-42ef-81a6-dcf4e3e20968 | `/mnt/data4` | **Data Drive 4** |
-| `/dev/sdf` | 3.6T | WDC WD40EFRX-68N32N0 | WD-WCC7K5JFY8XT | sdf1 | data1 | 53c59e25-4e9a-4c82-a83a-40941151e959 | `/mnt/data1` | **Data Drive 1** (largest) |
+| `/dev/sda` | 3.6T | WDC WD40EFRX-68N32N0 | WD-WCC7K2UYA5A3 | sda1 | data4 | 777e02e3-19f2-40a6-9015-7268e58c9068 | `/mnt/data4` | **Data Drive 4** (ex-parity) |
+| `/dev/sdb` | 447.1G | KINGSTON SA400S37480G | 50026B7380689D75 | sdb1 | - | 5d0349bc-9c4b-4463-b21e-8ccaf6f861d1 | `/` | **OS Drive** (not in array) |
+| `/dev/sdc` | 1.8T | ST2000DM006-2DM164 | Z560WFLZ | sdc1 | data2 | cade9ae8-5631-4ceb-9be4-af09085bcc8a | `/mnt/data2` | **Data Drive 2** |
+| `/dev/sdd` | 931.5G | WDC WD10EADX-00TDHB0 | WD-WCAV5S398441 | sdd1 | data3 | f3671b3e-6a45-4904-aec5-e5cfa774b64c | `/mnt/data3` | **Data Drive 3** |
+| `/dev/sde` | 3.6T | WDC WD40EFRX-68N32N0 | WD-WCC7K5JFY8XT | sde1 | data1 | 53c59e25-4e9a-4c82-a83a-40941151e959 | `/mnt/data1` | **Data Drive 1** |
+| `/dev/sdf` | 5.5T | WDC WD60EFZX-68B3FN0 | WD-C81MYRAK | sdf1 | parity1 | 744d3ce7-6c52-4e5a-a798-2b86a57e73d8 | `/mnt/parity1` | **Parity Drive** (XFS) |
 
 `/dev/sdg`–`/dev/sdj` are the empty built-in USB card reader slots (0B) — ignore
 them.
@@ -53,8 +49,8 @@ Use these in any script or procedure that must survive a reboot:
 | `/mnt/data1` | `ata-WDC_WD40EFRX-68N32N0_WD-WCC7K5JFY8XT` |
 | `/mnt/data2` | `ata-ST2000DM006-2DM164_Z560WFLZ` |
 | `/mnt/data3` | `ata-WDC_WD10EADX-00TDHB0_WD-WCAV5S398441` |
-| `/mnt/data4` | `ata-ST3500830AS_9QG5N35P` |
-| `/mnt/parity1` | `ata-WDC_WD40EFRX-68N32N0_WD-WCC7K2UYA5A3` |
+| `/mnt/data4` | `ata-WDC_WD40EFRX-68N32N0_WD-WCC7K2UYA5A3` |
+| `/mnt/parity1` | `ata-WDC_WD60EFZX-68B3FN0_WD-C81MYRAK` |
 | `/` (OS) | `ata-KINGSTON_SA400S37480G_50026B7380689D75` |
 
 `/etc/fstab` correctly uses UUIDs, so mounts are unaffected by letter changes.
@@ -65,44 +61,42 @@ Use these in any script or procedure that must survive a reboot:
 
 ### Data Drives (ext4)
 
-#### Data Drive 1 → `/mnt/data1` (Largest)
-- **Size:** 3.6 TB (used 2.4T / 68% as of 2026-08-21)
+#### Data Drive 1 → `/mnt/data1`
+- **Size:** 3.6 TB (used 3.4T / 94% as of 2026-09-26)
 - **Model:** Western Digital Red WD40EFRX
 - **Serial:** WD-WCC7K5JFY8XT
-- **Filesystem:** ext4
 - **SnapRAID ID:** d1
 
 #### Data Drive 2 → `/mnt/data2`
 - **Size:** 1.8 TB (used 1.2T / 68%)
 - **Model:** Seagate ST2000DM006
 - **Serial:** Z560WFLZ
-- **Filesystem:** ext4
 - **SnapRAID ID:** d2
 
 #### Data Drive 3 → `/mnt/data3`
-- **Size:** 931.5 GB (used 304M / 1% — effectively empty)
+- **Size:** 931.5 GB (used 737G / 85%)
 - **Model:** Western Digital WD10EADX
 - **Serial:** WD-WCAV5S398441
-- **Filesystem:** ext4
 - **SnapRAID ID:** d3
 
 #### Data Drive 4 → `/mnt/data4`
-- **Size:** 465.8 GB (used 227G / 53%)
-- **Model:** Seagate ST3500830AS (older model)
-- **Serial:** 9QG5N35P
-- **Filesystem:** ext4
+- **Size:** 3.6 TB (used 227G / 7%)
+- **Model:** Western Digital Red WD40EFRX
+- **Serial:** WD-WCC7K2UYA5A3
 - **SnapRAID ID:** d4
-- **Note:** Oldest drive in array
+- **Note:** Was the parity drive until 2026-09-26. Rebuilt with
+  `snapraid -d d4 fix`, which does not restore owner/permissions: the restored
+  files are `root:root 600`. The previous data4 (Seagate ST3500830AS, serial
+  9QG5N35P, 465.8 GB) is shelved with the original files.
 
 ### Parity Drive (XFS)
 
 #### Parity Drive → `/mnt/parity1`
-- **Size:** 3.6 TB (used 2.7T / 72%)
-- **Model:** Western Digital Red WD40EFRX
-- **Serial:** WD-WCC7K2UYA5A3
-- **Filesystem:** XFS (recommended for parity)
-- **Purpose:** Stores parity information to recover from 1 drive failure
-- **Note:** Must be ≥ largest data drive (matches data1 at 3.6TB)
+- **Size:** 5.5 TB (used 3.6T / 66%)
+- **Model:** Western Digital Red Plus WD60EFZX (bought used)
+- **Serial:** WD-C81MYRAK
+- **Filesystem:** XFS
+- **Note:** Must be ≥ largest data drive (3.6 TB)
 
 ### OS Drive (Not in Array)
 
@@ -120,13 +114,13 @@ Use these in any script or procedure that must survive a reboot:
 
 ## MergerFS Configuration
 
-**Unified Mount Point:** `/media/data` (6.8T total, 3.8T used / 58%)
+**Unified Mount Point:** `/media/data` (9.9T total, 5.5T used / 57%)
 
 **Source Drives (branch order):**
 1. `/mnt/data1` (3.6 TB)
 2. `/mnt/data2` (1.8 TB)
 3. `/mnt/data3` (931 GB)
-4. `/mnt/data4` (466 GB)
+4. `/mnt/data4` (3.6 TB)
 
 **Live options** (`pgrep -a mergerfs`), mergerfs v2.42.0:
 ```
@@ -172,11 +166,11 @@ name in an alert — re-check the table above first.
 4. **Update /etc/fstab** with the new UUID
 5. **Mount to same location** (e.g. `/mnt/data2`)
 6. **Restore data:** `sudo snapraid fix -d d2`
-7. **Update this file and `config/service-configs/monitoring.conf`**
+7. **Update this file** (the monitor finds disks from `/etc/snapraid.conf` itself)
 
 ### If the Parity Drive Fails
 
-1. **Replace with 3.6TB+ drive**
+1. **Replace with a drive ≥ the largest data drive (3.6 TB)**
 2. **Format as XFS** with label `parity1`
 3. **Update /etc/fstab** with the new UUID
 4. **Mount to /mnt/parity1**
@@ -195,23 +189,16 @@ name in an alert — re-check the table above first.
 
 ## Monitoring Configuration
 
-**Script:** `/home/cyl/homelab/scripts/monitor-storage.sh`
-**Config:** `/home/cyl/homelab/config/service-configs/monitoring.conf`
-**Schedule:** every 5 minutes via **`disk-monitor.timer`** (systemd), deployed by
-`ansible/playbooks/systemd-timers.yml`. This is not a cron job.
+**Script:** `scripts/monitor-storage.sh`, run every 5 minutes by
+**`disk-monitor.timer`** (systemd, deployed by `ansible/playbooks/systemd-timers.yml`).
+It has no config file: it reads the data and parity disks from `/etc/snapraid.conf`
+and resolves each mount to its device and serial at run time.
 
-**Monitored:**
-- SMART health for the 4 data drives + parity drive
-- Mount points: `/mnt/data1`–`/mnt/data4`, `/mnt/parity1`
-- MergerFS pool: `/media/data`
-- Server-side NFS export layer (advisory only — never triggers lockdown)
+**Monitored:** SMART health, mount + write test, and kernel I/O / filesystem
+errors for every SnapRAID disk; the MergerFS pool; the server-side NFS export
+layer (advisory only — never triggers lockdown).
 
-**On drive failure (`lockdown_array`):**
-- Stop all Docker containers
-- Scale deployments to 0 in the `media` and `cloud` namespaces
-- Unmount the MergerFS pool
-- Remount all SnapRAID drives read-only
-- Emit Prometheus metrics → Alertmanager → Discord
+**On drive failure:** see `docs/STORAGE.md` → "How It Works".
 
 ---
 
@@ -220,7 +207,7 @@ name in an alert — re-check the table above first.
 1. **Drive Order Changes:** `/dev/sdX` names are assigned at boot and have
    already shifted once here. Always use UUIDs in `/etc/fstab` and serials or
    `by-id` paths everywhere else.
-2. **Parity Size:** Must be ≥ largest data drive (currently 3.6TB)
+2. **Parity Size:** Must be ≥ largest data drive (currently 3.6 TB; parity is 5.5 TB)
 3. **Single Drive Protection:** SnapRAID can only recover from 1 drive failure at a time
 4. **Not Real-Time:** New files are only protected after the next `snapraid sync`
    (runs daily at 02:00 via `snapraid-runner.timer`)
@@ -236,10 +223,10 @@ To physically identify a failed drive:
 2. Cross-reference with the table above
 3. Drive serial numbers are printed on drive labels
 4. `WD-WCC7K*` = Western Digital Red 4TB (two of them — **check the full serial**,
-   `...5JFY8XT` is data1, `...2UYA5A3` is parity)
-5. `WD-WCAV5*` = Western Digital 1TB (data3)
-6. `Z560*` = Seagate 2TB (data2)
-7. `9QG5*` = Older Seagate 500GB (data4, most likely to fail first)
+   `...5JFY8XT` is data1, `...2UYA5A3` is data4)
+5. `WD-C81*` = Western Digital Red Plus 6TB (parity)
+6. `WD-WCAV5*` = Western Digital 1TB (data3)
+7. `Z560*` = Seagate 2TB (data2)
 
 ---
 
@@ -254,7 +241,7 @@ lsblk -d -o NAME,SIZE,MODEL,SERIAL
 ls -l /dev/disk/by-id/ | grep -v part
 
 # Check physical drive info (use by-id to be safe)
-sudo smartctl -i /dev/disk/by-id/ata-ST3500830AS_9QG5N35P
+sudo smartctl -i /dev/disk/by-id/ata-WDC_WD60EFZX-68B3FN0_WD-C81MYRAK
 
 # View SnapRAID status
 sudo snapraid status
@@ -263,10 +250,10 @@ sudo snapraid status
 sudo snapraid sync
 
 # Check a specific drive's health
-sudo smartctl -H /dev/disk/by-id/ata-ST3500830AS_9QG5N35P
+sudo smartctl -H /dev/disk/by-id/ata-WDC_WD60EFZX-68B3FN0_WD-C81MYRAK
 ```
 
 ---
 
-**Generated from system state on:** 2026-08-21
+**Generated from system state on:** 2026-09-26
 **Config files backed up in:** `/home/cyl/homelab/config/system-configs/`

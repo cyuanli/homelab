@@ -294,11 +294,7 @@ SSDs, which idle hotter by design.
 
 **Disk health monitoring** (for SnapRAID storage nodes):
 
-```bash
-# Create monitoring config from template
-cp config/service-configs/monitoring.conf.template config/service-configs/monitoring.conf
-# Edit with your drive configuration — see docs/CONFIGURATION.md
-```
+No config file: the script reads the disks from `/etc/snapraid.conf`.
 
 The check itself runs from `disk-monitor.timer` (every 5 minutes), deployed by
 `ansible-playbook playbooks/systemd-timers.yml`. It is **not** a cron job.

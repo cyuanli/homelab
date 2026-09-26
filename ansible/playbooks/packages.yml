@@ -22,6 +22,7 @@
       ansible.builtin.apt:
         name:
           - smartmontools
+          - attr
           - sysstat
           - net-tools
           - dnsutils

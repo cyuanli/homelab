@@ -1,611 +1,465 @@
 #!/usr/bin/env bash
-# Locks down the ENTIRE array on any single drive failure.
+# Locks down the array on any drive failure. Drives are read from snapraid.conf
+# and resolved to devices at runtime; /dev/sdX letters change between boots.
 set -euo pipefail
-IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
-
 # shellcheck source=utils/metrics.sh
 source "$SCRIPT_DIR/utils/metrics.sh"
 
+SNAPRAID_CONF="${SNAPRAID_CONF:-/etc/snapraid.conf}"
+MERGERFS_MOUNT="${MERGERFS_MOUNT:-/media/data}"
+STATE_DIR="/var/lib/disk-monitor"
+STATE_FILE="$STATE_DIR/state"
+RESTORE_FILE="$STATE_DIR/restore.sh"
 LOG_FILE="/var/log/disk-monitor.log"
-STATE_FILE="/var/lib/disk-monitor/state"
+DRY_RUN="${DRY_RUN:-0}"
+LOCKDOWN_TIMEOUT="${LOCKDOWN_TIMEOUT:-180}"
+LOCKDOWN_TIMERS=("snapraid-runner.timer" "borgmatic.timer")
+export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
-DATA_PARTITIONS=("sdb1" "sdc1" "sdd1" "sde1")
-DATA_MOUNT_POINTS=("/mnt/data4" "/mnt/data2" "/mnt/data3" "/mnt/data1")
-PARITY_PARTITIONS=("sdf1")
-PARITY_MOUNT_POINTS=("/mnt/parity1")
+# PVs whose NFS path is under one of these (relative to the /exports pseudo-root) live on the pool.
+POOL_NFS_PATHS=("/media" "/games")
 
-DATA_DRIVES=("sdb" "sdc" "sdd" "sde")
-PARITY_DRIVES=("sdf")
-
-MERGERFS_MOUNT="/media/data"
-
-# NFS serving layer, not covered by the SMART/mount/mergerfs checks above.
-# A mergerfs crash leaves the pool ENOTCONN and nfsd serving stale handles to
-# every client, cascading the cluster (2026-08-21). ADVISORY only: never
-# triggers lockdown, a stale export is a serving fault, not a drive failure.
-# Override in config/service-configs/monitoring.conf.
+# ADVISORY only: a stale export is a serving fault, never a lockdown trigger.
+# A mergerfs crash leaves the pool ENOTCONN and nfsd serving stale handles (2026-08-21).
 NFS_SERVER_UNIT="${NFS_SERVER_UNIT:-nfs-server.service}"
 NFS_KERNEL_EXPORTS="${NFS_KERNEL_EXPORTS:-/proc/fs/nfs/exports}"
 NFS_STAT_TIMEOUT="${NFS_STAT_TIMEOUT:-10}"
 NFS_EXPORT_BINDS=("/exports/media" "/exports/configs" "/exports/games")
-# fsid=0 (/exports pseudo-root) is implied. /exports/games is served through
-# the pseudo-root and has no fsid of its own, so it is only checked as a bind.
+# fsid=0 is implied; /exports/games has no fsid of its own.
 NFS_EXPECTED_FSIDS=("1" "2")
 
-ALL_PARTITIONS=("${DATA_PARTITIONS[@]}" "${PARITY_PARTITIONS[@]}")
-ALL_DRIVES=("${DATA_DRIVES[@]}" "${PARITY_DRIVES[@]}")
-ALL_MOUNT_POINTS=("${DATA_MOUNT_POINTS[@]}" "${PARITY_MOUNT_POINTS[@]}")
-
-load_monitoring_config() {
-    load_config
-
-    local monitoring_config="$HOMELAB_ROOT/config/service-configs/monitoring.conf"
-    if [[ -f "$monitoring_config" ]]; then
-        log_info "Loading monitoring configuration from $monitoring_config"
-        # shellcheck source=/dev/null
-        source "$monitoring_config"
-    fi
-}
+MOUNTS=() ROLES=() DISKS=() SERIALS=()
 
 log() {
-    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"
+    local line
+    line="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "$line"
+    echo "$line" >> "$LOG_FILE" 2>/dev/null || true
 }
 error() { log "ERROR: $*"; }
 warn()  { log "WARNING: $*"; }
 info()  { log "INFO: $*"; }
 
-check_dependencies() {
-    local missing_deps=()
-    command -v smartctl >/dev/null 2>&1 || missing_deps+=("smartmontools")
-    command -v findmnt >/dev/null 2>&1 || missing_deps+=("util-linux")
-    command -v mountpoint >/dev/null 2>&1 || missing_deps+=("mountpoint")
-
-    if ! command -v docker >/dev/null 2>&1; then
-        warn "docker not found - docker stop operations will be skipped"
+run() {
+    if [[ $DRY_RUN == 1 ]]; then
+        info "DRY RUN: $*"
+    else
+        "$@"
     fi
-
-    if [ ${#missing_deps[@]} -gt 0 ]; then
-        error "Missing dependencies: ${missing_deps[*]}"
-        error "Install with: sudo apt install ${missing_deps[*]}"
-        return 1
-    fi
-    return 0
 }
 
-ensure_directories() {
-    mkdir -p "$(dirname "$STATE_FILE")"
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE"
-    touch "$STATE_FILE" || true
-    chmod 640 "$LOG_FILE" 2>/dev/null || true
-    return 0
+record_restore() {
+    if [[ $DRY_RUN == 1 ]]; then
+        info "DRY RUN restore: $*"
+    elif ! grep -qxF -- "$*" "$RESTORE_FILE" 2>/dev/null; then
+        # prepend so the file undoes in reverse order
+        { head -n 3 "$RESTORE_FILE"; printf '%s\n' "$*"; tail -n +4 "$RESTORE_FILE"; } > "$RESTORE_FILE.tmp"
+        mv "$RESTORE_FILE.tmp" "$RESTORE_FILE"
+        chmod 700 "$RESTORE_FILE"
+    fi
+}
+
+is_ro() {
+    local opts
+    opts=$(findmnt -no OPTIONS --mountpoint "$1" 2>/dev/null) || return 1
+    [[ ",$opts," == *,ro,* ]]
+}
+
+discover_array() {
+    local key a b mp part disk
+    [[ -r $SNAPRAID_CONF ]] || { error "Cannot read $SNAPRAID_CONF"; exit 1; }
+    while read -r key a b _; do
+        case "$key" in
+            data) mp="${b%/}"; ROLES+=("data") ;;
+            parity|[2-6]-parity|z-parity) mp="$(dirname "${a%%,*}")"; ROLES+=("parity") ;;
+            *) continue ;;
+        esac
+        MOUNTS+=("$mp")
+        part=$(findmnt -no SOURCE --mountpoint "$mp" 2>/dev/null || findmnt -s -e -no SOURCE --mountpoint "$mp" 2>/dev/null || true)
+        disk=""
+        if [[ -b $part ]]; then
+            disk=$(lsblk -no PKNAME "$part" 2>/dev/null | head -1)
+            disk="${disk:-$(basename "$part")}"
+        fi
+        DISKS+=("${disk:-unknown}")
+        SERIALS+=("$([[ -n $disk ]] && lsblk -dno SERIAL "/dev/$disk" 2>/dev/null || echo unknown)")
+    done < <(sed 's/#.*//' "$SNAPRAID_CONF")
+    (( ${#MOUNTS[@]} )) || { error "No data/parity disks found in $SNAPRAID_CONF"; exit 1; }
 }
 
 check_smart_health() {
-    local device="$1"
-    local health_status
-
-    health_status=$(smartctl -H "/dev/$device" 2>/dev/null | grep -i "smart.*health" | awk '{print $NF}')
-
-    if [[ -z "$health_status" ]]; then
-        error "Failed to get SMART health for /dev/$device - no health status found"
+    local disk="$1" status
+    [[ $disk != unknown ]] || { error "No block device found for this mount"; return 1; }
+    status=$(smartctl -H "/dev/$disk" 2>/dev/null | awk 'tolower($0) ~ /smart.*health/ {print $NF}')
+    if [[ $status != PASSED && $status != OK ]]; then
+        error "SMART health for /dev/$disk: ${status:-no result}"
         return 1
     fi
+}
 
-    info "SMART health for /dev/$device: $health_status"
-
-    if [[ "$health_status" != "PASSED" && "$health_status" != "OK" ]]; then
-        error "SMART health check FAILED for /dev/$device: $health_status"
-        return 1
-    fi
-
-    return 0
+kernel_errors() {
+    local disk="$1" ata pattern log_text
+    [[ $disk != unknown ]] || return 1
+    ata=$(readlink -f "/sys/block/$disk" | grep -oE 'ata[0-9]+' | head -1 || true)
+    pattern="error, dev $disk,|Buffer I/O error on dev $disk[0-9]*,|EXT4-fs error \(device $disk[0-9]*\)|XFS \($disk[0-9]*\): .*[Cc]orruption"
+    [[ -n $ata ]] && pattern+="|$ata\.[0-9]{2}: error: \{[^}]*UNC"
+    log_text=$(dmesg --since "5 minutes ago" 2>/dev/null || true)
+    grep -E "$pattern" <<< "$log_text"
 }
 
 check_mount_point() {
-    local mount_point="$1"
-    local partition="$2"
-
-    if ! mountpoint -q "$mount_point"; then
-        error "Mount point $mount_point is not mounted"
+    local mp="$1" disk="$2" tf errs
+    if ! mountpoint -q "$mp"; then
+        error "$mp is not mounted"
         return 1
     fi
-
-    local opts
-    if ! opts=$(findmnt -n -o OPTIONS --target "$mount_point" 2>/dev/null); then
-        warn "Could not query mount options for $mount_point"
-        opts=""
-    fi
-
-    if echo "$opts" | grep -qw "ro"; then
-        info "$mount_point mounted read-only"
+    if is_ro "$mp"; then
+        info "$mp is mounted read-only"
+    elif tf=$(timeout "$NFS_STAT_TIMEOUT" mktemp -p "$mp" .disk-health-test.XXXX 2>/dev/null); then
+        rm -f "$tf"
     else
-        local tf
-        if ! tf=$(mktemp -p "$mount_point" .disk-health-test.XXXX 2>/dev/null); then
-            error "Cannot create test file on $mount_point (write failed)"
-            return 1
-        fi
-        rm -f "$tf" || true
-    fi
-
-    if dmesg -T --since "5 minutes ago" 2>/dev/null | grep -E "(ext4_mb_generate_buddy.*corruption|EXT4-fs error.*Corrupt|XFS.*Metadata corruption|xfs_inode_buf_verify.*bad magic|COMRESET failed \(errno=-16\)|link is slow to respond.*ready=0|SStatus.*SError.*UnrecovData|blk_update_request: I/O error.*sector [0-9]+|status: \{ DRDY ERR \}.*error: \{ UNC \}|ata[0-9]+\.00: exception Emask.*frozen)" | grep -i "$partition" >/dev/null; then
-        error "Critical hardware/filesystem errors detected for $partition / $mount_point"
+        error "Cannot write a test file on $mp"
         return 1
     fi
-
-    return 0
+    if errs=$(kernel_errors "$disk"); then
+        error "Kernel reported errors for /dev/$disk ($mp):"$'\n'"$errs"
+        return 1
+    fi
 }
 
 check_mergerfs_health() {
-    if ! mountpoint -q "$MERGERFS_MOUNT"; then
-        warn "MergerFS mount $MERGERFS_MOUNT is not mounted (may be expected during failure recovery)"
-        return 1
-    fi
-
     local tf
-    if ! tf=$(mktemp -p "$MERGERFS_MOUNT" .disk-health-test.XXXX 2>/dev/null); then
-        error "Cannot write to MergerFS mount $MERGERFS_MOUNT"
+    mountpoint -q "$MERGERFS_MOUNT" || return 1
+    is_ro "$MERGERFS_MOUNT" && return 0
+    tf=$(timeout "$NFS_STAT_TIMEOUT" mktemp -p "$MERGERFS_MOUNT" .disk-health-test.XXXX 2>/dev/null) || return 1
+    rm -f "$tf"
+}
+
+# "ns claim" for every bound PV on the pool
+pool_claims() {
+    kubectl get pv -o json | jq -r --args '
+        .items[] | select(.spec.nfs and .spec.claimRef)
+        | .spec.nfs.path as $p
+        | select(any($ARGS.positional[] as $pre | $p == $pre or ($p | startswith($pre + "/")); .))
+        | "\(.spec.claimRef.namespace) \(.spec.claimRef.name)"' "${POOL_NFS_PATHS[@]}"
+}
+
+# $1 = kubectl resource list; prints matching items as JSON lines
+using_pool() {
+    local claims
+    claims=$(pool_claims | jq -Rsc 'split("\n") | map(select(length > 0))') || return 1
+    kubectl get "$1" -A -o json | jq -c --argjson c "$claims" '
+        .items[] | .metadata.namespace as $ns
+        | (if .kind == "CronJob" then .spec.jobTemplate.spec.template
+           elif .kind == "Pod" then . else .spec.template end) as $t
+        | select(any($t.spec.volumes[]?; .persistentVolumeClaim.claimName as $n
+                 | $n != null and ($c | index("\($ns) \($n)")) != null))'
+}
+
+stop_pool_workloads() {
+    local items kind ns name val
+    if ! items=$(using_pool deployment,statefulset,cronjob | jq -r '"\(.kind) \(.metadata.namespace) \(.metadata.name) \(if .kind == "CronJob" then (.spec.suspend // false) else .spec.replicas end)"'); then
+        error "Cannot query Kubernetes (KUBECONFIG=$KUBECONFIG); pool workloads NOT stopped"
         return 1
     fi
-    rm -f "$tf" || true
-    return 0
-}
-
-stop_all_docker_containers() {
-    if ! command -v docker >/dev/null 2>&1; then
-        info "docker missing; skipping container stop"
-        return 0
-    fi
-
-    info "Stopping ALL Docker containers to prevent data loss..."
-    local running_containers
-    if running_containers=$(docker ps -q 2>/dev/null); then
-        if [ -n "$running_containers" ]; then
-            info "Stopping containers: $(docker ps --format '{{.Names}}' | tr '\n' ' ')"
-            echo "$running_containers" | xargs -r docker stop
-            info "All Docker containers stopped"
+    while read -r kind ns name val; do
+        [[ -n $kind ]] || continue
+        if [[ $kind == CronJob ]]; then
+            [[ $val == true ]] && continue
+            info "Suspending cronjob $ns/$name"
+            run kubectl -n "$ns" patch cronjob "$name" -p '{"spec":{"suspend":true}}'
+            record_restore "kubectl -n $ns patch cronjob $name -p '{\"spec\":{\"suspend\":false}}'"
         else
-            info "No running Docker containers found"
+            [[ $val == 0 ]] && continue
+            info "Scaling ${kind,,} $ns/$name from $val to 0"
+            run kubectl -n "$ns" scale "${kind,,}" "$name" --replicas=0
+            record_restore "kubectl -n $ns scale ${kind,,} $name --replicas=$val"
         fi
-    else
-        warn "Failed to query Docker containers"
-    fi
+    done <<< "$items"
+
+    using_pool job | jq -r 'select((.status.active // 0) > 0) | "\(.metadata.namespace) \(.metadata.name)"' |
+        while read -r ns name; do
+            info "Deleting running job $ns/$name"
+            run kubectl -n "$ns" delete job "$name" --wait=false
+        done
 }
 
-stop_all_k8s_workloads() {
-    if ! command -v kubectl >/dev/null 2>&1; then
-        info "kubectl missing; skipping k8s workload stop"
-        return 0
-    fi
-
-    info "Stopping K8s workloads to prevent data loss..."
-
-    local namespaces=("media" "cloud")
-    for ns in "${namespaces[@]}"; do
-        if kubectl get namespace "$ns" >/dev/null 2>&1; then
-            info "Scaling down deployments in namespace: $ns"
-            kubectl scale deployment --all --replicas=0 -n "$ns" || true
-        fi
-    done
-}
-
-unmount_mergerfs() {
-    if mountpoint -q "$MERGERFS_MOUNT"; then
-        info "Unmounting MergerFS pool: $MERGERFS_MOUNT"
-        if umount "$MERGERFS_MOUNT"; then
-            info "MergerFS pool unmounted successfully"
-            return 0
-        else
-            error "Failed to unmount MergerFS pool"
+wait_pool_pods() {
+    local remaining waited=0
+    [[ $DRY_RUN == 1 ]] && return 0
+    while :; do
+        remaining=$(using_pool pod | jq -r 'select(.status.phase == "Running" or .status.phase == "Pending") | "\(.metadata.namespace)/\(.metadata.name)"') ||
+            { error "Cannot list pods using the pool"; return 1; }
+        [[ -z $remaining ]] && break
+        if (( waited >= LOCKDOWN_TIMEOUT )); then
+            error "Pods still using the pool after ${LOCKDOWN_TIMEOUT}s: $(tr '\n' ' ' <<< "$remaining")"
             return 1
         fi
-    else
-        info "MergerFS pool already unmounted"
-    fi
-    return 0
+        sleep 5
+        waited=$((waited + 5))
+    done
+    info "No pods are using the pool"
 }
 
-remount_all_drives_readonly() {
-    info "Remounting ALL SnapRAID drives as read-only..."
-    for mount_point in "${ALL_MOUNT_POINTS[@]}"; do
-        if mountpoint -q "$mount_point"; then
-            local opts
-            opts=$(findmnt -n -o OPTIONS --target "$mount_point" 2>/dev/null || true)
-            if echo "$opts" | grep -qw "ro"; then
-                info "$mount_point already mounted read-only"
-            else
-                info "Remounting $mount_point as read-only"
-                if mount -o remount,ro "$mount_point"; then
-                    info "Successfully remounted $mount_point as read-only"
-                else
-                    error "Failed to remount $mount_point as read-only"
-                fi
-            fi
-        else
-            warn "$mount_point is not mounted"
-        fi
+stop_timers() {
+    local t
+    for t in "${LOCKDOWN_TIMERS[@]}"; do
+        systemctl is-enabled --quiet "$t" 2>/dev/null || continue
+        info "Disabling $t"
+        run systemctl disable --now "$t"
+        record_restore "systemctl enable --now $t"
     done
+}
+
+# Unlike remount, this cannot fail with EBUSY, so pool writes stop even if a disk stays busy.
+freeze_pool() {
+    local ctl="$MERGERFS_MOUNT/.mergerfs" branches frozen
+    if ! branches=$(getfattr --only-values -n user.mergerfs.branches "$ctl" 2>/dev/null); then
+        error "Cannot read mergerfs branches from $ctl (attr package missing, or pool down)"
+        return 1
+    fi
+    frozen=$(sed -E 's/=(RW|NC)/=RO/g' <<< "$branches")
+    [[ $frozen == "$branches" ]] && return 0
+    info "Setting all mergerfs branches read-only"
+    if ! run setfattr -n user.mergerfs.branches -v "$frozen" "$ctl"; then
+        error "Could not set mergerfs branches read-only"
+        return 1
+    fi
+    record_restore "setfattr -n user.mergerfs.branches -v '$branches' $ctl"
+}
+
+# Pool stays mounted: unmounting it exposes the empty mountpoint on the root disk.
+remount_array_readonly() {
+    local mp attempt ok=0
+    for mp in "${MOUNTS[@]}"; do
+        mountpoint -q "$mp" || { warn "$mp is not mounted"; continue; }
+        is_ro "$mp" && continue
+        for attempt in 1 2 3 4 5 6; do
+            if run timeout 60 mount -o remount,ro "$mp"; then
+                info "Remounted $mp read-only"
+                record_restore "mount -o remount,rw $mp"
+                continue 2
+            fi
+            sleep 10
+        done
+        error "Could not remount $mp read-only. Processes holding it: $(fuser -vm "$mp" 2>&1 | tail -n +2 | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+        ok=1
+    done
+    return "$ok"
 }
 
 lockdown_array() {
-    info "INITIATING ARRAY LOCKDOWN - Drive failure detected"
-
-    stop_all_docker_containers
-    stop_all_k8s_workloads
-    unmount_mergerfs
-    remount_all_drives_readonly
-
-    info "Array lockdown complete - all drives protected"
+    local rc=0
+    info "INITIATING ARRAY LOCKDOWN"
+    if [[ $DRY_RUN != 1 && ! -e $RESTORE_FILE ]]; then
+        printf '#!/bin/sh\n# Undo for the lockdown of %s. Run only after the array is verified healthy.\nset -x\n' "$(date)" > "$RESTORE_FILE"
+        chmod 700 "$RESTORE_FILE"
+    fi
+    stop_timers || rc=1
+    stop_pool_workloads || rc=1
+    freeze_pool || rc=1
+    wait_pool_pods || rc=1
+    remount_array_readonly || rc=1
+    if (( rc )); then
+        error "LOCKDOWN INCOMPLETE - see errors above"
+    elif [[ $DRY_RUN == 1 ]]; then
+        info "Dry run complete. Nothing was changed"
+    else
+        info "Lockdown complete. Undo commands: $RESTORE_FILE"
+    fi
+    return "$rc"
 }
-
 
 export_disk_metrics() {
-    local overall_status="$1"
-    local smart_results="$2"
-    local mount_results="$3"
-    local mergerfs_status="$4"
-
-    local timestamp=$(get_timestamp)
-    local metrics_content=""
-
-    metrics_content+=$(export_gauge "disk_monitor_status" "$overall_status" 'type="overall"' "Disk monitoring overall status (1=healthy, 0=failed)")
-    metrics_content+=$'\n'
-
-    metrics_content+=$(export_gauge_header "disk_smart_health" "SMART health status per drive (1=pass, 0=fail)")
-    metrics_content+=$'\n'
-    for i in "${!ALL_DRIVES[@]}"; do
-        local drive="${ALL_DRIVES[$i]}"
-        local drive_type="data"
-
-        for parity_drive in "${PARITY_DRIVES[@]}"; do
-            if [ "$drive" = "$parity_drive" ]; then
-                drive_type="parity"
-                break
-            fi
-        done
-
-        local smart_value=1
-        if ! check_smart_health "$drive" >/dev/null 2>&1; then
-            smart_value=0
-        fi
-
-        metrics_content+=$(export_gauge_line "disk_smart_health" "$smart_value" "device=\"$drive\",type=\"$drive_type\"")
-        metrics_content+=$'\n'
+    local overall="$1" i v content
+    content=$(export_gauge "disk_monitor_status" "$overall" 'type="overall"' "Disk monitoring overall status (1=healthy, 0=failed)")$'\n'
+    content+=$(export_gauge_header "disk_smart_health" "SMART health status per drive (1=pass, 0=fail)")$'\n'
+    for i in "${!MOUNTS[@]}"; do
+        v=1; check_smart_health "${DISKS[$i]}" >/dev/null 2>&1 || v=0
+        content+=$(export_gauge_line "disk_smart_health" "$v" "device=\"${DISKS[$i]}\",serial=\"${SERIALS[$i]}\",mount=\"${MOUNTS[$i]}\",type=\"${ROLES[$i]}\"")$'\n'
     done
-
-    metrics_content+=$(export_gauge_header "disk_mount_accessible" "Mount point accessibility (1=ok, 0=failed)")
-    metrics_content+=$'\n'
-    for i in "${!ALL_MOUNT_POINTS[@]}"; do
-        local mount_point="${ALL_MOUNT_POINTS[$i]}"
-        local mount_value=1
-
-        if ! mountpoint -q "$mount_point"; then
-            mount_value=0
-        fi
-
-        metrics_content+=$(export_gauge_line "disk_mount_accessible" "$mount_value" "mount=\"$mount_point\"")
-        metrics_content+=$'\n'
+    content+=$(export_gauge_header "disk_mount_accessible" "Mount point accessibility (1=ok, 0=failed)")$'\n'
+    for i in "${!MOUNTS[@]}"; do
+        v=1; mountpoint -q "${MOUNTS[$i]}" || v=0
+        content+=$(export_gauge_line "disk_mount_accessible" "$v" "mount=\"${MOUNTS[$i]}\"")$'\n'
     done
-
-    metrics_content+=$(export_gauge "disk_mergerfs_status" "$mergerfs_status" "mount=\"$MERGERFS_MOUNT\"" "MergerFS pool status (1=ok, 0=failed)")
-    metrics_content+=$'\n'
-
-    metrics_content+=$(export_gauge "disk_monitor_last_run_timestamp_seconds" "$timestamp" "" "Last successful monitoring run timestamp")
-    metrics_content+=$'\n'
-
-    write_metric_file "disk_monitor.prom" "$metrics_content"
+    v=1; check_mergerfs_health || v=0
+    content+=$(export_gauge "disk_mergerfs_status" "$v" "mount=\"$MERGERFS_MOUNT\"" "MergerFS pool status (1=ok, 0=failed)")$'\n'
+    content+=$(export_gauge "disk_monitor_last_run_timestamp_seconds" "$(get_timestamp)" "" "Last successful monitoring run timestamp")
+    write_metric_file "disk_monitor.prom" "$content"
 }
 
-export_nfs_export_metrics() {
-    local overall_status="$1"
-
-    local metrics_content=""
-
-    metrics_content+=$(export_gauge "nfs_export_status" "$overall_status" 'type="overall"' "NFS export layer health (1=healthy, 0=degraded)")
-    metrics_content+=$'\n'
-
-    local server_active=0
-    if systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
-        server_active=1
-    fi
-    metrics_content+=$(export_gauge "nfs_server_active" "$server_active" "unit=\"$NFS_SERVER_UNIT\"" "NFS server unit active (1=active, 0=inactive)")
-    metrics_content+=$'\n'
-
-    metrics_content+=$(export_gauge_header "nfs_export_bind_accessible" "NFS export bind accessible (1=ok, 0=stale/missing)")
-    metrics_content+=$'\n'
-    for bind in "${NFS_EXPORT_BINDS[@]}"; do
-        local bind_value=0
-        if mountpoint -q "$bind" && timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
-            bind_value=1
-        fi
-        metrics_content+=$(export_gauge_line "nfs_export_bind_accessible" "$bind_value" "mount=\"$bind\"")
-        metrics_content+=$'\n'
-    done
-
-    metrics_content+=$(export_gauge_header "nfs_export_fsid_present" "Expected fsid present in kernel export table (1=present, 0=missing)")
-    metrics_content+=$'\n'
-    for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
-        local fsid_value=0
-        if [[ -r "$NFS_KERNEL_EXPORTS" ]] && grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
-            fsid_value=1
-        fi
-        metrics_content+=$(export_gauge_line "nfs_export_fsid_present" "$fsid_value" "fsid=\"$fsid\"")
-        metrics_content+=$'\n'
-    done
-
-    metrics_content+=$(export_gauge "nfs_export_last_run_timestamp_seconds" "$(get_timestamp)" "" "Last NFS export health check timestamp")
-    metrics_content+=$'\n'
-
-    write_metric_file "nfs_export.prom" "$metrics_content"
-}
+bind_ok() { mountpoint -q "$1" && timeout "$NFS_STAT_TIMEOUT" stat "$1" >/dev/null 2>&1; }
+fsid_ok() { [[ -r $NFS_KERNEL_EXPORTS ]] && grep -qE "fsid=$1[,)]" "$NFS_KERNEL_EXPORTS"; }
 
 check_nfs_export_layer() {
-    info "Checking server-side NFS export layer..."
-    local healthy=true
-
+    local healthy=1 server=1 bind fsid v content
     if ! systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
-        error "NFS server ($NFS_SERVER_UNIT) is not active - exports are down"
-        healthy=false
+        error "$NFS_SERVER_UNIT is not active - exports are down"
+        healthy=0 server=0
     fi
-
-    # Timed stat: an ENOTCONN pool or stale bind would otherwise hang forever.
+    content=$(export_gauge_header "nfs_export_bind_accessible" "NFS export bind accessible (1=ok, 0=stale/missing)")$'\n'
     for bind in "${NFS_EXPORT_BINDS[@]}"; do
-        if ! mountpoint -q "$bind"; then
-            error "NFS export bind $bind is not mounted - clients will get stale handles"
-            healthy=false
-        elif ! timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
-            error "NFS export bind $bind is not accessible (stale/ENOTCONN pool?)"
-            healthy=false
+        v=1
+        if ! bind_ok "$bind"; then
+            error "NFS export bind $bind is not mounted or not accessible (stale/ENOTCONN pool?)"
+            healthy=0 v=0
         fi
+        content+=$(export_gauge_line "nfs_export_bind_accessible" "$v" "mount=\"$bind\"")$'\n'
     done
+    content+=$(export_gauge_header "nfs_export_fsid_present" "Expected fsid present in kernel export table (1=present, 0=missing)")$'\n'
+    for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
+        v=1
+        if [[ ! -r $NFS_KERNEL_EXPORTS ]]; then
+            warn "Cannot read $NFS_KERNEL_EXPORTS - skipping export-table check"
+        elif ! fsid_ok "$fsid"; then
+            error "NFS export table is missing fsid=$fsid (needs 'exportfs -ra')"
+            healthy=0 v=0
+        fi
+        content+=$(export_gauge_line "nfs_export_fsid_present" "$v" "fsid=\"$fsid\"")$'\n'
+    done
+    content+=$(export_gauge "nfs_server_active" "$server" "unit=\"$NFS_SERVER_UNIT\"" "NFS server unit active (1=active, 0=inactive)")$'\n'
+    content+=$(export_gauge "nfs_export_status" "$healthy" 'type="overall"' "NFS export layer health (1=healthy, 0=degraded)")$'\n'
+    content+=$(export_gauge "nfs_export_last_run_timestamp_seconds" "$(get_timestamp)" "" "Last NFS export health check timestamp")
+    write_metric_file "nfs_export.prom" "$content"
 
-    # A bind can look fine locally while nfsd has dropped its export, leaving
-    # clients unable to mount. Fix is 'exportfs -ra'.
-    if [[ -r "$NFS_KERNEL_EXPORTS" ]]; then
-        for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
-            if ! grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
-                error "NFS export table is missing fsid=$fsid (nfsd not exporting; needs 'exportfs -ra')"
-                healthy=false
-            fi
-        done
-    else
-        warn "Cannot read $NFS_KERNEL_EXPORTS - skipping export-table check"
-    fi
-
-    if [[ "$healthy" == true ]]; then
-        export_nfs_export_metrics 1
-        info "NFS export layer healthy (server active, binds accessible, fsids exported)"
+    if (( healthy )); then
+        info "NFS export layer healthy"
         return 0
     fi
-
-    export_nfs_export_metrics 0
-    error "NFS export layer DEGRADED (see errors above). Workloads NOT locked down - this is an NFS serving issue, not a drive failure. Recover the pool/binds and re-run 'sudo exportfs -ra'."
+    error "NFS export layer DEGRADED. Not a drive failure, so no lockdown. Recover the pool/binds, then 'sudo exportfs -ra'."
     return 1
 }
 
 check_all_drives() {
-    local failures=()
-    local all_healthy=true
-
-    info "Starting comprehensive disk health check..."
-
-    for i in "${!DATA_DRIVES[@]}"; do
-        local drive="${DATA_DRIVES[$i]}"
-        local partition="${DATA_PARTITIONS[$i]}"
-        local mount_point="${DATA_MOUNT_POINTS[$i]}"
-
-        info "Checking data drive /dev/$drive (partition $partition) mounted at $mount_point"
-
-        if ! check_smart_health "$drive"; then
-            failures+=("Data drive /dev/$drive: SMART health failure")
-            all_healthy=false
-        fi
-
-        if ! check_mount_point "$mount_point" "$partition"; then
-            failures+=("Data drive /dev/$drive: Mount/access failure at $mount_point")
-            all_healthy=false
-        fi
+    local i f failures=()
+    for i in "${!MOUNTS[@]}"; do
+        check_smart_health "${DISKS[$i]}" || failures+=("${MOUNTS[$i]} (${SERIALS[$i]}): SMART health failure")
+        check_mount_point "${MOUNTS[$i]}" "${DISKS[$i]}" || failures+=("${MOUNTS[$i]} (${SERIALS[$i]}): mount/access failure")
     done
 
-    for i in "${!PARITY_DRIVES[@]}"; do
-        local drive="${PARITY_DRIVES[$i]}"
-        local partition="${PARITY_PARTITIONS[$i]}"
-        local mount_point="${PARITY_MOUNT_POINTS[$i]}"
-
-        info "Checking parity drive /dev/$drive (partition $partition) mounted at $mount_point"
-
-        if ! check_smart_health "$drive"; then
-            failures+=("Parity drive /dev/$drive: SMART health failure")
-            all_healthy=false
-        fi
-
-        if ! check_mount_point "$mount_point" "$partition"; then
-            failures+=("Parity drive /dev/$drive: Mount/access failure at $mount_point")
-            all_healthy=false
-        fi
-    done
-
-    local mergerfs_failed=false
-    if ! check_mergerfs_health; then
-        if [ "$all_healthy" = true ]; then
-            mergerfs_failed=true
-            warn "MergerFS mount $MERGERFS_MOUNT is not mounted while drives are healthy"
-        else
-            info "MergerFS health check failed (expected during drive failure recovery)"
-        fi
-    fi
-
-    if [ "$all_healthy" = false ]; then
-        local failure_message
-        failure_message=$(printf '%s\n' "${failures[@]}")
-
-        error "DRIVE FAILURE DETECTED!"
-        error "$failure_message"
-
-        lockdown_array
-
-        {
-            printf 'FAILED\n%s\n%s\n' "$(date)" "$failure_message" > "$STATE_FILE"
-        } || true
-
-        local mergerfs_ok=0
-        check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
-        export_disk_metrics 0 "" "" "$mergerfs_ok"
-
-        return 1
-    else
+    if (( ${#failures[@]} == 0 )); then
         info "All drives are healthy"
-
-        local was_failed=false
-        if [ -f "$STATE_FILE" ] && grep -q "FAILED" "$STATE_FILE" 2>/dev/null; then
-            was_failed=true
+        check_mergerfs_health || warn "MergerFS pool $MERGERFS_MOUNT is not mounted or not writable while drives are healthy"
+        printf 'HEALTHY\n%s\n' "$(date)" > "$STATE_FILE"
+        if [[ -e $RESTORE_FILE ]]; then
+            warn "Drives pass but the array is still locked down. Once verified, run 'sh $RESTORE_FILE' and delete it"
+            export_disk_metrics 0
+        else
+            export_disk_metrics 1
         fi
-
-        {
-            printf 'HEALTHY\n%s\n' "$(date)" > "$STATE_FILE"
-        } || true
-
-        if [ "$was_failed" = true ]; then
-            info "RECOVERY COMPLETE - All drives are now healthy on $(hostname)"
-            info "All SnapRAID drives have passed health checks: $(printf '/dev/%s ' "${ALL_DRIVES[@]}")"
-        fi
-
-        local mergerfs_ok=0
-        check_mergerfs_health >/dev/null 2>&1 && mergerfs_ok=1 || mergerfs_ok=0
-        export_disk_metrics 1 "" "" "$mergerfs_ok"
-
         return 0
     fi
+
+    error "DRIVE FAILURE DETECTED:"
+    for f in "${failures[@]}"; do error "  $f"; done
+    mark_failed "$(printf '%s\n' "${failures[@]}")"
+    export_disk_metrics 0
+    lockdown_array || true
+    return 1
 }
 
 show_status() {
-    echo "=== Disk Monitor Status ==="
-    if [ -f "$STATE_FILE" ]; then
-        echo "Current State: $(head -1 "$STATE_FILE")"
-        if grep -q "FAILED" "$STATE_FILE" 2>/dev/null; then
-            echo ""
-            echo "=== Failure Details ==="
-            tail -n +2 "$STATE_FILE"
-        fi
-    else
-        echo "Current State: UNKNOWN (never run)"
-    fi
+    local i mp state bind fsid
+    echo "=== State ==="
+    if [[ -r $STATE_FILE ]]; then cat "$STATE_FILE"; else echo "UNKNOWN (never run, or not readable)"; fi
+    [[ -e $RESTORE_FILE ]] && echo "Lockdown undo file present: $RESTORE_FILE"
 
-    echo ""
-    echo "=== Mount Status ==="
-    for mount_point in "${ALL_MOUNT_POINTS[@]}" "$MERGERFS_MOUNT"; do
-        if mountpoint -q "$mount_point"; then
-            local opts
-            opts=$(findmnt -n -o OPTIONS --target "$mount_point" 2>/dev/null || true)
-            if echo "$opts" | grep -qw "ro"; then
-                echo "$mount_point: MOUNTED (READ-ONLY)"
-            else
-                echo "$mount_point: MOUNTED (READ-WRITE)"
-            fi
-        else
-            echo "$mount_point: NOT MOUNTED"
-        fi
+    echo; echo "=== Drives (from $SNAPRAID_CONF) ==="
+    for i in "${!MOUNTS[@]}"; do
+        mp="${MOUNTS[$i]}"
+        if ! mountpoint -q "$mp"; then state="NOT MOUNTED"
+        elif is_ro "$mp"; then state="READ-ONLY"
+        else state="read-write"; fi
+        printf '%-14s %-7s /dev/%-5s %-20s %-12s' "$mp" "${ROLES[$i]}" "${DISKS[$i]}" "${SERIALS[$i]}" "$state"
+        if (( EUID != 0 )); then echo "SMART: needs root"
+        elif check_smart_health "${DISKS[$i]}" >/dev/null 2>&1; then echo "SMART: OK"
+        else echo "SMART: FAILED"; fi
     done
+    if check_mergerfs_health; then echo "$MERGERFS_MOUNT: OK"; else echo "$MERGERFS_MOUNT: NOT MOUNTED/WRITABLE"; fi
 
-    echo ""
-    echo "=== NFS Export Layer ==="
-    if systemctl is-active --quiet "$NFS_SERVER_UNIT"; then
-        echo "$NFS_SERVER_UNIT: active"
-    else
-        echo "$NFS_SERVER_UNIT: NOT ACTIVE"
-    fi
+    echo; echo "=== NFS export layer ==="
+    systemctl is-active --quiet "$NFS_SERVER_UNIT" && echo "$NFS_SERVER_UNIT: active" || echo "$NFS_SERVER_UNIT: NOT ACTIVE"
     for bind in "${NFS_EXPORT_BINDS[@]}"; do
-        if mountpoint -q "$bind" && timeout "$NFS_STAT_TIMEOUT" stat "$bind" >/dev/null 2>&1; then
-            echo "$bind: OK"
-        else
-            echo "$bind: STALE/MISSING"
-        fi
+        bind_ok "$bind" && echo "$bind: OK" || echo "$bind: STALE/MISSING"
     done
-    if [[ -r "$NFS_KERNEL_EXPORTS" ]]; then
-        for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
-            if grep -qE "fsid=${fsid}[,)]" "$NFS_KERNEL_EXPORTS" 2>/dev/null; then
-                echo "export fsid=$fsid: present"
-            else
-                echo "export fsid=$fsid: MISSING (run 'sudo exportfs -ra')"
-            fi
-        done
-    fi
-
-    echo ""
-    echo "=== Workload Status ==="
-    if command -v kubectl >/dev/null 2>&1; then
-        echo "K8s workloads:"
-        kubectl get pods -n media 2>/dev/null | grep -v "0/1.*Completed" || echo "No media pods running"
-    fi
-
-    if command -v docker >/dev/null 2>&1; then
-        local running_containers
-        running_containers=$(docker ps --format '{{.Names}}' | sed '/^\s*$/d' || true)
-        if [ -n "$running_containers" ]; then
-            echo "Running containers:"
-            echo "$running_containers"
-        else
-            echo "No running containers"
-        fi
-    fi
-
-    echo ""
-    echo "=== Drive Health Summary ==="
-    for drive in "${ALL_DRIVES[@]}"; do
-        if check_smart_health "$drive" >/dev/null 2>&1; then
-            echo "/dev/$drive: SMART OK"
-        else
-            echo "/dev/$drive: SMART FAILED"
-        fi
+    for fsid in "${NFS_EXPECTED_FSIDS[@]}"; do
+        fsid_ok "$fsid" && echo "export fsid=$fsid: present" || echo "export fsid=$fsid: MISSING or unreadable"
     done
+
+    echo; echo "=== Lockdown would stop (workloads using pool PVs) ==="
+    using_pool deployment,statefulset,cronjob | jq -r '"\(.kind | ascii_downcase) \(.metadata.namespace)/\(.metadata.name)"' ||
+        echo "Cannot query Kubernetes (KUBECONFIG=$KUBECONFIG)"
+    printf 'timer %s\n' "${LOCKDOWN_TIMERS[@]}"
 }
 
+mark_failed() {
+    [[ $DRY_RUN == 1 ]] || printf 'FAILED\n%s\n%s\n' "$(date)" "$1" > "$STATE_FILE"
+}
+
+# smartd runs this through /etc/smartmontools/run.d. Other fail types (ErrorCount is often cabling) only log.
+handle_smartd() {
+    local dev i reason
+    dev=$(basename "$(readlink -f "${SMARTD_DEVICE:-none}")")
+    for i in "${!MOUNTS[@]}"; do
+        [[ ${DISKS[$i]} == "$dev" ]] || continue
+        reason="smartd ${SMARTD_FAILTYPE:-?} on ${MOUNTS[$i]} (${SERIALS[$i]}): ${SMARTD_MESSAGE:-}"
+        case "${SMARTD_FAILTYPE:-}" in
+            Health|CurrentPendingSector|OfflineUncorrectableSector|SelfTest)
+                error "$reason"
+                mark_failed "$reason"
+                export_disk_metrics 0
+                lockdown_array
+                return
+                ;;
+        esac
+        warn "$reason (no lockdown for this type)"
+        return 0
+    done
+    info "smartd ${SMARTD_FAILTYPE:-?} on ${SMARTD_DEVICE:-?} is not an array disk; ignoring"
+}
 
 main() {
+    if [[ ${1:-check} =~ ^(check|lockdown|smartd)$ ]]; then
+        mkdir -p "$STATE_DIR"
+        exec 9> /run/disk-monitor.lock
+        flock 9
+    fi
     case "${1:-check}" in
         check)
-            load_monitoring_config
-
-            if ! check_dependencies; then
-                log_error "Missing dependencies"
-                exit 1
-            fi
-
-            if ! ensure_directories; then
-                log_error "Failed to create directories"
-                exit 1
-            fi
-
-            if ! check_all_drives; then
-                exit 1
-            fi
-
-            # Runs only once drives/pool are healthy, so a real drive failure
-            # short-circuits above.
-            if ! check_nfs_export_layer; then
-                exit 1
-            fi
+            discover_array
+            check_all_drives || exit 1
+            check_nfs_export_layer || exit 1
+            ;;
+        lockdown)
+            discover_array
+            mark_failed "Manual lockdown: ${2:-no reason given}"
+            lockdown_array
+            ;;
+        smartd)
+            discover_array
+            handle_smartd
             ;;
         status)
-            load_monitoring_config
+            discover_array
             show_status
             ;;
         *)
             cat <<EOF
-Usage: $0 {check|status}
+Usage: $0 {check|status|lockdown [reason]|smartd}
 
-Commands:
-  check       - Run comprehensive disk health check (default)
-  status      - Show current system status
+  check     Health check; locks the array down on any drive failure (default)
+  status    Show drives, NFS exports, and what a lockdown would stop
+  lockdown  Lock down now. DRY_RUN=1 logs the actions without doing them
+  smartd    Hook for smartd; reads SMARTD_DEVICE and SMARTD_FAILTYPE
 
-Configuration:
-  Customize drive configuration in config/service-configs/monitoring.conf
-  Alerts are handled by Prometheus/Alertmanager
+Lockdown: disables ${LOCKDOWN_TIMERS[*]}, scales to 0 / suspends every workload
+with a PVC on the pool, sets the mergerfs branches read-only, remounts all
+SnapRAID disks read-only. Undo commands are written to $RESTORE_FILE.
 EOF
             exit 1
             ;;

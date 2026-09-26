@@ -4,6 +4,7 @@ Documentation=file:///home/cyl/homelab/scripts/monitor-storage.sh
 
 [Timer]
 OnBootSec=2min
+OnActiveSec=1min
 OnUnitActiveSec=5min
 Persistent=true
 

@@ -47,6 +47,12 @@
         - ../../config/systemd/snapraid-runner.timer
       notify: Reload systemd
 
+    - name: Install smartd lockdown hook
+      ansible.builtin.copy:
+        src: ../../config/smartmontools/run.d/60monitor-storage
+        dest: /etc/smartmontools/run.d/60monitor-storage
+        mode: "0755"
+
     - name: Enable storage timers
       ansible.builtin.systemd:
         name: "{{ item }}"
