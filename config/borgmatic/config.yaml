@@ -4,6 +4,18 @@ source_directories:
   - /media/data/owntracks/rec
   - /media/data/games
   - /media/data/db-dumps
+  - /srv/app-storage/hermes
+
+# Hermes caches and reinstallable tools, ~3GB. real data ~20MB
+exclude_patterns:
+  - /srv/app-storage/hermes/installs
+  - /srv/app-storage/hermes/stt
+  - /srv/app-storage/hermes/cache
+  - /srv/app-storage/hermes/.cache
+  - /srv/app-storage/hermes/.local
+  - /srv/app-storage/hermes/.npm
+  - /srv/app-storage/hermes/home/.cache
+  - /srv/app-storage/hermes/home/.npm
 
 repositories:
   - path: ssh://cyl-optiplex9020/media/archive/borg

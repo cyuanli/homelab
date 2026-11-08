@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes
+  namespace: ai
+  labels:
+    app: hermes
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hermes
+  template:
+    metadata:
+      labels:
+        app: hermes
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: cyl-homelab
+      containers:
+      - name: hermes
+        image: nousresearch/hermes-agent:latest
+        args: ["gateway", "run"]
+        env:
+        - name: CLAUDE_CONFIG_DIR
+          value: /opt/data/.claude
+        - name: MATRIX_E2EE_MODE
+          value: required
+        # Whisper model cache on the volume
+        - name: HF_HOME
+          value: /opt/data/.cache/huggingface
+        envFrom:
+        - secretRef:
+            name: hermes-env
+        volumeMounts:
+        - name: data
+          mountPath: /opt/data
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+      # Official Proton .deb; IMAP/SMTP on 127.0.0.1:1143/1025, shared with hermes
+      - name: proton-bridge
+        image: debian:trixie-slim
+        env:
+        - name: DEBIAN_FRONTEND
+          value: noninteractive
+        - name: BRIDGE_VERSION
+          value: 3.27.1
+        - name: BRIDGE_SHA256
+          value: d69eab5674335a41428bf77bde6a9f85667867e2083205625a710f6948e54d86
+        command:
+        - sh
+        - -euc
+        - |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates curl pass gnupg >/dev/null
+          curl -fsSLo /tmp/bridge.deb "https://proton.me/download/bridge/protonmail-bridge_${BRIDGE_VERSION}-1_amd64.deb"
+          echo "${BRIDGE_SHA256}  /tmp/bridge.deb" | sha256sum -c
+          apt-get install -y -qq --no-install-recommends /tmp/bridge.deb >/dev/null
+          if [ ! -d /root/.password-store ]; then
+            gpg --batch --passphrase '' --quick-generate-key 'Proton Bridge' default default never
+            pass init 'Proton Bridge'
+          fi
+          until [ -f /root/.setup-done ]; do echo "waiting for login, see README"; sleep 30; done
+          exec protonmail-bridge --noninteractive
+        volumeMounts:
+        - name: bridge
+          mountPath: /root
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      volumes:
+      - name: data
+        hostPath:
+          path: /srv/app-storage/hermes
+          type: DirectoryOrCreate
+      - name: bridge
+        hostPath:
+          path: /srv/app-storage/hermes-bridge
+          type: DirectoryOrCreate
