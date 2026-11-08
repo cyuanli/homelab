@@ -251,6 +251,9 @@ exclude /tmp/
 exclude .Trashes/
 # Transient write-probes from scripts/monitor-storage.sh (every 5 min)
 exclude .disk-health-test.*
+# Rewritten by Home Assistant every 15 min
+exclude /home-assistant/config/.storage/bluetooth.passive_update_processor
+exclude /home-assistant/config/.storage/core.restore_state
 
 # Configuration
 block_size 256
@@ -929,7 +932,8 @@ sudo mkdir -p /media/data/media/{movies,tv,music}
 sudo mkdir -p /media/data/downloads
 sudo mkdir -p /srv/app-storage/media-stack/{jellyfin-config,jellyfin-cache}
 sudo mkdir -p /srv/app-storage/media-stack/{prowlarr-config,radarr-config,sonarr-config,qbittorrent-config}
-sudo mkdir -p /srv/app-storage/immich/{thumbs,encoded-video,profile}
+# Immich needs no SSD directories: it mounts one volume, the library PV on the
+# mergerFS pool. See cluster/applications/cloud/immich/README.md.
 ```
 
 ### NFSv4 Path Considerations

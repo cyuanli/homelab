@@ -330,3 +330,225 @@ sudo tail -f /var/log/nginx/stream_error.log
 # Test connectivity
 curl -I http://100.x.x.x  # Homelab Tailscale IP
 ```
+
+## Finding files stored in both Nextcloud and Immich
+
+`scripts/find-duplicate-files.py` reports content that exists in both services,
+matched by SHA-1 rather than by filename — the same photo is usually
+`uploads/Camera/20250508_125034.jpg` in Nextcloud and
+`library/admin/2025/2025-05-08/20250508_125034.jpg` in Immich, and Immich
+renames plenty of others outright.
+
+```bash
+# Run on the storage node, with a working kubeconfig
+./scripts/find-duplicate-files.py -o /media/data/backups/nc-immich-dupes.json
+```
+
+Read-only — SELECTs plus `sha1sum`, and the output file. Takes a few minutes.
+
+### How it avoids hashing 941 GB
+
+Both services already store a SHA-1 of every file, so most of the work is a
+join, not a disk walk:
+
+| Source | Column | Coverage |
+|---|---|---|
+| Immich | `asset.checksum` (bytea) | complete, all 44k assets |
+| Nextcloud | `oc_filecache.checksum` (`SHA1:<hex>`) | ~27% of files |
+
+The rest is narrowed by file size before anything is read: a file can only be a
+duplicate if some Immich asset has exactly the same byte count. That takes
+241k Nextcloud files down to ~10k candidates, of which ~8k need hashing (~72
+GiB). `--no-size-filter` skips the narrowing and hashes everything, and
+`--rehash` ignores Nextcloud's stored checksums.
+
+Immich's library is world-readable on the host and is read directly.
+Nextcloud's data directory is `0750 www-data`, so its files are hashed through
+`kubectl exec` into the **Nextcloud application pod** (`app=nextcloud`) — not
+its database pod. No sudo needed either way.
+
+Both checksum columns were verified against `sha1sum` on the real files before
+this script was trusted, and sampled matches were re-verified on both sides
+afterwards.
+
+> A candidate hashed in the pod proves it exists. One whose SHA-1 came from
+> `oc_filecache` does not — a stale row can carry a checksum for a file deleted
+> outside Nextcloud. The script therefore checks every candidate for existence
+> before matching (`drop_missing`), so a phantom never reaches the report. This
+> is rare (one entry in a 3,017-file manifest) but a phantom is
+> indistinguishable from a real duplicate once it is in the output.
+
+### Paths
+
+The script maps container paths back to the host:
+
+- Immich `originalPath` `/data/X` → `/media/data/immich/library/X`. Note the
+  doubled segment: originals live at `.../library/library/...`, because the PV
+  `/media/immich/library` is mounted at `/data` and Immich puts its own
+  `library/`, `upload/`, `encoded-video/`, `thumbs/` and `profile/` inside it.
+- Nextcloud `oc_filecache.path` `files/Y` for storage `home::<user>` →
+  `/media/data/nextcloud/<user>/files/Y`.
+
+> `asset.originalPath` is not always under `/data/library` — live-photo and
+> motion-photo videos sit under `/data/upload` and `/data/encoded-video`. All
+> three resolve into the same PV, so the single prefix swap above is enough.
+
+### Output
+
+```json
+{
+  "summary": { "matching_contents": 5596, "nextcloud_bytes_duplicated": 80872208886 },
+  "matches": [
+    {
+      "sha1": "e522f01a...", "size": 900391172,
+      "nextcloud": [{"user": "cyl", "path": "files/archive/...", "host_path": "/media/data/nextcloud/cyl/...", "sha1_source": "hashed"}],
+      "immich": [{"asset_id": "f2077c1d-...", "owner": "cliff.li@cliff.li", "path": "/media/data/immich/library/library/..."}]
+    }
+  ],
+  "nextcloud_unreadable": [{"user": "cyl", "path": "files/...", "size": 123}]
+}
+```
+
+Both sides are lists: one content hash can have several copies in either
+service. `sha1_source` records whether a Nextcloud hash came from the database
+(`nextcloud-db`) or was computed (`hashed`).
+
+> ⚠️ **The report identifies duplicates; it does not say which copy to delete.**
+> Nextcloud and Immich each hold the only reference to their own copy, and
+> deleting from either is a separate, destructive decision — back up first.
+
+### `nextcloud_unreadable`
+
+Candidates listed in `oc_filecache` but missing on disk; their duplicate status
+is undecided, not negative. These are stale rows from files removed outside
+Nextcloud.
+
+## Reconciling the Nextcloud file cache
+
+Only `cyl` ever had drift — `yingshao`, `admin` and `tessy` matched disk exactly
+both before and after. Check any user with:
+
+```bash
+# Filesystem entries
+kubectl exec -n cloud deploy/nextcloud -- \
+    find /var/www/html/data/<user>/files -mindepth 1 | wc -l
+# Cache rows for the same tree
+kubectl exec -n cloud postgres-0 -- psql -U nextcloud -d nextcloud -t -A -c \
+    "SELECT count(*) FROM oc_filecache f JOIN oc_storages s
+       ON s.numeric_id=f.storage
+     WHERE s.id='home::<user>' AND f.path LIKE 'files/%';"
+```
+
+> ⚠️ **Back up the database first.** `files:scan` rewrites `oc_filecache`, and
+> dropping a row drops the fileid — taking its shares, tags and favourites with
+> it. It never touches files on disk, but the metadata loss is irreversible.
+> ```bash
+> kubectl exec -n cloud postgres-0 -- pg_dump -U nextcloud -d nextcloud \
+>     | gzip > /media/data/backups/nextcloud-pre-filescan-$(date +%Y%m%d-%H%M%S).sql.gz
+> ```
+> Verify it before proceeding: `gzip -t` the file, and check the row count in
+> the dump matches the live table.
+
+Then scan the affected user. Scope to one user rather than `--all`:
+
+```bash
+kubectl exec -n cloud deploy/nextcloud -- su -s /bin/sh www-data \
+    -c 'php /var/www/html/occ files:scan cyl'
+```
+
+### What the 2026-09-21 run did
+
+| | Before | After |
+|---|---|---|
+| `cyl` cache rows | 236,933 | 230,148 |
+| `cyl` disk entries | 229,426 | 229,426 |
+| Orphan rows | 7,507 | 731 |
+
+The single pass removed 5,920 rows in 6m27s with 0 errors. Clearing the rest
+took a second step, and a residue survives both — see below.
+
+### Folders the scan skips
+
+The scanner reuses a folder's cached mtime and skips re-reading its children
+when it matches, so a single pass left 1,596 orphans in folders that had not
+themselves changed. Rescanning each affected folder by `--path` forces the
+re-read. Because deleting a folder row cascades to its subtree, this converges
+over a few passes: compute the orphans' parents that still exist on disk,
+rescan those, repeat. That took 1,596 → 731.
+
+### Rows no scan can reach
+
+The remaining **731 are parentless** — 692 have a `parent` fileid with no
+matching row, and the other 39 descend from those:
+
+```bash
+kubectl exec -n cloud postgres-0 -- psql -U nextcloud -d nextcloud -c \
+    "SELECT count(*) FROM oc_filecache f
+     JOIN oc_storages s ON s.numeric_id=f.storage
+     WHERE s.id='home::cyl' AND f.path LIKE 'files/%' AND f.parent <> -1
+       AND NOT EXISTS (SELECT 1 FROM oc_filecache p WHERE p.fileid=f.parent);"
+```
+
+They arise when a folder row was deleted without its descendants. The scanner
+enumerates children through their parent, so it can never visit them: a rescan
+of the surviving ancestor reports `Removed 0` while the rows sit there. All 731
+are under `cyl/files/archive/`, and many carry `?` where a non-UTF-8 filename
+(GBK-encoded Chinese, from an old Windows backup) could not be decoded.
+
+Clearing them needs a direct `DELETE` on `oc_filecache`, which is outside what
+`occ` will do and was **not** run here.
+
+### Files the scan deliberately ignores
+
+Nine paths exist on disk with no cache row, and that is correct: six `.lnk`
+files whose names are not valid UTF-8, and three `*.ocTransferId*.part` files,
+which are abandoned chunked uploads that Nextcloud skips by design.
+
+## Deleting duplicates from Nextcloud
+
+Done once, for `cyl/files/uploads`, on 2026-09-25. Checks run first:
+
+1. **Off-host backup verified, not assumed** — borgmatic's config covers
+   `/media/data/nextcloud/*/files`; confirm the *archive* actually holds the
+   tree: `borgmatic list --archive latest --find 'media/data/nextcloud/cyl/files/uploads'`
+   (needs `config/borgmatic/.borg-passphrase-env`, readable by `cyl`).
+2. **Re-run the finder the same day.** A report is a snapshot; the phone keeps
+   uploading.
+3. **Confirm the Immich original exists on disk for every file** in the
+   manifest — not just that the database claims it.
+4. **Check nothing depends on them**: `oc_share` (including ancestor folders),
+   `oc_systemtag_object_mapping`, `oc_comments`, `oc_vcategory_to_object`.
+
+Delete through `occ`, never `rm` — removing files under Nextcloud's feet
+recreates the orphan-row problem above:
+
+```bash
+printf '%s\n' /cyl/files/uploads/... | kubectl exec -i -n cloud deploy/nextcloud -- \
+  su -s /bin/sh www-data -c 'while IFS= read -r p; do
+     php /var/www/html/occ files:delete -f "$p" || echo "FAIL: $p"; done'
+```
+
+`-f` is required: without it `files:delete` prompts and defaults to **no** when
+stdin is not a terminal, so nothing happens.
+
+Files go to the user's trashbin, so this is reversible, and `files_trashbin` is
+on the same filesystem — **no space is freed until the trash is purged.**
+
+### Result
+
+3,017 files, 57.5 GiB, all photos/videos. 3,016 went to the trashbin; one
+manifest entry was a stale cache row with no file behind it. Afterwards
+`uploads` reconciled exactly: 1,261 entries on disk, 1,261 rows in cache.
+
+### Expect transient failures under memory pressure
+
+Each `files:delete` spawns a full PHP bootstrap (~3s, ~20 files/min), so a few
+thousand files take hours. A long background run was killed when the host ran
+low on memory, and the chunks around that point reported failures — 110 of 111
+in one — that were **not** data problems: every one succeeded on retry once
+memory recovered.
+
+So: re-derive what is left from `oc_filecache` rather than trusting a failure
+list, and retry. Some failures also move the file to the trashbin while still
+exiting non-zero, which is why the cache is the source of truth, not the exit
+code. Prefer short foreground chunks over one long background job.
