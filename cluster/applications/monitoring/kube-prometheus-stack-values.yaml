@@ -182,10 +182,19 @@ grafana:
   initChownData:
     enabled: false
 
+  plugins:
+    - grafana-clock-panel
+
   env:
-    GF_INSTALL_PLUGINS: "grafana-clock-panel"
     GF_SERVER_ROOT_URL: "https://grafana.cliff.li"
     GF_AUTH_ANONYMOUS_ENABLED: "false"
+
+  # "both" adds a ~90Mi watcher process per sidecar; nothing labels Secrets.
+  sidecar:
+    dashboards:
+      resource: configmap
+    datasources:
+      resource: configmap
 
   resources:
     requests:
@@ -208,9 +217,8 @@ prometheus-node-exporter:
   # alert built on one evaluates against no data and can never fire. The
   # collector is on by default but reads nothing unless the flag is set AND the
   # host directory is mounted in. Verify after any change, expect one series per
-  # .prom file:
-  #   kubectl -n monitoring exec ds/kube-prometheus-stack-prometheus-node-exporter \
-  #     -- wget -qO- localhost:9100/metrics | grep node_textfile_mtime_seconds
+  # .prom file per node (the image is distroless, so no exec):
+  #   kubectl get --raw '/api/v1/namespaces/monitoring/services/kube-prometheus-stack-prometheus:9090/proxy/api/v1/query?query=count+by(node)(node_textfile_mtime_seconds)' | jq -c '.data.result[]'
   extraArgs:
     - --collector.textfile.directory=/host/textfile_collector
   extraHostVolumeMounts:

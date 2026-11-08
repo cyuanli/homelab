@@ -3,7 +3,7 @@
 set -euo pipefail
 
 NS="${ALERTMANAGER_NAMESPACE:-monitoring}"
-POD="${ALERTMANAGER_POD:-alertmanager-kube-prometheus-stack-alertmanager-0}"
+SVC="${ALERTMANAGER_SERVICE:-kube-prometheus-stack-alertmanager:9093}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils/common.sh
@@ -34,12 +34,11 @@ done
 command -v jq > /dev/null || { log_error "jq is required"; exit 2; }
 
 am_get() {
-    kubectl exec -n "$NS" "$POD" -c alertmanager -- \
-        wget -qO- "http://localhost:9093/api/v2/$1" 2> /dev/null
+    kubectl get --raw "/api/v1/namespaces/$NS/services/$SVC/proxy/api/v2/$1" 2> /dev/null
 }
 
 if ! alerts="$(am_get alerts)"; then
-    log_error "Cannot reach Alertmanager ($NS/$POD)"
+    log_error "Cannot reach Alertmanager ($NS/$SVC)"
     exit 2
 fi
 silences="$(am_get silences || echo '[]')"
