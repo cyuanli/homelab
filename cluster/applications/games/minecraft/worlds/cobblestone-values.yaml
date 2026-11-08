@@ -16,7 +16,6 @@ minecraftServer:
 
   modrinth:
     projects:
-      - ferrite-core
       - lithium
 
   levelSeed: ""

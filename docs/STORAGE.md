@@ -267,6 +267,13 @@ autosave 250
 > writability. They are unlinked immediately, but without the exclusion a
 > concurrent `snapraid sync` can race against them and count them as new or
 > deleted files.
+>
+> The two Home Assistant exclusions are the same problem with live files: HA rewrites
+> them every 15 minutes, and a write landing mid-sync aborts the run with
+> `Unexpected time change ... You cannot modify files during a sync` (3 failed
+> nights in Oct 2026). They are disposable runtime state. Don't widen this to all
+> of `.storage/` — HA config is not in borgmatic, so parity is its only copy.
+> A leading `/` in an exclude is relative to each data disk's root.
 
 ### Create content directory:
 ```bash
