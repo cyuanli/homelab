@@ -6,7 +6,7 @@ source_directories:
   - /media/data/db-dumps
   - /srv/app-storage/hermes
 
-# Hermes caches and reinstallable tools, ~3GB. real data ~20MB
+# Hermes caches, models, reinstallable tools and rebuildable indexes
 exclude_patterns:
   - /srv/app-storage/hermes/installs
   - /srv/app-storage/hermes/stt
@@ -16,6 +16,8 @@ exclude_patterns:
   - /srv/app-storage/hermes/.npm
   - /srv/app-storage/hermes/home/.cache
   - /srv/app-storage/hermes/home/.npm
+  - /srv/app-storage/hermes/syncthing/index-v2
+  - /srv/app-storage/hermes/index/models
 
 repositories:
   - path: ssh://cyl-optiplex9020/media/archive/borg

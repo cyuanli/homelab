@@ -32,6 +32,8 @@ spec:
         # Whisper model cache on the volume
         - name: HF_HOME
           value: /opt/data/.cache/huggingface
+        - name: OBSIDIAN_VAULT_PATH
+          value: /opt/data/vault
         envFrom:
         - secretRef:
             name: hermes-env
@@ -44,7 +46,7 @@ spec:
             memory: 512Mi
           limits:
             cpu: "2"
-            memory: 2Gi
+            memory: 4Gi
       # Official Proton .deb; IMAP/SMTP on 127.0.0.1:1143/1025, shared with hermes
       - name: proton-bridge
         image: debian:trixie-slim
@@ -80,6 +82,33 @@ spec:
           limits:
             cpu: "1"
             memory: 1Gi
+      # Obsidian vault copy, peered only with utilities/syncthing; runs as hermes so the agent can write
+      - name: syncthing
+        image: syncthing/syncthing:latest
+        securityContext:
+          runAsUser: 10000
+          runAsGroup: 10000
+        env:
+        - name: STGUIADDRESS
+          value: 127.0.0.1:8384
+        ports:
+        - name: sync-tcp
+          containerPort: 22000
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /var/syncthing/config
+          subPath: syncthing
+        - name: data
+          mountPath: /opt/data/vault
+          subPath: vault
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
       volumes:
       - name: data
         hostPath:
@@ -89,3 +118,17 @@ spec:
         hostPath:
           path: /srv/app-storage/hermes-bridge
           type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-syncthing
+  namespace: ai
+spec:
+  selector:
+    app: hermes
+  ports:
+  - name: sync-tcp
+    port: 22000
+    targetPort: sync-tcp
+    protocol: TCP

@@ -62,6 +62,33 @@ faster-whisper sits in the pm environment under `/opt/data/installs` (picked at 
 restart is needed after it first installs); model cache via `HF_HOME`. On this i5-3470 an
 11s clip takes ~9s once the model is loaded, container hit ~1.3Gi during that test.
 
+## Semantic index
+
+Hermes built its own search index (`/opt/data/scripts/semindex.py`, fastembed with
+`multilingual-e5-large`) over the vault and chats, stored in `/opt/data/index`. The model is 2.1GB
+on disk and loading it OOM-killed the container at the old 2Gi limit, hence 4Gi. The model cache
+`index/models` is excluded from borgmatic (re-downloads on first use).
+
+## Obsidian vault
+
+Hermes has its own read-write copy at `/opt/data/vault` (`OBSIDIAN_VAULT_PATH`, used by the
+bundled `obsidian` skill), kept in sync by the `syncthing` sidecar. The sidecar runs as uid 10000
+so the files belong to hermes, and peers only with `utilities/syncthing` through the
+`hermes-syncthing` Service (global/local discovery, relays and NAT off). Edits arrive on the
+other side in ~15s. The vault is backed up by borgmatic with the rest of `/opt/data`, plus hourly
+git commits on the Syncthing side.
+
+Sidecar config and identity live in `/opt/data/syncthing` (device `L5SNWSI-…`, name `hermes`).
+GUI/API on `127.0.0.1:8384`, only from inside the pod. Its CLI needs the API key passed in:
+
+```bash
+kubectl -n ai exec deploy/hermes -c syncthing -- sh -c 'K=$(grep -o "<apikey>[^<]*" /var/syncthing/config/config.xml | cut -d">" -f2); syncthing cli --gui-address=127.0.0.1:8384 --gui-apikey="$K" show connections'
+```
+
+Don't use a hostPath mount of `/srv/app-storage/syncthing/data` instead: those files are uid 1000,
+and the Syncthing pod reads that directory over NFS from another node, so it never gets inotify
+events for writes made on `cyl-homelab` and only sees them at the hourly rescan.
+
 ## Proton Mail Bridge
 
 Official Proton `.deb` on stock Debian, installed at every container start and checked against
