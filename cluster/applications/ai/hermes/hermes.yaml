@@ -33,7 +33,7 @@ spec:
         - name: HF_HOME
           value: /opt/data/.cache/huggingface
         - name: OBSIDIAN_VAULT_PATH
-          value: /opt/data/vault
+          value: /opt/data/obsidian
         envFrom:
         - secretRef:
             name: hermes-env
@@ -100,8 +100,8 @@ spec:
           mountPath: /var/syncthing/config
           subPath: syncthing
         - name: data
-          mountPath: /opt/data/vault
-          subPath: vault
+          mountPath: /opt/data/obsidian
+          subPath: obsidian
         resources:
           requests:
             cpu: 10m

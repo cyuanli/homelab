@@ -78,8 +78,11 @@ originals elsewhere. Copy files in as the `hermes` user, e.g.
 
 ## Obsidian vault
 
-Hermes has its own read-write copy at `/opt/data/vault` (`OBSIDIAN_VAULT_PATH`, used by the
-bundled `obsidian` skill), kept in sync by the `syncthing` sidecar. The sidecar runs as uid 10000
+Hermes has its own read-write copy at `/opt/data/obsidian` (`OBSIDIAN_VAULT_PATH`, used by the
+bundled `obsidian` skill), kept in sync by the `syncthing` sidecar. Not `/opt/data/vault`: Hermes
+reserves that name for its credential vault and its file tools refuse to touch it. The sidecar
+mounts only this subfolder, so moving the vault means changing its mount and its Syncthing folder
+path together. The sidecar runs as uid 10000
 so the files belong to hermes, and peers only with `utilities/syncthing` through the
 `hermes-syncthing` Service (global/local discovery, relays and NAT off). Edits arrive on the
 other side in ~15s. The vault is backed up by borgmatic with the rest of `/opt/data`, plus hourly
