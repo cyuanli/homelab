@@ -69,6 +69,13 @@ Hermes built its own search index (`/opt/data/scripts/semindex.py`, fastembed wi
 on disk and loading it OOM-killed the container at the old 2Gi limit, hence 4Gi. The model cache
 `index/models` is excluded from borgmatic (re-downloads on first use).
 
+## Library
+
+`/opt/data/library` holds large reference files (books in `library/books`, extracted text that
+`semindex.py` indexes in `library/books/extracted`). Excluded from borgmatic, so keep the
+originals elsewhere. Copy files in as the `hermes` user, e.g.
+`kubectl -n ai exec -i deploy/hermes -c hermes -- /command/s6-setuidgid hermes sh -c "cat > /opt/data/library/books/x.pdf" < x.pdf`.
+
 ## Obsidian vault
 
 Hermes has its own read-write copy at `/opt/data/vault` (`OBSIDIAN_VAULT_PATH`, used by the
