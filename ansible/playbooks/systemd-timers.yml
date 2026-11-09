@@ -23,6 +23,39 @@
       ansible.builtin.systemd:
         daemon_reload: true
 
+# Runs where the claude CLI is logged in and the repo lives
+- name: Deploy claude-investigate timer
+  hosts: cyl-homelab
+  become: true
+  tasks:
+    # Otherwise journalctl only shows the user's own logs, not host services
+    - name: Let the investigator read the system journal
+      ansible.builtin.user:
+        name: "{{ homelab_user }}"
+        groups: systemd-journal
+        append: true
+
+    - name: Copy claude-investigate units
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/systemd/system/
+        mode: "0644"
+      loop:
+        - ../../config/systemd/claude-investigate.service
+        - ../../config/systemd/claude-investigate.timer
+      notify: Reload systemd
+
+    - name: Enable claude-investigate timer
+      ansible.builtin.systemd:
+        name: claude-investigate.timer
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
 - name: Deploy storage timers
   hosts: storage
   become: true

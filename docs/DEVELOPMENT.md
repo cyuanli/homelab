@@ -97,6 +97,7 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | `manage-nodes.sh` | Cluster node management |
 | `monitor-storage.sh` | SnapRAID disk health + server-side NFS export checks (run by `disk-monitor.timer`) |
 | `auto-remediate.sh` | Restarts deployments on `ServiceDown` alerts (run by `auto-remediate.timer`) |
+| `claude-investigate.sh` | Runs Claude Code read-only on new alerts, posts the report to Discord (run by `claude-investigate.timer`) |
 | `backup-notify.sh` | Borgmatic notification hook |
 | `backup-databases.sh` | Dumps the Nextcloud + Immich Postgres DBs (borgmatic `before_backup` hook) |
 | `snapraid-notify.sh` | SnapRAID metrics export |

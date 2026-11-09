@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Read(//home/cyl/homelab/**)",
+      "Bash(cd /home/cyl/homelab)",
+      "Bash(kubectl:*)",
+      "Bash(scripts/check-alerts.sh:*)",
+      "Bash(journalctl:*)",
+      "Bash(systemctl status:*)",
+      "Bash(systemctl list-timers:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(df:*)",
+      "Bash(free:*)",
+      "Bash(ps:*)",
+      "Bash(uptime)",
+      "Bash(date:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)"
+    ],
+    "deny": [
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Agent"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/cyl/homelab/config/claude-investigate/guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

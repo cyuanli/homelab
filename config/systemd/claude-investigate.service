@@ -1,0 +1,15 @@
+[Unit]
+Description=Investigate new Alertmanager alerts with Claude Code (read-only) and post to Discord
+Documentation=file:///home/cyl/homelab/scripts/claude-investigate.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cyl
+Environment="HOME=/home/cyl"
+Environment="PATH=/home/cyl/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/cyl/homelab/scripts/claude-investigate.sh
+TimeoutStartSec=30min
+StandardOutput=journal
+StandardError=journal

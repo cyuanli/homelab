@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for new alerts to investigate every 15 minutes
+Documentation=file:///home/cyl/homelab/scripts/claude-investigate.sh
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

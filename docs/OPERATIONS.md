@@ -187,6 +187,7 @@ it: a backup you have never restored is a hypothesis, not a backup.
 | `snapraid-runner` | Daily 2 AM | storage | SnapRAID sync/scrub |
 | `disk-monitor` | Every 5 min | storage | Disk health checks |
 | `auto-remediate` | Every 15 min | monitoring | Restart services on alerts |
+| `claude-investigate` | Every 15 min | cyl-homelab | Claude Code investigates new alerts, reports to Discord |
 | `borgmatic` | Daily 3 AM | backup | Backups |
 
 ```bash
@@ -204,7 +205,59 @@ cd ansible
 ansible-playbook playbooks/systemd-timers.yml --ask-become-pass
 ```
 
-This deploys disk-monitor + snapraid-runner to storage nodes, and auto-remediate to monitoring nodes.
+This deploys disk-monitor + snapraid-runner to storage nodes, auto-remediate to monitoring nodes,
+and claude-investigate to cyl-homelab.
+
+### Claude alert investigator
+
+`scripts/claude-investigate.sh` runs headless Claude Code on every firing, unsilenced alert it
+hasn't looked at in the last 6h (per Alertmanager fingerprint; `Watchdog`/`InfoInhibitor` skipped)
+and posts the report to the alerts Discord channel, failures included. All new alerts in one tick
+share one run. If Alertmanager is unreachable, that itself gets investigated.
+
+Phase 1 is **read-only**, enforced in layers:
+
+- `--setting-sources user` (in the script): the repo's `.claude/settings.local.json` is NOT
+  loaded. It pre-approves `kubectl delete/apply/exec`, `bash`, `curl` etc.
+- `config/claude-investigate/settings.json`: allowlist (kubectl, journalctl, `systemctl status`, git log/diff, reads inside
+  the repo), with `dontAsk` + `--permission-prompts none` so anything else is denied, never asked.
+- `guard.sh` (PreToolUse hook): rejects kubectl verbs other than get/describe/logs/top/events/…,
+  anything mentioning secrets/tokens/passwords/`.env.local`, redirection, `$(…)`, shells, `rm`,
+  `curl`, `ssh`, `sudo`, write-y `git`/`systemctl`. Test it by piping
+  `{"tool_name":"Bash","tool_input":{"command":"…"}}` into it; exit 2 = blocked.
+- `prompt.md`: appended system prompt, fixes the report format.
+
+Allow rules match on command prefix, so `kubectl -n ai get` does NOT match `Bash(kubectl get:*)`.
+That's why `settings.json` allows all of `kubectl` and `guard.sh` checks the verb.
+
+State, run transcripts and the cached webhook URL live in `~/.local/state/claude-investigate`.
+The webhook comes from the `alertmanager-discord-webhook` Secret (cached for when the API server is
+down) or `DISCORD_WEBHOOK_URL`. Each Discord footer has `claude -r <session>` to continue the
+investigation interactively from `~/homelab`.
+
+```bash
+scripts/claude-investigate.sh --dry-run          # what would be investigated
+scripts/claude-investigate.sh --force            # ignore the 6h cooldown
+# test end to end against silenced alerts, without touching the real cooldown
+STATE_DIR=/tmp/ci AM_PATH="/api/v1/namespaces/monitoring/services/kube-prometheus-stack-alertmanager:9093/proxy/api/v2/alerts?active=true&silenced=true&inhibited=true" \
+  scripts/claude-investigate.sh --force
+```
+
+The playbook also adds `cyl` to `systemd-journal`; without it `journalctl` only sees the user's own
+logs and host-level alerts (borgmatic, k3s, snapraid) can't be investigated.
+
+Runs use the Claude subscription logged in for `cyl` on cyl-homelab (model/effort from
+`~/.claude/settings.json`), not API credits, so they share usage limits with interactive sessions
+and Hermes. Keep extra usage off. If the login expires (`claude auth status`, `loginExpiresAt`),
+runs fail and post a red Discord message; fix with `claude auth login`.
+
+Troubleshooting: `journalctl -u claude-investigate.service`; per run,
+`runs/<id>.json` (`.permission_denials` lists what was blocked) and `runs/<id>.stderr`, pruned
+after 30 days. If the Discord post itself fails, the unit fails and nothing is posted.
+
+Before allowing fixes (phase 2): widen `settings.json` and `guard.sh` per fix type, and narrow
+`/etc/sudoers.d/homelab-cyl` first. `user-permissions.yml` grants passwordless `systemctl`,
+`chown`, `chmod` and `mount`, so any gap in the guard is root.
 
 ## Monitoring
 
