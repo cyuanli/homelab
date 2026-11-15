@@ -31,3 +31,39 @@ spec:
   resources:
     requests:
       storage: 100Gi
+
+---
+# Same share via homelab's Tailscale IP, for the backup CronJob once cyl-mitx is off the LAN.
+# PV spec.nfs is immutable, hence a second PV. Needs mitx's Tailscale IP in config/system-configs/exports.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minecraft-backups-tailscale
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-direct
+  mountOptions:
+    - nfsvers=4.1
+    - hard
+  nfs:
+    server: 100.93.141.39
+    path: /media/games
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minecraft-backups-tailscale
+  namespace: games
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-direct
+  volumeName: minecraft-backups-tailscale
+  resources:
+    requests:
+      storage: 100Gi

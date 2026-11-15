@@ -7,7 +7,30 @@ exports_root: /exports
 
 k3s_version: v1.33.5+k3s1
 server_url: https://192.168.1.94:6443
-kubelet_cpu_manager_policy: none
+kubelet_cpu_manager_policy: static
+# Critical k3s arg: a server joining with a different value fails. See docs/OPERATIONS.md.
+k3s_flannel_external_ip: false
+# Shared by k3s.yml server and agent installs; tailscale_ip is registered there.
+k3s_node_args: >-
+  --node-name {{ inventory_hostname }}
+  --kubelet-arg=eviction-hard=memory.available<500Mi
+  --kubelet-arg=eviction-soft=memory.available<1Gi
+  --kubelet-arg=eviction-soft-grace-period=memory.available=1m30s
+  --kubelet-arg=system-reserved=cpu={{ kubelet_system_reserved_cpu }},memory={{ kubelet_system_reserved_memory }}
+  --kubelet-arg=kube-reserved=cpu={{ kubelet_kube_reserved_cpu }},memory={{ kubelet_kube_reserved_memory }}
+  --kubelet-arg=cpu-manager-policy={{ kubelet_cpu_manager_policy }}
+  --node-external-ip {{ tailscale_ip.stdout | trim }}
+  {% if k3s_tailscale_only | default(false) | bool %}--node-ip {{ tailscale_ip.stdout | trim }} --flannel-iface tailscale0{% endif %}
+  {{ k3s_extra_args | default('') }}
+# Not the whole 100.64.0.0/10: the internet-facing VPS is on the tailnet too.
+tailscale_node_ips:
+  - 100.93.141.39   # cyl-homelab
+  - 100.73.184.67   # cyl-mitx
+  - 100.109.162.47  # cyl-optiplex9020
+  - 100.85.219.109  # cyl-aspiree17
+  - 100.109.76.110  # cyl-inspiron14
+  - 100.64.225.53   # cyl-xps13
+  - 100.108.214.56  # cyl-yoga213
 
 cluster_token: "{{ vault_cluster_token }}"
 discord_webhook_url: "{{ vault_discord_webhook_url }}"

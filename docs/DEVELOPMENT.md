@@ -156,8 +156,10 @@ written **relative to the NFSv4 pseudo-root** — i.e. `/media/<service>` for th
 top-level export means editing the bind mount in `/etc/fstab` on the host and
 the repo's `exports` file, then re-running
 `ansible-playbook playbooks/nfs-storage.yml --limit cyl-homelab`, which copies
-it and runs `exportfs -ra`. Exports are scoped to the 7 cluster node IPs, so a
-new node must be added to all three export lines before it can mount anything.
+it and runs `exportfs -ra`. Exports are scoped to the cluster node IPs (LAN, plus
+the Tailscale IP for nodes off the LAN), so a new node must be added to all
+three export lines before it can mount anything. Nodes off the LAN reach the
+server at `100.93.141.39`, not `192.168.1.94`.
 
 ## Common Commands
 

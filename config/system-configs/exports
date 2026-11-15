@@ -4,13 +4,14 @@
 #
 #   .92 optiplex9020  .94 homelab (this host)  .95 mitx  .100 inspiron14
 #   .102 yoga213  .103 xps13  .105 aspiree17
+#   100.73.184.67 mitx over Tailscale (it is moving off the LAN; drop .95 once it has)
 #
 # Addresses must be DHCP reservations. A changed address breaks every
 # NFS-backed pod on that node. Update all three lines below plus
 # docs/DEVELOPMENT.md, then run: sudo exportfs -ra
 
-/exports 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=0)
+/exports 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=0) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=0) 100.73.184.67(rw,sync,no_subtree_check,no_root_squash,fsid=0)
 
 # Bind mounts need their own export with an fsid.
-/exports/media 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=1)
-/exports/configs 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=2)
+/exports/media 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=1) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=1) 100.73.184.67(rw,sync,no_subtree_check,no_root_squash,fsid=1)
+/exports/configs 192.168.1.92(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.94(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.95(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.100(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.102(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.103(rw,sync,no_subtree_check,no_root_squash,fsid=2) 192.168.1.105(rw,sync,no_subtree_check,no_root_squash,fsid=2) 100.73.184.67(rw,sync,no_subtree_check,no_root_squash,fsid=2)

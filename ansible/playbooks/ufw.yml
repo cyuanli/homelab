@@ -1,6 +1,12 @@
 - name: Configure UFW on all nodes
   hosts: all
   become: true
+  vars:
+    node_ports:
+      - { port: "22", proto: tcp }
+      - { port: "10250", proto: tcp }
+      - { port: "8472", proto: udp }
+      - { port: "9100", proto: tcp }
   tasks:
     - name: Install UFW
       ansible.builtin.apt:
@@ -17,33 +23,23 @@
         direction: outgoing
         default: allow
 
-    - name: Allow SSH from LAN
+    - name: Allow node ports from LAN
       community.general.ufw:
         rule: allow
         src: "{{ lan_cidr }}"
-        port: "22"
-        proto: tcp
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop: "{{ node_ports }}"
 
-    - name: Allow kubelet from LAN
+    - name: Allow node ports from cluster nodes over Tailscale
       community.general.ufw:
         rule: allow
-        src: "{{ lan_cidr }}"
-        port: "10250"
-        proto: tcp
-
-    - name: Allow Flannel VXLAN from LAN
-      community.general.ufw:
-        rule: allow
-        src: "{{ lan_cidr }}"
-        port: "8472"
-        proto: udp
-
-    - name: Allow node exporter from LAN
-      community.general.ufw:
-        rule: allow
-        src: "{{ lan_cidr }}"
-        port: "9100"
-        proto: tcp
+        direction: in
+        interface: tailscale0
+        src: "{{ item.0 }}"
+        port: "{{ item.1.port }}"
+        proto: "{{ item.1.proto }}"
+      loop: "{{ tailscale_node_ips | product(node_ports) | list }}"
 
     - name: Enable UFW
       community.general.ufw:
@@ -53,82 +49,58 @@
   hosts: servers
   become: true
   tasks:
-    - name: Allow K3s API server from LAN
+    - name: Allow K3s API and etcd from LAN
       community.general.ufw:
         rule: allow
         src: "{{ lan_cidr }}"
+        port: "{{ item }}"
+        proto: tcp
+      loop: ["6443", "2379", "2380"]
+
+    - name: Allow K3s API from cluster nodes over Tailscale
+      community.general.ufw:
+        rule: allow
+        direction: in
+        interface: tailscale0
+        src: "{{ item }}"
         port: "6443"
         proto: tcp
+      loop: "{{ tailscale_node_ips }}"
 
-    - name: Allow etcd client from LAN
-      community.general.ufw:
-        rule: allow
-        src: "{{ lan_cidr }}"
-        port: "2379"
-        proto: tcp
-
-    - name: Allow etcd peer from LAN
-      community.general.ufw:
-        rule: allow
-        src: "{{ lan_cidr }}"
-        port: "2380"
-        proto: tcp
-
-    - name: Allow HTTP from VPS
+    - name: Allow ingress, SSH and Minecraft from VPS
       community.general.ufw:
         rule: allow
         src: "{{ vps_ip }}"
-        port: "80"
-        proto: tcp
-
-    - name: Allow HTTPS from VPS (TCP)
-      community.general.ufw:
-        rule: allow
-        src: "{{ vps_ip }}"
-        port: "443"
-        proto: tcp
-
-    - name: Allow HTTPS from VPS (UDP)
-      community.general.ufw:
-        rule: allow
-        src: "{{ vps_ip }}"
-        port: "443"
-        proto: udp
-
-    - name: Allow SSH from VPS
-      community.general.ufw:
-        rule: allow
-        src: "{{ vps_ip }}"
-        port: "22"
-        proto: tcp
-
-    - name: Allow Minecraft from VPS
-      community.general.ufw:
-        rule: allow
-        src: "{{ vps_ip }}"
-        port: "25565"
-        proto: tcp
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: "80", proto: tcp }
+        - { port: "443", proto: tcp }
+        - { port: "443", proto: udp }
+        - { port: "22", proto: tcp }
+        - { port: "25565", proto: tcp }
 
 - name: Configure UFW on storage node
   hosts: storage
   become: true
+  vars:
+    nfs_ports: "{{ ['111', '2049'] | product(['tcp', 'udp']) | list }}"
   tasks:
-    - name: Allow NFS rpcbind from LAN
+    - name: Allow NFS from LAN
       community.general.ufw:
         rule: allow
         src: "{{ lan_cidr }}"
-        port: "111"
-        proto: "{{ item }}"
-      loop:
-        - tcp
-        - udp
+        port: "{{ item.0 }}"
+        proto: "{{ item.1 }}"
+      loop: "{{ nfs_ports }}"
 
-    - name: Allow NFS server from LAN
+    # NFS exports still restrict which nodes may mount.
+    - name: Allow NFS from cluster nodes over Tailscale
       community.general.ufw:
         rule: allow
-        src: "{{ lan_cidr }}"
-        port: "2049"
-        proto: "{{ item }}"
-      loop:
-        - tcp
-        - udp
+        direction: in
+        interface: tailscale0
+        src: "{{ item.0 }}"
+        port: "{{ item.1.0 }}"
+        proto: "{{ item.1.1 }}"
+      loop: "{{ tailscale_node_ips | product(nfs_ports) | list }}"

@@ -6,9 +6,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
 
+USE_TAILSCALE=false
+
+# Default-route source IP, not `hostname -I` order (docker/tailscale IPs can come first).
 get_server_ip() {
     local server_ip
-    server_ip=$(hostname -I | awk '{print $1}')
+    if $USE_TAILSCALE; then
+        server_ip=$(tailscale ip -4)
+    else
+        server_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
+    fi
 
     if [[ -z "$server_ip" ]]; then
         log_error "Could not determine local network IP"
@@ -25,21 +32,25 @@ Node Management Script
 Usage: $0 [command] [options]
 
 Commands:
-  add [hostname] [--role server|agent]  - Create configuration for new node
-  remove [hostname]                     - Remove node from cluster
+  add [hostname] [--role server|agent] [--tailscale]
+                                        - Create configuration for new node
+  remove [hostname] [--purge]           - Remove node from cluster
   list                                  - List all nodes in cluster
   status                                - Show cluster status
-  info                                  - Show cluster connection info
+  info [--tailscale]                    - Show cluster connection info
   drain [hostname]                      - Drain node for maintenance
   uncordon [hostname]                   - Mark node as schedulable
 
 Options:
   --role server|agent     - Node role (default: agent)
+  --tailscale             - Use this host's Tailscale IP (for nodes off the LAN)
+  --purge                 - Also delete nodes/<hostname>/ (incl. gitignored config.env.local)
 
 Examples:
   $0 add worker1
   $0 add worker1 --role agent
   $0 add control2 --role server
+  $0 add cyl-mitx --tailscale
   $0 remove worker1
   $0 list
   $0 status
@@ -54,7 +65,6 @@ get_cluster_info() {
 
     local server_ip
     server_ip=$(get_server_ip) || return 1
-
     local server_url="https://${server_ip}:6443"
 
     local cluster_token=""
@@ -97,7 +107,6 @@ create_node_config() {
 
     local server_ip
     server_ip=$(get_server_ip) || return 1
-
     local server_url="https://${server_ip}:6443"
     local cluster_token=""
     if [[ -f /var/lib/rancher/k3s/server/node-token ]]; then
@@ -121,7 +130,8 @@ create_node_config() {
     log_info "Template contains placeholders, actual config has real secrets from server"
 
     local labels_file="$node_dir/labels.yaml"
-    cat > "$labels_file" << EOF
+    if [[ ! -f "$labels_file" ]]; then
+        cat > "$labels_file" << EOF
 # cpu-tier high = 8+ cores, memory-tier high = 16GB+
 apiVersion: v1
 kind: Node
@@ -132,8 +142,9 @@ metadata:
     homelab/memory-tier: low
 EOF
 
-    log_success "Created labels file: $labels_file"
-    log_info "Remember to update labels.yaml with actual node specs (cpu-tier: high/low, memory-tier: high/low)"
+        log_success "Created labels file: $labels_file"
+        log_info "Remember to update labels.yaml with actual node specs (cpu-tier: high/low, memory-tier: high/low)"
+    fi
 
     if [[ -n "$HOMELAB_USER" ]]; then
         chown -R "$HOMELAB_USER:$HOMELAB_USER" "$node_dir"
@@ -228,8 +239,10 @@ ${BLUE}Current cluster info:${NC}
 EOF
 }
 
+# Etcd servers: kubectl delete node makes k3s remove the etcd member (managed-etcd-controller).
 remove_node() {
     local node_name="$1"
+    local purge="${2:-false}"
 
     if [[ -z "$node_name" ]]; then
         log_error "Node hostname not provided"
@@ -246,19 +259,53 @@ remove_node() {
         return 0
     fi
 
+    local etcd_label is_etcd=false
+    etcd_label=$(kubectl get node "$node_name" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/etcd}')
+    [[ "$etcd_label" == true ]] && is_etcd=true
+
+    if $is_etcd; then
+        local etcd_nodes remaining not_ready
+        etcd_nodes=$(kubectl get nodes -l node-role.kubernetes.io/etcd=true --no-headers)
+        remaining=$(( $(wc -l <<<"$etcd_nodes") - 1 ))
+        log_info "$node_name is an etcd member ($remaining members after removal)"
+        if (( remaining < 3 || remaining % 2 == 0 )); then
+            log_error "Removing it leaves $remaining etcd members (need an odd number >= 3). Add a server first."
+            return 1
+        fi
+        not_ready=$(awk -v n="$node_name" '$1 != n && $2 != "Ready" {print $1}' <<<"$etcd_nodes")
+        if [[ -n "$not_ready" ]]; then
+            log_error "Other etcd members not Ready: $not_ready. Refusing to shrink etcd."
+            return 1
+        fi
+    fi
+
     log_info "Draining node: $node_name"
-    kubectl drain "$node_name" --ignore-daemonsets --delete-emptydir-data --force
+    kubectl drain "$node_name" --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
+
+    if $is_etcd; then
+        local ready
+        ready=$(kubectl get node "$node_name" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+        if [[ "$ready" == "True" ]]; then
+            log_error "k3s still runs on $node_name. Run 'sudo systemctl stop k3s' there, wait for NotReady, then re-run."
+            return 1
+        fi
+    fi
 
     log_info "Deleting node: $node_name"
-    kubectl delete node "$node_name"
+    kubectl delete node "$node_name" --timeout=120s
+
+    $is_etcd && log_info "Verify etcd member removal on any server: sudo journalctl -u k3s --since -10min | grep -i 'removing etcd member'"
 
     local node_dir="$HOMELAB_ROOT/nodes/$node_name"
-    if [[ -d "$node_dir" ]]; then
+    if [[ "$purge" == "true" && -d "$node_dir" ]]; then
         log_info "Removing node configuration: $node_dir"
         rm -rf "$node_dir"
+    elif [[ -d "$node_dir" ]]; then
+        log_info "Kept $node_dir (pass --purge to delete it)"
     fi
 
     log_success "Node $node_name removed from cluster"
+    log_info "Before uninstalling k3s on it: scripts/pre-uninstall-check.sh $node_name"
 }
 
 list_nodes() {
@@ -374,6 +421,10 @@ main() {
                         role="$2"
                         shift 2
                         ;;
+                    --tailscale)
+                        USE_TAILSCALE=true
+                        shift
+                        ;;
                     *)
                         hostname="$1"
                         shift
@@ -384,7 +435,9 @@ main() {
             create_node_config "$hostname" "$role"
             ;;
         "remove")
-            remove_node "${1:-}"
+            local purge=false
+            [[ "${2:-}" == --purge ]] && purge=true
+            remove_node "${1:-}" "$purge"
             ;;
         "list")
             list_nodes
@@ -397,6 +450,7 @@ main() {
                 log_error "This command must be run on a K3s server node"
                 exit 1
             fi
+            [[ "${1:-}" == --tailscale ]] && USE_TAILSCALE=true
             get_cluster_info
             ;;
         "drain")

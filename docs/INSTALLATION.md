@@ -211,8 +211,8 @@ sudo chown -R $USER:$USER /media/data
 
 ## Recovery
 
+Uninstall per [OPERATIONS.md](OPERATIONS.md#uninstalling-k3s-on-a-node) first, then:
+
 ```bash
-# Clean reinstall
-sudo /usr/local/bin/k3s-uninstall.sh
 cd ansible && ansible-playbook playbooks/k3s.yml --ask-become-pass --ask-vault-pass --limit $(hostname)
 ```

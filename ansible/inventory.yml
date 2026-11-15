@@ -38,6 +38,7 @@ all:
     agents:
       hosts:
         cyl-aspiree17:
+          k3s_extra_args: "--default-runtime nvidia"
           kubelet_system_reserved_cpu: "1"
           kubelet_system_reserved_memory: "1.5Gi"
           kubelet_kube_reserved_cpu: "1"

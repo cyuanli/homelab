@@ -3,20 +3,25 @@
   become: true
   serial: 1
   tasks:
+    - name: Refuse if this host runs a K3s agent
+      ansible.builtin.command: systemctl is-active k3s-agent
+      register: k3s_other_role
+      changed_when: false
+      failed_when: k3s_other_role.rc == 0
+
     - name: Check if K3s is running
       ansible.builtin.command: systemctl is-active k3s
       register: k3s_check
       changed_when: false
       failed_when: false
 
-    - name: Install K3s server
-      when: k3s_check.rc != 0
+    - name: Install or reconfigure K3s server
+      when: k3s_check.rc != 0 or (k3s_reconfigure | default(false) | bool)
       block:
         - name: Get Tailscale IP
           ansible.builtin.command: tailscale ip -4
           register: tailscale_ip
           changed_when: false
-          failed_when: false
 
         - name: Build K3s server install command
           ansible.builtin.set_fact:
@@ -26,15 +31,9 @@
               --disable traefik
               --disable servicelb
               --disable local-storage
-              --node-name {{ inventory_hostname }}
-              --kubelet-arg=eviction-hard=memory.available<500Mi
-              --kubelet-arg=eviction-soft=memory.available<1Gi
-              --kubelet-arg=eviction-soft-grace-period=memory.available=1m30s
-              --kubelet-arg=system-reserved=cpu={{ kubelet_system_reserved_cpu }},memory={{ kubelet_system_reserved_memory }}
-              --kubelet-arg=kube-reserved=cpu={{ kubelet_kube_reserved_cpu }},memory={{ kubelet_kube_reserved_memory }}
-              --kubelet-arg=cpu-manager-policy={{ kubelet_cpu_manager_policy }}
-              {% if cluster_token | default('') == '' %}--cluster-init{% else %}--server {{ server_url }}{% endif %}
-              {% if tailscale_ip.rc == 0 %}--node-external-ip {{ tailscale_ip.stdout | trim }}{% endif %}
+              {% if cluster_token | default('') == '' %}--cluster-init{% else %}--server {{ k3s_server_url | default(server_url) }}{% endif %}
+              {% if k3s_flannel_external_ip | bool %}--flannel-external-ip{% endif %}
+              {{ k3s_node_args }}
 
         - name: Run K3s installer
           ansible.builtin.shell: >-
@@ -51,6 +50,12 @@
             state: started
           retries: 30
           delay: 4
+
+        # serial: 1 only protects etcd quorum if the next server waits for this one.
+        - name: Wait for node to be Ready
+          ansible.builtin.command: >-
+            k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
+          changed_when: false
 
     - name: Configure kubectl access
       block:
@@ -82,34 +87,32 @@
   hosts: agents
   become: true
   tasks:
+    - name: Refuse if this host runs a K3s server
+      ansible.builtin.command: systemctl is-active k3s
+      register: k3s_other_role
+      changed_when: false
+      failed_when: k3s_other_role.rc == 0
+
     - name: Check if K3s agent is running
       ansible.builtin.command: systemctl is-active k3s-agent
       register: k3s_agent_check
       changed_when: false
       failed_when: false
 
-    - name: Install K3s agent
-      when: k3s_agent_check.rc != 0
+    - name: Install or reconfigure K3s agent
+      when: k3s_agent_check.rc != 0 or (k3s_reconfigure | default(false) | bool)
       block:
         - name: Get Tailscale IP
           ansible.builtin.command: tailscale ip -4
           register: tailscale_ip
           changed_when: false
-          failed_when: false
 
         - name: Build K3s agent install command
           ansible.builtin.set_fact:
             k3s_install_args: >-
               agent
-              --server {{ server_url }}
-              --node-name {{ inventory_hostname }}
-              --kubelet-arg=eviction-hard=memory.available<500Mi
-              --kubelet-arg=eviction-soft=memory.available<1Gi
-              --kubelet-arg=eviction-soft-grace-period=memory.available=1m30s
-              --kubelet-arg=system-reserved=cpu={{ kubelet_system_reserved_cpu }},memory={{ kubelet_system_reserved_memory }}
-              --kubelet-arg=kube-reserved=cpu={{ kubelet_kube_reserved_cpu }},memory={{ kubelet_kube_reserved_memory }}
-              --kubelet-arg=cpu-manager-policy={{ kubelet_cpu_manager_policy }}
-              {% if tailscale_ip.rc == 0 %}--node-external-ip {{ tailscale_ip.stdout | trim }}{% endif %}
+              --server {{ k3s_server_url | default(server_url) }}
+              {{ k3s_node_args }}
 
         - name: Run K3s installer
           ansible.builtin.shell: >-

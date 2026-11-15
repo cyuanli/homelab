@@ -37,7 +37,91 @@ kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
 
 # Return to service
 kubectl uncordon <node>
+
+# Remove a node (keeps nodes/<hostname>/ unless --purge)
+./scripts/manage-nodes.sh remove <hostname>
 ```
+
+### Etcd snapshots
+
+k3s takes a local snapshot every 12h on each server, stored in
+`/var/lib/rancher/k3s/server/db/snapshots`. `k3s-uninstall.sh` deletes that
+directory, so a node's own snapshots are lost when it is uninstalled.
+
+```bash
+sudo k3s etcd-snapshot save --name pre-<change>   # on a server that stays
+kubectl get etcdsnapshotfiles                     # all servers' snapshots
+```
+
+### Uninstalling k3s on a node
+
+Never run `k3s-uninstall.sh` / `k3s-agent-uninstall.sh` straight away. It
+`rm -rf`s `/var/lib/kubelet`. If an NFS volume is still mounted there, that
+deletes NAS data as root, because the exports use `no_root_squash`. DaemonSet
+pods (Traefik mounts NFS) keep their mounts after a drain.
+
+1. `./scripts/manage-nodes.sh drain <node>`
+2. Back up anything in `/opt/local-path-provisioner` on the node (uninstall
+   does not touch it, but local-path PVs use reclaim policy Delete)
+3. On the node: `sudo systemctl stop k3s` (or `k3s-agent`), then
+   `sudo /usr/local/bin/k3s-killall.sh` (unmounts pod volumes)
+4. For etcd servers: `./scripts/manage-nodes.sh remove <node>`. Deleting the
+   Node object makes k3s remove the etcd member. The script refuses if fewer
+   than 3 members, or an even number, would remain.
+5. `./scripts/pre-uninstall-check.sh <node> --local-path-backed-up` must pass
+6. On the node: run the uninstall script
+7. `k3s-killall.sh` runs `tailscale set --advertise-routes=`. Check
+   `tailscale debug prefs` afterwards, and re-advertise the exit node if needed
+   (cyl-mitx is one).
+
+### Changing a node's role (server ↔ agent)
+
+k3s cannot convert a node in place: uninstall and reinstall it. The k3s
+playbook refuses to install one role while the other role's service is
+running.
+
+- **Agent → server**: follow "Uninstalling k3s" (no etcd step), move the host
+  to `servers` in `ansible/inventory.yml`, re-run `ufw.yml` (servers get
+  6443/2379/2380 and the VPS rules) and `k3s.yml`. Add the server to
+  `HOME_PC_NAMES` in `vps/config/vps.env` (Traefik runs on control-plane nodes
+  only).
+- **Server → agent**: add a replacement server first so etcd stays at 3
+  members, then follow "Uninstalling k3s" and move the host to `agents`.
+- Re-apply `nodes/<node>/labels.yaml` after the node rejoins. Deleting the Node
+  object drops its labels.
+
+### Changing k3s flags on a running node
+
+The playbook skips nodes where k3s is already active. To apply changed flags,
+re-run the installer through the playbook (restarts k3s, one server at a time,
+waiting for Ready):
+
+```bash
+cd ansible && ansible-playbook playbooks/k3s.yml --ask-become-pass -e k3s_reconfigure=true --limit <host>
+```
+
+Per-host vars: `k3s_server_url`, `k3s_tailscale_only` (node-ip and
+flannel-iface on `tailscale0`), and `k3s_extra_args` (e.g.
+`--default-runtime nvidia` on cyl-aspiree17).
+
+### Nodes off the LAN (Tailscale only)
+
+- Servers must stay on the LAN. k3s does not support embedded etcd across
+  networks ([docs](https://docs.k3s.io/networking/distributed-multicloud)).
+- Set `k3s_flannel_external_ip: true` in `ansible/group_vars/all/vars.yml`,
+  then reconfigure servers one at a time, cyl-homelab (`--cluster-init`)
+  first: `--limit cyl-homelab`, then each other server. Flannel then uses each node's
+  `--node-external-ip` (its Tailscale IP) for VXLAN. This is a **critical** k3s
+  arg: a server joining with a different value fails. Once it is true, every
+  future server gets it from the same var.
+- The remote agent: `k3s_server_url: https://100.93.141.39:6443` and
+  `k3s_tailscale_only: true` in the inventory. Join it with
+  `./scripts/manage-nodes.sh add <node> --tailscale`.
+- NFS PVs use `192.168.1.94`, which a remote node cannot reach. Use a PV that
+  points at `100.93.141.39` (e.g. `minecraft-backups-tailscale`), and add the
+  node's Tailscale IP to `config/system-configs/exports`.
+- Every node's Tailscale IP must be in `tailscale_node_ips`
+  (`ansible/group_vars/all/vars.yml`). ufw allows only those IPs on `tailscale0`.
 
 ## Backups (Borgmatic)
 
