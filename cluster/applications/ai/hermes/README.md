@@ -69,6 +69,9 @@ Hermes built its own search index (`/opt/data/scripts/semindex.py`, fastembed wi
 on disk and loading it OOM-killed the container at the old 2Gi limit, hence 4Gi. The model cache
 `index/models` is excluded from borgmatic (re-downloads on first use).
 
+The same model is kept loaded by `ai/embeddings` on `cyl-aspiree17`
+(`http://embeddings.ai.svc:8080/embed`), so `semindex.py` can query it instead of loading it locally.
+
 ## Browser
 
 `browser.chromium_args: ["--no-sandbox", "--disable-dev-shm-usage"]` in `config.yaml`: the container

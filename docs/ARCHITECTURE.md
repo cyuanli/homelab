@@ -42,7 +42,7 @@ Internet → VPS (Nginx) → Tailscale VPN → K3s Cluster (Traefik) → Applica
 | `monitoring` | kube-prometheus-stack (Prometheus, Grafana, Alertmanager), blackbox-exporter, alertmanager-discord |
 | `location` | OwnTracks recorder + frontend, backup CronJob |
 | `utilities` | Syncthing, Whoami |
-| `ai` | Hermes Agent (Matrix gateway) |
+| `ai` | Hermes Agent (Matrix gateway), embeddings server for its semantic index |
 | `cert-manager` | cert-manager controller, cainjector, webhook |
 
 `cluster/manifests/namespaces/namespaces.yaml` creates `infrastructure`,

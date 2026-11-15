@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embeddings
+  namespace: ai
+  labels:
+    app: embeddings
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: embeddings
+  template:
+    metadata:
+      labels:
+        app: embeddings
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: cyl-aspiree17
+      initContainers:
+      - name: chown
+        image: busybox:1.37
+        command: ["chown", "10000:10000", "/models"]
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      containers:
+      - name: embeddings
+        image: python:3.14-slim
+        securityContext:
+          runAsUser: 10000
+          runAsGroup: 10000
+        env:
+        # Same versions as Hermes's semindex.py venv, so vectors match the existing index
+        - name: FASTEMBED_VERSION
+          value: 0.9.1
+        - name: ONNXRUNTIME_VERSION
+          value: 1.31.1
+        - name: HF_HUB_OFFLINE
+          value: "1"
+        - name: HOME
+          value: /tmp
+        - name: THREADS
+          value: "4"
+        command:
+        - sh
+        - -euc
+        - |
+          pip install -q --no-cache-dir --user "fastembed==${FASTEMBED_VERSION}" "onnxruntime==${ONNXRUNTIME_VERSION}"
+          until [ -f /models/.ready ]; do echo "waiting for model copy, see README"; sleep 30; done
+          exec python -u /app/server.py
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        - name: app
+          mountPath: /app
+        resources:
+          requests:
+            cpu: 100m
+            memory: 3Gi
+          limits:
+            cpu: "3"
+            memory: 4Gi
+      volumes:
+      - name: models
+        hostPath:
+          path: /srv/app-storage/embeddings
+          type: DirectoryOrCreate
+      - name: app
+        configMap:
+          name: embeddings-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embeddings
+  namespace: ai
+spec:
+  selector:
+    app: embeddings
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
