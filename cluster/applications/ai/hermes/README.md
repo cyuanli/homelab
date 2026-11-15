@@ -69,6 +69,12 @@ Hermes built its own search index (`/opt/data/scripts/semindex.py`, fastembed wi
 on disk and loading it OOM-killed the container at the old 2Gi limit, hence 4Gi. The model cache
 `index/models` is excluded from borgmatic (re-downloads on first use).
 
+## Browser
+
+`browser.chromium_args: ["--no-sandbox", "--disable-dev-shm-usage"]` in `config.yaml`: the container
+blocks user namespaces, so Chromium's sandbox aborts (SIGABRT), and Hermes only adds `--no-sandbox`
+itself when it detects Docker.
+
 ## Library
 
 `/opt/data/library` holds large reference files (books in `library/books`, extracted text that
