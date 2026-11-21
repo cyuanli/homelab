@@ -15,6 +15,13 @@ data:
         proxyProtocol:
           trustedIPs:
             - "100.121.249.71/32"
+        # ACME HTTP-01 still works: Let's Encrypt follows the redirect
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
       websecure:
         address: ":443"
         proxyProtocol:

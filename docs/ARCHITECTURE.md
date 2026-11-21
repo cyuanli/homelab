@@ -15,6 +15,8 @@ Internet → VPS (Nginx) → Tailscale VPN → K3s Cluster (Traefik) → Applica
 - **Traefik**: Ingress controller with automatic HTTPS. Deployed from
   `cluster/manifests/traefik/` as a **DaemonSet in the `infrastructure`
   namespace** — not the K3s bundled Traefik in `kube-system`.
+  The `web` entrypoint redirects all HTTP to HTTPS, so Ingresses don't need
+  the `https-redirect` middleware (ACME HTTP-01 follows the redirect).
 - **cert-manager**: Let's Encrypt certificate management (installed separately;
   this repo tracks only the ClusterIssuers).
 - **VPS Proxy**: Nginx load balancing across control planes via Tailscale
