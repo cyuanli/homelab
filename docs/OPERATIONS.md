@@ -411,7 +411,7 @@ and from `monitor-storage.sh`. It exports raw SMART attributes, not the
 
 ```bash
 helm upgrade --install smartctl-exporter prometheus-community/prometheus-smartctl-exporter \
-  --version 0.17.1 -n monitoring \
+  --version 0.19.2 -n monitoring \
   -f cluster/applications/monitoring/smartctl-exporter-values.yaml
 ```
 

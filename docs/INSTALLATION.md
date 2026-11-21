@@ -140,12 +140,13 @@ helm upgrade --install home-assistant pajikos/home-assistant -n automation \
 
 # Monitoring
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-# Helm never upgrades CRDs: on a major bump, first apply the new chart's
+# Helm never upgrades CRDs: on any bump that changes them (93.1 -> 93.6 did), first apply the new chart's
 # charts/crds/crds/ with `kubectl apply --server-side --force-conflicts`.
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --version 93.1.0 \
+  --version 93.6.1 \
   -n monitoring -f cluster/applications/monitoring/kube-prometheus-stack-values.yaml
 helm upgrade --install prometheus-blackbox-exporter prometheus-community/prometheus-blackbox-exporter \
+  --version 11.21.3 \
   -n monitoring -f cluster/applications/monitoring/blackbox-exporter-values.yaml
 kubectl apply -f cluster/applications/monitoring/alertmanager-discord.yaml
 kubectl apply -f cluster/applications/monitoring/prometheus-rules-*.yaml
