@@ -100,6 +100,7 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | `claude-investigate.sh` | Runs Claude Code read-only on new alerts, posts the report to Discord (run by `claude-investigate.timer`) |
 | `backup-notify.sh` | Borgmatic notification hook |
 | `backup-databases.sh` | Dumps the Nextcloud + Immich Postgres DBs (borgmatic `before_backup` hook) |
+| `check-drift.sh` | Per-object diff of `cluster/` and Helm values against the live cluster |
 | `snapraid-notify.sh` | SnapRAID metrics export |
 | `50-tailscale-udp-gro` | NetworkManager dispatcher hook, tunes UDP GRO for Tailscale |
 | `utils/common.sh` | Shared utility functions |

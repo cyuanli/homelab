@@ -23,8 +23,8 @@ labels:
 
 images:
   - name: nextcloud
-    newTag: 32-apache
+    newTag: 32.0.15-apache
   - name: postgres
-    newTag: 16-alpine
+    newTag: 16.16-alpine
   - name: redis
-    newTag: 7-alpine
+    newTag: 7.4.12-alpine

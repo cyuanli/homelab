@@ -18,6 +18,6 @@ labels:
 
 images:
   - name: syncthing/syncthing
-    newTag: latest
+    newTag: 2.1.7
   - name: alpine/git
-    newTag: latest
+    newTag: 2.54.1
