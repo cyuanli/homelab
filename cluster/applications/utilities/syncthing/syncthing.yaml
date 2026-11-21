@@ -22,7 +22,7 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: git-init
-          image: alpine/git
+          image: alpine/git:2.54.1
           envFrom:
             - secretRef:
                 name: syncthing-git
@@ -45,7 +45,7 @@ spec:
               mountPath: /data
       containers:
         - name: syncthing
-          image: syncthing/syncthing
+          image: syncthing/syncthing:2.1.7
           ports:
             - name: web-ui
               containerPort: 8384
@@ -80,7 +80,7 @@ spec:
             periodSeconds: 10
 
         - name: git-sidecar
-          image: alpine/git
+          image: alpine/git:2.54.1
           envFrom:
             - secretRef:
                 name: syncthing-git

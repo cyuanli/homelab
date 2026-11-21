@@ -84,7 +84,7 @@ spec:
             memory: 1Gi
       # Obsidian vault copy, peered only with utilities/syncthing; runs as hermes so the agent can write
       - name: syncthing
-        image: syncthing/syncthing:latest
+        image: syncthing/syncthing:2.1.7
         securityContext:
           runAsUser: 10000
           runAsGroup: 10000
