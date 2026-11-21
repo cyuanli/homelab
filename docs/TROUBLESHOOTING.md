@@ -83,7 +83,7 @@ kubectl port-forward -n <namespace> deployment/<service> 8080:<port>
 curl http://localhost:8080
 
 # Check Traefik
-kubectl logs -n kube-system deployment/traefik --tail=50
+kubectl logs -n infrastructure -l app=traefik --prefix --tail=50
 ```
 
 ## Emergency Recovery
@@ -102,7 +102,7 @@ sudo systemctl restart k3s
 kubectl get nodes -o wide
 kubectl get pods -A
 kubectl get events --sort-by='.lastTimestamp' -A | tail -30
-kubectl logs -n kube-system deployment/traefik --tail=20
+kubectl logs -n infrastructure -l app=traefik --prefix --tail=20
 sudo tailscale status
 df -h
 ```

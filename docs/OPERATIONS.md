@@ -461,6 +461,34 @@ kubectl describe certificate <name> -n <namespace>
 kubectl delete certificaterequest -n <namespace> <request-name>
 ```
 
+## Upgrading Traefik
+
+Traefik is a plain-manifest DaemonSet (`cluster/manifests/traefik/`), not a
+Helm chart, so CRDs and RBAC are upgraded by hand. Read
+https://doc.traefik.io/traefik/migrate/v3/ for every version in between.
+
+1. Apply the target version's CRDs and compare its RBAC with
+   `traefik-rbac.yaml`:
+   ```bash
+   V=v3.7.19
+   kubectl apply --server-side --force-conflicts -f \
+     https://raw.githubusercontent.com/traefik/traefik/$V/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+   curl -s https://raw.githubusercontent.com/traefik/traefik/$V/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+   ```
+2. One node first. The VPS round-robins across all three, so the others keep
+   serving:
+   ```bash
+   kubectl patch ds -n infrastructure traefik -p '{"spec":{"updateStrategy":{"type":"OnDelete","rollingUpdate":null}}}'
+   kubectl set image -n infrastructure ds/traefik traefik=traefik:$V
+   kubectl delete -n infrastructure pod -l app=traefik --field-selector spec.nodeName=cyl-optiplex9020
+   ```
+3. Test that node directly, e.g.
+   `curl --resolve drive.cliff.li:443:192.168.1.92 https://drive.cliff.li/`,
+   and compare with a node still on the old version. Then delete the other
+   pods one at a time.
+4. Restore the strategy:
+   `kubectl patch ds -n infrastructure traefik -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":1,"maxSurge":0}}}}'`
+
 ## VPS Proxy
 
 ```bash

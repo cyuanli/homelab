@@ -17,7 +17,7 @@ spec:
       serviceAccountName: traefik
       containers:
       - name: traefik
-        image: traefik:v3.0
+        image: traefik:v3.7.19
         args:
           - --configfile=/etc/traefik/traefik.yml
         ports:

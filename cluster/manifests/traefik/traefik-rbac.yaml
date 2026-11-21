@@ -13,8 +13,31 @@ rules:
   - ""
   resources:
   - services
-  - endpoints
   - secrets
+  - nodes
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+# v3.0 rollback only; v3.1+ uses endpointslices
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
   verbs:
   - get
   - list
