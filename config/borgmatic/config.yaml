@@ -4,6 +4,8 @@ source_directories:
   - /media/data/owntracks/rec
   - /media/data/games
   - /media/data/db-dumps
+  # holds secret/passwordsalt; the DB dump is useless without it
+  - /var/lib/rancher/k3s/storage/pvc-730eb40f-7c37-400f-99d5-449d30b52899_cloud_nextcloud-data/config
   - /srv/app-storage/hermes
 
 # Hermes caches, models, reinstallable tools, rebuildable indexes, core dumps and library

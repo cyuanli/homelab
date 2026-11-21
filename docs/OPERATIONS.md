@@ -184,6 +184,10 @@ left uncompressed on purpose, because borg dedupes an uncompressed dump against
 the previous night's far better than a gzip stream, where one changed row
 perturbs the whole file.
 
+The Nextcloud `config/` directory (inside the `nextcloud-data` local-path PVC)
+is also in `source_directories`: it holds `secret` and `passwordsalt`, without
+which a restored DB dump can't be fully used.
+
 Dumps are written atomically (`.part` → `mv`) and only promoted if pg_dump's
 completion marker is present, since `pg_dump` exits 0 on a connection dropped
 mid-stream.
@@ -559,6 +563,33 @@ service. `sha1_source` records whether a Nextcloud hash came from the database
 Candidates listed in `oc_filecache` but missing on disk; their duplicate status
 is undecided, not negative. These are stale rows from files removed outside
 Nextcloud.
+
+## Upgrading Nextcloud
+
+The image is pinned (`nextcloud:<version>-apache`); bump the tag to upgrade.
+The entrypoint runs `occ upgrade` on startup.
+
+1. Dump the DB and tar `/var/www/html/config` to `/media/data/backups/`.
+2. Scale to 0 first. The rollout strategy is `RollingUpdate`, so otherwise the
+   upgrading pod runs alongside the old one.
+3. Set the image with `kubectl set image -n cloud deploy/nextcloud
+   nextcloud=nextcloud:<tag>`. `kubectl apply -k` fails: the kustomization
+   labels don't match the live Deployment's immutable selector.
+4. Scale to 1. Check `kubectl logs --previous` too: a failed upgrade exits
+   (code 5), restarts, and leaves maintenance mode on.
+
+Nextcloud connects as `oc_admin`, not `nextcloud`. A table owned by `nextcloud`
+fails migrations with `must be owner of table …` (2026-11-21:
+`oc_calendars_federated`). Check before upgrading:
+
+```bash
+kubectl exec -n cloud postgres-0 -- psql -U nextcloud -d nextcloud -At -c \
+  "select relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+   where nspname='public' and pg_get_userbyid(relowner)<>'oc_admin';"
+```
+
+Fix with `ALTER TABLE <t> OWNER TO oc_admin;`, then
+`su -s /bin/sh www-data -c 'php occ upgrade -n'` and `occ maintenance:mode --off`.
 
 ## Reconciling the Nextcloud file cache
 
