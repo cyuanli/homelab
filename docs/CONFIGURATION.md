@@ -83,10 +83,11 @@ the htpasswd hash:
 | Middleware | Namespace | Protects |
 |------------|-----------|----------|
 | `prometheus-auth` | `monitoring` | Prometheus, Alertmanager |
-| `owntracks-auth` | `location` | OwnTracks recorder + frontend |
+| `owntracks-auth` | `location` | OwnTracks frontend, API and `/pub` (phone app needs the user/password) |
 | `zigbee2mqtt-auth` | `automation` | Zigbee2MQTT |
 
-Generate a hash with `htpasswd -nbm <user> <password>`.
+Generate a hash with `htpasswd -nbm <user> <password>`. Secrets take one user per line with plain `$`;
+the docker-compose `$$` escaping or comma separation makes Traefik reject the middleware and 404 the route.
 
 ## Kubernetes Secrets
 

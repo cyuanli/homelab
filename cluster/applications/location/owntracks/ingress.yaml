@@ -6,6 +6,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.priority: "100"
+    traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd,location-owntracks-auth@kubernetescrd
     cert-manager.io/cluster-issuer: letsencrypt-production
 spec:
   ingressClassName: traefik
@@ -32,6 +33,7 @@ metadata:
   namespace: location
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: infrastructure-https-redirect@kubernetescrd,location-owntracks-auth@kubernetescrd
     cert-manager.io/cluster-issuer: letsencrypt-production
 spec:
   ingressClassName: traefik
