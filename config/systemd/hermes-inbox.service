@@ -1,0 +1,15 @@
+[Unit]
+Description=Answer messages Hermes left in its inbox with read-only Claude Code
+Documentation=file:///home/cyl/homelab/scripts/hermes-inbox.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cyl
+Environment="HOME=/home/cyl"
+Environment="PATH=/home/cyl/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/cyl/homelab/scripts/hermes-inbox.sh
+TimeoutStartSec=20min
+StandardOutput=journal
+StandardError=journal

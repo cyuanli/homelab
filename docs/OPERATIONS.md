@@ -276,6 +276,7 @@ it: a backup you have never restored is a hypothesis, not a backup.
 | `disk-monitor` | Every 5 min | storage | Disk health checks |
 | `auto-remediate` | Every 15 min | monitoring | Restart services on alerts |
 | `claude-investigate` | Every 15 min | cyl-homelab | Claude Code investigates new alerts, reports to Discord |
+| `hermes-inbox` | Every 30 min | cyl-homelab | Claude Code answers messages Hermes leaves in its inbox |
 | `borgmatic` | Daily 3 AM | backup | Backups |
 
 ```bash
@@ -294,29 +295,44 @@ ansible-playbook playbooks/systemd-timers.yml --ask-become-pass
 ```
 
 This deploys disk-monitor + snapraid-runner to storage nodes, auto-remediate to monitoring nodes,
-and claude-investigate to cyl-homelab.
+and claude-investigate + hermes-inbox to cyl-homelab.
 
-### Claude alert investigator
+### Headless Claude runs
 
-`scripts/claude-investigate.sh` runs headless Claude Code on every firing, unsilenced alert it
-hasn't looked at in the last 6h (per Alertmanager fingerprint; `Watchdog`/`InfoInhibitor` skipped)
-and posts the report to the alerts Discord channel, failures included. All new alerts in one tick
-share one run. If Alertmanager is unreachable, that itself gets investigated.
+`claude-investigate` and `hermes-inbox` run headless Claude Code through
+`scripts/utils/claude-headless.sh`, under one **read-only** policy in `config/claude-readonly/`,
+enforced in layers:
 
-Phase 1 is **read-only**, enforced in layers:
-
-- `--setting-sources user` (in the script): the repo's `.claude/settings.local.json` is NOT
-  loaded. It pre-approves `kubectl delete/apply/exec`, `bash`, `curl` etc.
-- `config/claude-investigate/settings.json`: allowlist (kubectl, journalctl, `systemctl status`, git log/diff, reads inside
-  the repo), with `dontAsk` + `--permission-prompts none` so anything else is denied, never asked.
+- `--setting-sources user`: the repo's `.claude/settings.local.json` is NOT loaded. It
+  pre-approves `kubectl delete/apply/exec`, `bash`, `curl` etc.
+- `settings.json`: allowlist (kubectl, journalctl, `systemctl status`, git log/diff,
+  `check-alerts.sh`, reads inside the repo), with `dontAsk` + `--permission-prompts none` so
+  anything else is denied, never asked.
 - `guard.sh` (PreToolUse hook): rejects kubectl verbs other than get/describe/logs/top/events/…,
   anything mentioning secrets/tokens/passwords/`.env.local`, redirection, `$(…)`, shells, `rm`,
   `curl`, `ssh`, `sudo`, write-y `git`/`systemctl`. Test it by piping
   `{"tool_name":"Bash","tool_input":{"command":"…"}}` into it; exit 2 = blocked.
-- `prompt.md`: appended system prompt, fixes the report format.
+- `prompt.md`: how to look things up, shared by both jobs. Each job appends its own `prompt.md`.
 
 Allow rules match on command prefix, so `kubectl -n ai get` does NOT match `Bash(kubectl get:*)`.
 That's why `settings.json` allows all of `kubectl` and `guard.sh` checks the verb.
+
+A job that needs one extra command passes `--allowedTools` for it plus `GUARD_EXTENSION=<script>`.
+The guard runs that script first: exit 0 allows, 2 blocks, anything else falls through to the
+read-only rules.
+
+Runs use the Claude subscription logged in for `cyl` on cyl-homelab (model/effort from
+`~/.claude/settings.json`), not API credits, so they share usage limits with interactive sessions
+and Hermes. Keep extra usage off. If the login expires (`claude auth status`, `loginExpiresAt`),
+runs fail; fix with `claude auth login`. Per run, `runs/<id>.json` in the job's state dir
+(`.permission_denials` lists what was blocked) and `runs/<id>.stderr`, pruned after 30 days.
+
+#### Claude alert investigator
+
+`scripts/claude-investigate.sh` runs on every firing, unsilenced alert it hasn't looked at in the
+last 6h (per Alertmanager fingerprint; `Watchdog`/`InfoInhibitor` skipped) and posts the report to
+the alerts Discord channel, failures included. All new alerts in one tick share one run. If
+Alertmanager is unreachable, that itself gets investigated.
 
 State, run transcripts and the cached webhook URL live in `~/.local/state/claude-investigate`.
 The webhook comes from the `alertmanager-discord-webhook` Secret (cached for when the API server is
@@ -334,14 +350,33 @@ STATE_DIR=/tmp/ci AM_PATH="/api/v1/namespaces/monitoring/services/kube-prometheu
 The playbook also adds `cyl` to `systemd-journal`; without it `journalctl` only sees the user's own
 logs and host-level alerts (borgmatic, k3s, snapraid) can't be investigated.
 
-Runs use the Claude subscription logged in for `cyl` on cyl-homelab (model/effort from
-`~/.claude/settings.json`), not API credits, so they share usage limits with interactive sessions
-and Hermes. Keep extra usage off. If the login expires (`claude auth status`, `loginExpiresAt`),
-runs fail and post a red Discord message; fix with `claude auth login`.
+Troubleshooting: `journalctl -u claude-investigate.service`. If the Discord post itself fails, the
+unit fails and nothing is posted.
 
-Troubleshooting: `journalctl -u claude-investigate.service`; per run,
-`runs/<id>.json` (`.permission_denials` lists what was blocked) and `runs/<id>.stderr`, pruned
-after 30 days. If the Discord post itself fails, the unit fails and nothing is posted.
+#### Hermes inbox
+
+`scripts/hermes-inbox.sh` lets Hermes start conversations with Claude Code, mostly to ask about the
+cluster. Hermes writes `/opt/data/claude-inbox/new/<name>.md` in its pod. Each tick takes up to 3
+of the oldest files untouched for at least a minute and puts their contents (20 KB each max) into
+the prompt. Claude looks things up read-only and answers in the persistent `peer dm local` Bot
+Chat, see `cluster/applications/ai/hermes/README.md`. On success the files move to `done/`. On
+failure they stay in `new/` and are retried next tick.
+
+Its one extra command is `scripts/hermes-reply.sh '<message>'`. `config/hermes-inbox/reply-rule.sh`
+(the `GUARD_EXTENSION`) claims every command that mentions `hermes-reply`. It allows only that
+script with a single single-quoted argument (`'\''` for apostrophes, so bash expands nothing), and
+blocks it after 8 replies per run. Hermes relays untrusted mail and web content, and what Claude
+tells it may leave the cluster, so `prompt.md` forbids sending secret values, env values or raw
+logs.
+
+Output lands in `~/.local/state/hermes-inbox`: `log` holds one entry per run (summary +
+`claude -r <session>`).
+
+```bash
+scripts/hermes-inbox.sh --list        # pending messages
+scripts/hermes-inbox.sh --dry-run     # prompt that would be sent
+tail -n 30 ~/.local/state/hermes-inbox/log
+```
 
 Before allowing fixes (phase 2): widen `settings.json` and `guard.sh` per fix type, and narrow
 `/etc/sudoers.d/homelab-cyl` first. `user-permissions.yml` grants passwordless `systemctl`,

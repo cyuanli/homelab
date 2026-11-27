@@ -6,12 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=utils/common.sh
 source "$SCRIPT_DIR/utils/common.sh"
+# shellcheck source=utils/claude-headless.sh
+source "$SCRIPT_DIR/utils/claude-headless.sh"
 
 CONF="$REPO/config/claude-investigate"
 STATE_DIR="${STATE_DIR:-$HOME/.local/state/claude-investigate}"
 COOLDOWN_SECONDS="${COOLDOWN_SECONDS:-21600}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-20m}"
-CLAUDE="${CLAUDE:-$HOME/.local/bin/claude}"
 IGNORE_ALERTS='^(Watchdog|InfoInhibitor)$'
 AM_PATH="${AM_PATH:-/api/v1/namespaces/monitoring/services/kube-prometheus-stack-alertmanager:9093/proxy/api/v2/alerts?active=true&silenced=false&inhibited=false}"
 
@@ -107,18 +108,9 @@ log_info "Investigating: $names"
 run_id="$(date +%Y%m%dT%H%M%S)"
 started="$(date +%s)"
 rc=0
-out="$(cd "$REPO" && timeout --kill-after=30s "$RUN_TIMEOUT" "$CLAUDE" -p "$context" \
-    --output-format json \
-    --setting-sources user \
-    --settings "$CONF/settings.json" \
-    --permission-mode dontAsk \
-    --permission-prompts none \
-    --strict-mcp-config \
-    --disable-slash-commands \
-    --append-system-prompt-file "$CONF/prompt.md" \
-    2> "$STATE_DIR/runs/$run_id.stderr")" || rc=$?
+claude_headless "$RUN_TIMEOUT" "$CONF/prompt.md" "$context" "$STATE_DIR/runs/$run_id.json" "$STATE_DIR/runs/$run_id.stderr" || rc=$?
 elapsed="$(( $(date +%s) - started ))s"
-echo "$out" > "$STATE_DIR/runs/$run_id.json"
+out="$(cat "$STATE_DIR/runs/$run_id.json")"
 
 result="$(jq -r '.result // empty' <<< "$out" 2> /dev/null || true)"
 session="$(jq -r '.session_id // empty' <<< "$out" 2> /dev/null || true)"

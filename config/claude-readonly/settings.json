@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/cyl/homelab/config/claude-investigate/guard.sh"
+            "command": "/home/cyl/homelab/config/claude-readonly/guard.sh"
           }
         ]
       }

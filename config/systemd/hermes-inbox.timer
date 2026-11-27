@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Hermes's inbox every 30 minutes
+Documentation=file:///home/cyl/homelab/scripts/hermes-inbox.sh
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

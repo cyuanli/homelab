@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
-# PreToolUse hook for claude-investigate: second line of defence behind the read-only allowlist.
+# PreToolUse hook for headless Claude runs: second line of defence behind the read-only allowlist.
 set -uo pipefail
 
 input="$(cat)"
 tool="$(jq -r '.tool_name // ""' <<< "$input")"
 
 block() {
-    echo "Blocked by claude-investigate guard: $1" >&2
+    echo "Blocked by read-only guard: $1" >&2
     exit 2
 }
+
+# A job may allow one extra command: exit 0 allows, 2 blocks, anything else falls through to the rules below
+if [[ -n "${GUARD_EXTENSION:-}" ]]; then
+    "$GUARD_EXTENSION" <<< "$input"
+    rc=$?
+    [[ "$rc" -eq 0 || "$rc" -eq 2 ]] && exit "$rc"
+fi
 
 sensitive='secret|passphrase|vault|\.env\b|env\.local|token|password|credential|\.ssh|id_rsa|id_ed25519|\.kube/|/etc/rancher|\.claude/'
 

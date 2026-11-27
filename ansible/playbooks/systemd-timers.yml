@@ -24,7 +24,7 @@
         daemon_reload: true
 
 # Runs where the claude CLI is logged in and the repo lives
-- name: Deploy claude-investigate timer
+- name: Deploy claude-investigate and hermes-inbox timers
   hosts: cyl-homelab
   become: true
   tasks:
@@ -35,7 +35,7 @@
         groups: systemd-journal
         append: true
 
-    - name: Copy claude-investigate units
+    - name: Copy claude-investigate and hermes-inbox units
       ansible.builtin.copy:
         src: "{{ item }}"
         dest: /etc/systemd/system/
@@ -43,13 +43,19 @@
       loop:
         - ../../config/systemd/claude-investigate.service
         - ../../config/systemd/claude-investigate.timer
+        - ../../config/systemd/hermes-inbox.service
+        - ../../config/systemd/hermes-inbox.timer
       notify: Reload systemd
 
-    - name: Enable claude-investigate timer
+    - name: Enable claude-investigate and hermes-inbox timers
       ansible.builtin.systemd:
-        name: claude-investigate.timer
+        name: "{{ item }}"
         enabled: true
         state: started
+        daemon_reload: true
+      loop:
+        - claude-investigate.timer
+        - hermes-inbox.timer
 
   handlers:
     - name: Reload systemd

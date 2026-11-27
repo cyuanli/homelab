@@ -98,6 +98,8 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | `monitor-storage.sh` | SnapRAID disk health + server-side NFS export checks (run by `disk-monitor.timer`) |
 | `auto-remediate.sh` | Restarts deployments on `ServiceDown` alerts (run by `auto-remediate.timer`) |
 | `claude-investigate.sh` | Runs Claude Code read-only on new alerts, posts the report to Discord (run by `claude-investigate.timer`) |
+| `hermes-inbox.sh` | Answers messages Hermes leaves in its inbox with read-only Claude Code (run by `hermes-inbox.timer`) |
+| `hermes-reply.sh` | Sends one peer dm to Hermes and prints the reply (the inbox run's only tool) |
 | `backup-notify.sh` | Borgmatic notification hook |
 | `backup-databases.sh` | Dumps the Nextcloud + Immich Postgres DBs (borgmatic `before_backup` hook) |
 | `check-drift.sh` | Per-object diff of `cluster/` and Helm values against the live cluster |
@@ -105,6 +107,7 @@ Shell scripts in `scripts/` handle app deployment and day-to-day management:
 | `50-tailscale-udp-gro` | NetworkManager dispatcher hook, tunes UDP GRO for Tailscale |
 | `utils/common.sh` | Shared utility functions |
 | `utils/metrics.sh` | Prometheus metrics helpers |
+| `utils/claude-headless.sh` | `claude_headless`: headless Claude Code under the shared read-only policy |
 
 ## Script Conventions
 
